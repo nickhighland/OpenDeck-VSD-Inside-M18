@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+	<id>com.nickhighland.opendeck-vsd-m18</id>
+	<name>OpenDeck VSD M18</name>
+	<summary>Control the VSD Inside M18</summary>
+	<developer id="com.nickhighland"><name>OpenDeck VSD M18 contributors</name></developer>
+	<launchable type="desktop-id">opendeck-vsd-m18.desktop</launchable>
+	<url type="vcs-browser">https://github.com/nekename/OpenDeck</url>
+	<url type="homepage">https://github.com/nekename/OpenDeck</url>
+	<metadata_license>CC-BY-SA-4.0</metadata_license>
+	<project_license>GPL-3.0-or-later</project_license>
+	<content_rating type="oars-1.1" />
+	<description>
+		<p>OpenDeck VSD M18 is an OpenDeck-based controller application for the VSD Inside M18.</p>
+		<p>It includes native M18 hardware support, all 15 LCD keys, all 3 physical bottom buttons, OpenDeck action/plugin compatibility, and VSD Craft profile migration.</p>
+	</description>
+	<releases>
+		<release version="2.14.0" date="2026-09-25" />
+	</releases>
+</component>

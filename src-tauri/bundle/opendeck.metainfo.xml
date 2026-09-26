@@ -1,0 +1,548 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+	<id>opendeck</id>
+
+	<name>OpenDeck</name>
+	<summary>Use stream controllers</summary>
+	<developer id="me.amankhanna"><name>Aman Khanna</name></developer>
+	<launchable type="desktop-id">opendeck.desktop</launchable>
+
+	<url type="vcs-browser">https://github.com/nekename/OpenDeck</url>
+	<url type="homepage">https://github.com/nekename/OpenDeck</url>
+	<url type="bugtracker">https://github.com/nekename/OpenDeck/issues</url>
+	<url type="faq">https://github.com/nekename/OpenDeck?tab=readme-ov-file#support</url>
+	<url type="contribute">https://github.com/nekename/OpenDeck?tab=readme-ov-file#building-from-source--contributing</url>
+	<url type="donation">https://github.com/sponsors/nekename</url>
+	<url type="contact">https://discord.gg/26Nf8rHvaj</url>
+
+	<metadata_license>CC-BY-SA-4.0</metadata_license>
+	<project_license>GPL-3.0-or-later</project_license>
+	<content_rating type="oars-1.1" />
+
+	<description>
+		<p>OpenDeck is an application for using stream controller devices like the Elgato Stream Deck.</p>
+		<p>OpenDeck supports the majority of the original Stream Deck plugins, like Elgato's own Discord plugin, unlike other softwares (e.g. streamdeck-ui, StreamController, Boatswain) which are much more limited.</p>
+		<p>Please note that you will need to install udev subsystem rules for your device to be detected. For more information, see the Installation section of the project README on GitHub.</p>
+		<p>Some compiled plugins are not compiled for Linux, so you may need to have Wine (and Wine Mono) installed on your system (natively, as the Wine Flatpak is not supported). Similarly, for using plugins made with Node.js, the Node.js Flatpak is not supported.</p>
+		<p>From Multi Actions and Toggle Actions to switching profiles when you switch apps and brightness control, OpenDeck has all the features you'd expect from stream controller software.</p>
+		<p>Consider that the power of your Stream Deck actually comes from the software you use with it, then remember how much you paid for it. To support OpenDeck's development, please consider donating to me on GitHub Sponsors, Ko-fi or Liberapay.</p>
+	</description>
+
+	<screenshots>
+		<screenshot type="default">
+			<image>https://github.com/nekename/OpenDeck/raw/release/.github/readme/mainmenu.png</image>
+			<caption>Main menu</caption>
+		</screenshot>
+		<screenshot>
+			<image>https://github.com/nekename/OpenDeck/raw/release/.github/readme/multiaction.png</image>
+			<caption>Multi action</caption>
+		</screenshot>
+		<screenshot>
+			<image>https://github.com/nekename/OpenDeck/raw/release/.github/readme/plugins.png</image>
+			<caption>Plugins</caption>
+		</screenshot>
+		<screenshot>
+			<image>https://github.com/nekename/OpenDeck/raw/release/.github/readme/profiles.png</image>
+			<caption>Profiles</caption>
+		</screenshot>
+	</screenshots>
+
+	<branding>
+		<color type="primary" scheme_preference="light">#62a0ea</color>
+		<color type="primary" scheme_preference="dark">#1a5fb4</color>
+	</branding>
+
+	<releases>
+		<release version="2.14.0" date="2026-07-29">
+			<url type="details">https://github.com/nekename/OpenDeck/releases/tag/v2.14.0</url>
+			<description>
+				<ul>
+					<li>fix: gracefully handle missing iframes during property inspector initialisation</li>
+					<li>chore: add Fossim community metadata file</li>
+					<li>fix: ensure the language selector's width grows with the longest language (#399)</li>
+					<li>fix: only supply the configured language to plugins if the Stream Deck SDK supports it</li>
+					<li>fix: sort languages lexicographically by display name in the language selector</li>
+					<li>fix: use named parameter for localising label of plugin details popup</li>
+					<li>feat: add Ukrainian language option and localisations (#370)</li>
+					<li>fix: prevent user-initiated profile updates from causing updated action states to be visually reverted (#387)</li>
+					<li>feat: add Swedish language option and localisations (#374)</li>
+					<li>feat: add Brazilian Portuguese language option and localisations (#398)</li>
+					<li>feat: incrementally render encoder layouts and also render them for device plugin devices (#385)</li>
+					<li>fix: make headers and footers of popups sticky to keep their content in view while scrolling (#384)</li>
+					<li>perf: replace debounced profile saving with a 30-second polling approach, retaining flushes for user changes (#402)</li>
+					<li>feat: allow customising the delay in between actions within Multi Actions (#393)</li>
+					<li>fix: use block_on from futures::executor when flushing profiles on exit to avoid Tokio runtime panic</li>
+					<li>fix: add missing Brazilian Portuguese and Ukrainian localisations for delay options in the parent action view</li>
+					<li>fix: output warnings to the log when failing to decode incoming events</li>
+					<li>fix: revert making header sticky in the profile manager to prevent scrollbar from obscuring buttons for deleting profiles</li>
+					<li>fix: don't require profiles to be marked as stale for them to be saved by save_profile_now</li>
+					<li>feat: add support for the Stream Deck + XL (#351)</li>
+					<li>fix: rotate encoder images correctly for the Stream Deck + XL</li>
+				</ul>
+			</description>
+		</release>
+		<release version="2.13.1" date="2026-06-27">
+			<url type="details">https://github.com/nekename/OpenDeck/releases/tag/v2.13.1</url>
+			<description>
+				<ul>
+					<li>fix: resolve missing localisation keys in ParentActionView and consolidate its key namespace</li>
+					<li>fix: accept string values for bars and correctly canonicalise comparison path for encoder layouts (#372)</li>
+					<li>fix: update psp to latest upstream to ensure SessionUnlocked event is triggered on KDE Plasma sessions</li>
+				</ul>
+			</description>
+		</release>
+		<release version="2.13.0" date="2026-06-26">
+			<url type="details">https://github.com/nekename/OpenDeck/releases/tag/v2.13.0</url>
+			<description>
+				<ul>
+					<li>chore: sync formatting changes introduced by a Deno formatter update</li>
+					<li>feat: support disabling devices while the computer screen is locked (#325)</li>
+					<li>feat: implement the `systemDidWakeUp` event</li>
+					<li>feat: implement support for the infobar display on the Stream Deck Neo (#253)</li>
+					<li>docs: add "Token Efficiency" section to and remove "Critical Workflows" section from AGENTS.md</li>
+					<li>feat: implement rendering encoder feedback layouts to the touchstrip of the Stream Deck Plus (#356)</li>
+					<li>fix: don't save parsed encoder layout data to the profile (#362)</li>
+					<li>refactor: ensure all encoder layout loads follow the same path (#363)</li>
+					<li>fix: correct handling of undefined and inaccessible encoder layouts (#365)</li>
+					<li>feat: implement the `touchTap` event</li>
+					<li>fix: lower the log level setFeedback payload issues are surfaced at</li>
+					<li>perf: don't hold global locks while rendering encoder layout images</li>
+					<li>feat: add support for localising text in the frontend and add German language data (#360)</li>
+					<li>fix: remove XML character escaping logic from the version bump script</li>
+					<li>fix: prevent selecting pre-release assets when installing plugins from GitHub repository releases</li>
+					<li>fix: render directly to a canvas in the instance editor to avoid flickering during image loads</li>
+					<li>chore: reformat codebase using Prettier due to frequent instability in the Deno formatter</li>
+				</ul>
+			</description>
+		</release>
+		<release version="2.12.1" date="2026-05-30">
+			<url type="details">https://github.com/nekename/OpenDeck/releases/tag/v2.12.1</url>
+			<description>
+				<ul>
+					<li>fix: use plugin name as window title for web-based plugins</li>
+					<li>fix: ensure GFM alerts are displaced correctly from the content above when displaying plugin README files</li>
+					<li>docs: adopt the Jellyfin LLM/"AI" Development Policy for the OpenDeck project</li>
+					<li>fix: use a dedicated spawner thread so that plugin processes don't die due to PR_SET_PDEATHSIG when the parent Tokio worker exits</li>
+					<li>fix: resolve race condition causing ENOENT error caused by concurrent accesses to the Settings store</li>
+				</ul>
+			</description>
+		</release>
+		<release version="2.12.0" date="2026-05-03">
+			<url type="details">https://github.com/nekename/OpenDeck/releases/tag/v2.12.0</url>
+			<description>
+				<ul>
+					<li>docs: update issue and pull request preflight checklists to require higher quality submissions</li>
+					<li>feat: add an application restart item to the tray menu</li>
+					<li>chore: remove repository FUNDING.yml file to centralise under user-wide file</li>
+					<li>feat: implement sleeping devices from the CLI</li>
+					<li>feat: implement support for duplicating profiles from the profile manager</li>
+					<li>fix: make profile labels in the profile manager clickable to make switching profiles easier</li>
+					<li>feat: implement waking devices from the CLI</li>
+					<li>feat: update active-win-pos-rs to support KDE Wayland window detection (#273)</li>
+					<li>fix: avoid process substitution in automated installation script one-liner to ensure it works across non-POSIX shells like fish</li>
+					<li>docs: update sponsorship information to highlight Ko-fi and Liberapay options</li>
+					<li>fix: prevent plugin children from orphaning on Linux by using PR_SET_PDEATHSIG (#318)</li>
+					<li>feat: implement backing up and restoring the config directory from the settings view</li>
+					<li>feat: use a Deno script to streamline the process of bumping the project version</li>
+				</ul>
+			</description>
+		</release>
+		<release version="2.11.1" date="2026-04-09">
+			<url type="details">https://github.com/nekename/OpenDeck/releases/tag/v2.11.1</url>
+			<description>
+				<ul>
+					<li>fix: replace usage of Tauri currentMonitor method with window.screen API to avoid GNOME X11 crash (#301)</li>
+					<li>fix: debounce profile saves for data URL image updates to prevent excessive disk writes (#302)</li>
+					<li>perf: return early from setTitle handler if text was unchanged</li>
+					<li>fix: debounce profile saves on the action instance level to prevent delaying a single change to one instance due to another constantly updating instance</li>
+					<li>fix: advertise ESD v7.1 to satisfy compatibility checks for message identifiers support</li>
+					<li>fix: preserve quoting and escaping for Run Command action values on Windows</li>
+				</ul>
+			</description>
+		</release>
+		<release version="2.11.0" date="2026-04-02">
+			<url type="details">https://github.com/nekename/OpenDeck/releases/tag/v2.11.0</url>
+			<description>
+				<ul>
+					<li>feat: add controls for customising image scale (#268)</li>
+					<li>feat: add keyboard focusability and accessible labels to items in the device view (#257)</li>
+					<li>feat: trigger virtual button press when double-clicking key (#267)</li>
+					<li>feat: support putting devices to sleep after a configurable period of inactivity (#264)</li>
+					<li>fix: prevent further processing of input events that wake device from sleep to prevent unwanted triggers</li>
+					<li>feat: support navigating the device view using the arrow keys for accessibility (#276)</li>
+					<li>chore: sync formatting changes introduced by a Deno formatter update</li>
+					<li>fix: ensure the focused slot is always visibly outlined, in part by enabling selection of empty slots</li>
+					<li>feat: support keyboard shortcuts for delete, copy, and paste actions on the focused slot</li>
+					<li>fix: don't hide focus outlines on interactive elements when using keyboard navigation</li>
+					<li>feat: make the action list keyboard accessible (#285)</li>
+					<li>feat: make the slot context menu keyboard accessible</li>
+					<li>feat: enhance accessibility by adding labels and titles to form elements in the instance editor</li>
+					<li>feat: support copying and pasting actions from the action list using keyboard shortcuts to create new instances</li>
+					<li>feat: make the parent action view keyboard accessible (#290)</li>
+					<li>feat: add accessible labels to elements in the settings view, profile manager, and instance editor (#291)</li>
+					<li>feat: add dialog semantics and accessible labels to popups and the plugin manager (#294)</li>
+				</ul>
+			</description>
+		</release>
+		<release version="2.10.1" date="2026-03-21">
+			<url type="details">https://github.com/nekename/OpenDeck/releases/tag/v2.10.1</url>
+			<description>
+				<ul>
+					<li>fix: accept event argument directly in property inspector message handlers instead of destructuring</li>
+					<li>refactor: update set_state command to replace the modified state instead of the entire instance</li>
+					<li>fix: return the entire slot from create_instance so that updating the frontend profile in ParentActionView sets complete and up to date values</li>
+					<li>fix: prevent WKWebView on macOS from suspending web-based plugins (#270)</li>
+					<li>fix: only parse headline of buildInfo string to prevent detecting the running OS incorrectly</li>
+				</ul>
+			</description>
+		</release>
+		<release version="2.10.0" date="2026-02-28">
+			<url type="details">https://github.com/nekename/OpenDeck/releases/tag/v2.10.0</url>
+			<description>
+				<ul>
+					<li>refactor: replace svelte.config.js with svelte.config.ts to eliminate untyped code</li>
+					<li>fix: prevent updating images for non-visual Elgato devices</li>
+					<li>refactor: clean out unneeded sections of sdpi.css to reduce bloat</li>
+					<li>feat: move to a navbar-based layout on the home screen for easier navigation</li>
+					<li>refactor: replace `fs2` crate with stabilised `std::fs` equivalents</li>
+					<li>fix: prevent concurrent operations on plugin global settings files to ensure did_receive_global_settings can read a complete file</li>
+					<li>docs: add issue and pull request preflight checklists to reduce administrative overhead during issue and pull request review</li>
+					<li>feat: remove light mode support as it was poorly maintained</li>
+					<li>feat: refine styling across the application for better contrast and consistency</li>
+					<li>fix: initialise tray icon with a static id (#252)</li>
+					<li>fix: limit redraws to rotation setting changes to stop key canvas flickering</li>
+					<li>fix: ensure popups opened by property inspectors are able to take up the full viewport height</li>
+					<li>chore: ensure all Markdown files are excluded from the Deno formatter</li>
+					<li>docs: update screenshots</li>
+					<li>fix: extend canvas locking mechanism to canvas clearing to ensure operation order is preserved and prevent painting ghost images</li>
+					<li>fix: clear image on device as well as in the UI when clearing the canvas due to the slot becoming empty in case another render occurred since the device was cleared on profile switch</li>
+				</ul>
+			</description>
+		</release>
+		<release version="2.9.1" date="2026-02-14">
+			<url type="details">https://github.com/nekename/OpenDeck/releases/tag/v2.9.1</url>
+			<description>
+				<ul>
+					<li>chore: sync lockfile changes made by `deno install` after earlier commit regarding displaying GFM alerts</li>
+					<li>fix: skip manual render of black background colours and use CSS instead for background colour display in the UI to prevent flickering</li>
+					<li>fix: index more safely into an action's states in the instance editor as Toggle Action instances have more states than the base action does</li>
+				</ul>
+			</description>
+		</release>
+		<release version="2.9.0" date="2026-02-08">
+			<url type="details">https://github.com/nekename/OpenDeck/releases/tag/v2.9.0</url>
+			<description>
+				<ul>
+					<li>fix: always underline available plugin version element to highlight that it is clickable</li>
+					<li>feat: display Input Simulation errors in the action's property inspector</li>
+					<li>feat: support changing the rendered text's stroke size and colour (#216)</li>
+					<li>fix: rename Input Simulation to Simulate Input for consistency with other actions</li>
+					<li>feat: implement rotating rendered images</li>
+					<li>feat: cancel key up events if their corresponding key down events targeted a different action instance</li>
+					<li>fix: centre device grid horizontally when the window is enlarged</li>
+					<li>docs: decrease references to Wine as few working plugins actually require it</li>
+					<li>feat: add support for installing Node.js to the installation script</li>
+					<li>feat: support encoders in the Switch Profile action</li>
+					<li>feat: automatically wrap Run Command commands with distrobox-host-exec when running in a Distrobox</li>
+					<li>feat: implement Open URL built-in action</li>
+					<li>fix: ensure all_from_plugin locates instances within Multi Actions and Toggle Actions</li>
+					<li>feat: support setting the background colour of an action instance's state (#233)</li>
+					<li>feat: unify instance editor preview render and normal render to display text in the preview (#237)</li>
+					<li>fix: use opaque black as default state background colour for consistency</li>
+					<li>fix: ensure invisible colour pickers function correctly on macOS</li>
+					<li>fix: ensure background colour picker opens already set to the current value</li>
+					<li>chore: update dependencies</li>
+					<li>feat: show datalist hints for device ID in Switch Profile property inspector</li>
+					<li>fix: ensure propertyInspectorDidAppear event is always dispatched when PI frame loads</li>
+					<li>docs: remove note on Flatpak caveat for background setting as single instance is now supported</li>
+					<li>docs: add tip to README for using OpenDeck with Tacto when without hardware</li>
+					<li>fix: only ever initialise hidapi once for Elgato device support to prevent crashes on macOS</li>
+					<li>feat: support opening developer tools for web-based plugins on a per-plugin basis by checking for a `debug` marker file</li>
+					<li>refactor: replace `once_cell` crate with stabilised `std::sync` equivalents</li>
+					<li>fix: ensure links in plugin README files open in the default browser</li>
+					<li>fix: ensure GFM alerts are rendered correctly when displaying plugin README files</li>
+				</ul>
+			</description>
+		</release>
+		<release version="2.8.2" date="2026-01-18">
+			<url type="details">https://github.com/nekename/OpenDeck/releases/tag/v2.8.2</url>
+			<description>
+				<ul>
+					<li>fix: ensure prefix is also canonicalised before matching in webserver request handler</li>
+				</ul>
+			</description>
+		</release>
+		<release version="2.8.1" date="2026-01-17">
+			<url type="details">https://github.com/nekename/OpenDeck/releases/tag/v2.8.1</url>
+			<description>
+				<ul>
+					<li>feat: load font list from system installed fonts</li>
+					<li>fix: ensure requested paths are within the OpenDeck config directory when containing dot segments</li>
+					<li>fix: add bounds checks for state index (#219)</li>
+					<li>fix: render text at correct Y position when text alignment is set to `top` (#221)</li>
+					<li>fix: add readiness check before calling connection code injected into web-based plugins</li>
+					<li>fix: ensure data URL state images contain `/` and `,` before attempting to read their contents</li>
+					<li>fix: correctly resolve relative-path symlinks to plugin directories</li>
+					<li>chore: update Tacto section of the plugin manager to use new domain name</li>
+				</ul>
+			</description>
+		</release>
+		<release version="2.8.0" date="2026-01-03">
+			<url type="details">https://github.com/nekename/OpenDeck/releases/tag/v2.8.0</url>
+			<description>
+				<ul>
+					<li>chore: run rustfmt on code fixed automatically by clippy</li>
+					<li>docs: create OpenDeck development guide for agents (and humans)</li>
+					<li>feat: allow profiles to be renamed from the profile manager</li>
+					<li>docs: note poor upstream Flatpak support in the tooltips for the background and autolaunch settings</li>
+					<li>feat: display available plugin updates in the plugin manager</li>
+					<li>feat: implement the `didReceiveDeepLink` event (#196)</li>
+					<li>docs: direct users to reach out on OpenDeck support channels before attempting to contact plugin developers</li>
+					<li>fix: apply dark mode background colour to entire document body</li>
+					<li>docs: clarify non-Flatpak Node.js install requirement</li>
+					<li>docs: link to the FAQ in the troubleshooting section of the README</li>
+					<li>feat: support overriding the detected package family in the installation script</li>
+					<li>feat: update starter pack plugin to use code paths mapped by target triple</li>
+					<li>feat: support installing Tacto Connect from the plugin store</li>
+					<li>feat: reload property inspectors from the relevant plugin when reloading a plugin</li>
+					<li>fix: spawn new thread for CLI handlers to ensure their completion</li>
+					<li>feat: migrate starter pack to v2 of the openaction crate</li>
+					<li>fix: clear plugin update notification when the installed version changes</li>
+					<li>fix: ignore build numbers during comparison of plugin versions</li>
+					<li>fix: prioritise plugins with settings interfaces in installed plugins list</li>
+					<li>docs: mention the opendeck-bin AUR package in the installation section of the README</li>
+					<li>docs: remove link to Elgato Marketplace plugin installation instructions from the plugin manager</li>
+					<li>perf: don't load the Elgato App Store archive automatically</li>
+					<li>feat: implement support for the Stream Deck Neo's Touch Points (#208)</li>
+				</ul>
+			</description>
+		</release>
+		<release version="2.7.1" date="2025-12-03">
+			<url type="details">https://github.com/nekename/OpenDeck/releases/tag/v2.7.1</url>
+			<description>
+				<ul>
+					<li>Prevent setting the current state of an action out of the bounds of its possible states</li>
+					<li>Support dragging and dropping images onto the image input in the instance editor (#180)</li>
+					<li>Show the correct cursors when dragging and dropping actions and images</li>
+					<li>Sort folders and profiles in the profile manager for consistent display</li>
+					<li>Update elgato-streamdeck to support the Discord edition of the Stream Deck Mini</li>
+					<li>Update dependencies</li>
+					<li>Prevent copying or overwriting images when moving or copying an instance if an instance is already present at the destination</li>
+					<li>Add udev rules for the Discord edition of the Stream Deck Mini (#181)</li>
+					<li>Add Visual Studio Code debug configurations (#186)</li>
+					<li>Add Visual Studio Code workspace configuration</li>
+					<li>Update enigo to latest upstream to receive unreleased fixes</li>
+					<li>Collapse nested if-let statements as it was stabilised in Rust 1.88.0</li>
+				</ul>
+			</description>
+		</release>
+		<release version="2.7.0" date="2025-11-08">
+			<url type="details">https://github.com/nekename/OpenDeck/releases/tag/v2.7.0</url>
+			<description>
+				<ul>
+					<li>Use alternative ports if default ports are already in use</li>
+					<li>Hide and show the Dock icon on macOS</li>
+					<li>Revise sysinfo usage to optimise process monitoring</li>
+					<li>Support encoders in Input Simulation</li>
+					<li>Update elgato-streamdeck to support Stream Deck Modules</li>
+					<li>Remove support for pre-v2.1.0 profile formats</li>
+					<li>Skip refreshing processes if no installed plugins use application monitoring</li>
+					<li>Make input fields in starter pack property inspectors consistently sized</li>
+					<li>Only show scrollbars if necessary in ParentActionView and Popup components</li>
+					<li>Ensure context menus close when clicking on another key or into a property inspector</li>
+					<li>Use tailwindcss colours for icons instead of Adwaita hex codes</li>
+				</ul>
+			</description>
+		</release>
+		<release version="2.6.1" date="2025-09-29">
+			<url type="details">https://github.com/nekename/OpenDeck/releases/tag/v2.6.1</url>
+			<description>
+				<ul>
+					<li>Remove app_exited event due to limited function</li>
+					<li>Keep window visible by default except on Windows due to bug on KDE Plasma</li>
+					<li>Remove plugdev group setting from udev rules file</li>
+					<li>Prevent asset choice dialog being shown behind plugin details popup</li>
+					<li>Send titleParametersDidChange alongside willAppear like ESD does</li>
+					<li>Increase width of input fields in the starter pack plugin property inspectors</li>
+					<li>Only compare major and minor app versions to allow downgrading within the same minor version</li>
+					<li>Integrate app icon better on macOS</li>
+					<li>Improve plugin README file discovery for plugin details view</li>
+					<li>Allow ctrl-clicking to open instance context menu on macOS</li>
+					<li>Add support for code paths mapped by target triple in plugin manifests</li>
+					<li>Save files atomically and restore from partial saves</li>
+					<li>Remove replacement of old app identifier for v3 profiles</li>
+					<li>Send willAppear after reloading a plugin for all instances of the plugin's actions</li>
+					<li>Update injected connection code to support connectOpenActionSocket definition</li>
+				</ul>
+			</description>
+		</release>
+		<release version="2.6.0" date="2025-08-30">
+			<url type="details">https://github.com/nekename/OpenDeck/releases/tag/v2.6.0</url>
+			<description>
+				<ul>
+					<li>Create automated installation script</li>
+					<li>Process messages from the CLI for use in scripts</li>
+					<li>Support disabling Elgato device discovery</li>
+					<li>Implement the `applicationDidLaunch` and `applicationDidTerminate` events</li>
+					<li>Display settings interfaces for supported plugins</li>
+					<li>Display category icons in action list</li>
+					<li>Add a search bar to the action list</li>
+					<li>Build for aarch64-unknown-linux-gnu</li>
+					<li>Move plugins and settings buttons to the top of the sidebar</li>
+					<li>Numerous bug fixes</li>
+				</ul>
+			</description>
+		</release>
+		<release version="2.5.1" date="2025-08-11">
+			<url type="details">https://github.com/nekename/OpenDeck/releases/tag/v2.5.1</url>
+			<description>
+				<ul>
+					<li>Allow leaving keys pressed in Input Simulation commands</li>
+					<li>Enable libei support for Input Simulation</li>
+					<li>Numerous bug fixes</li>
+				</ul>
+			</description>
+		</release>
+		<release version="2.5.0" date="2025-06-15">
+			<url type="details">https://github.com/nekename/OpenDeck/releases/tag/v2.5.0</url>
+			<description>
+				<ul>
+					<li>Support configuring a 'default profile'</li>
+					<li>Rework UI for Stream Deck Plus dials</li>
+					<li>Implement Device Brightness built-in action</li>
+					<li>Implement setting images to solid colours</li>
+					<li>Improve system tray icon</li>
+					<li>Support dials in Run Command and Device Brightness built-in actions</li>
+					<li>Improve Wine installation check</li>
+					<li>Indicate unregistered plugins in plugin manager</li>
+					<li>Reorganise settings view options</li>
+					<li>Support creating separate Wine prefixes for each plugin</li>
+					<li>Create plugin details view for plugin store</li>
+					<li>Implement reloading plugins from the CLI</li>
+					<li>Indicate plugin name in OpenDeck logs</li>
+					<li>Render dial action image and text to SD+ LCD</li>
+					<li>Numerous bug fixes</li>
+				</ul>
+				<p>
+					Please note that non-Elgato devices are no longer supported out of the box from this release onwards.
+					You can continue to use them by installing the relevant device support plugin, but your existing configurations will not carry over.
+				</p>
+			</description>
+		</release>
+		<release version="2.4.4" date="2025-04-18">
+			<url type="details">https://github.com/nekename/OpenDeck/releases/tag/v2.4.4</url>
+			<description>
+				<p>This release contains a fix for Mirabox device support that was accidentally removed in the previous release. This is the last release to support Mirabox devices.</p>
+			</description>
+		</release>
+		<release version="2.4.3" date="2025-04-17">
+			<url type="details">https://github.com/nekename/OpenDeck/releases/tag/v2.4.3</url>
+			<description>
+				<p>This release contains two months' worth of bug fixes and improvements; see the commit timeline on GitHub for details.</p>
+			</description>
+		</release>
+		<release version="2.4.2" date="2025-02-18">
+			<url type="details">https://github.com/nekename/OpenDeck/releases/tag/v2.4.2</url>
+			<description>
+				<ul>
+					<li>Highlight currently selected key</li>
+					<li>Numerous bug fixes</li>
+				</ul>
+			</description>
+		</release>
+		<release version="2.4.1" date="2025-01-27">
+			<url type="details">https://github.com/nekename/OpenDeck/releases/tag/v2.4.1</url>
+			<description>
+				<ul>
+					<li>Numerous bug fixes</li>
+				</ul>
+			</description>
+		</release>
+		<release version="2.4.0" date="2025-01-23">
+			<url type="details">https://github.com/nekename/OpenDeck/releases/tag/v2.4.0</url>
+			<description>
+				<ul>
+					<li>Plugin management improvements</li>
+					<li>Config file portability improvements</li>
+					<li>Device support and automatic reconnection</li>
+					<li>Update notifications</li>
+					<li>Run Command action improvements</li>
+					<li>Numerous bug fixes</li>
+				</ul>
+			</description>
+		</release>
+		<release version="2.3.1" date="2024-12-17">
+			<url type="details">https://github.com/nekename/OpenDeck/releases/tag/v2.3.1</url>
+			<description>
+				<ul>
+					<li>Fix instances being removed due to a race condition</li>
+					<li>Fix profile switching deadlock</li>
+					<li>Bug fixes and improvements</li>
+				</ul>
+			</description>
+		</release>
+		<release version="2.3.0" date="2024-12-16">
+			<url type="details">https://github.com/nekename/OpenDeck/releases/tag/v2.3.0</url>
+			<description>
+				<ul>
+					<li>Support platform-specific manifest property overrides</li>
+					<li>Store state images as files outside of the profile</li>
+					<li>Implement switching profiles based on the active window</li>
+					<li>Support installing plugins through deep linking</li>
+					<li>Add star and sponsorship prompt</li>
+					<li>Implement device registration by plugins</li>
+					<li>Support closing popups with keyboard and improve dialogue boxes</li>
+					<li>Build and include builtin plugins with OpenDeck</li>
+					<li>Resize window automatically with device size</li>
+					<li>Implement installing plugins from local files</li>
+					<li>Collect statistics</li>
+					<li>Update dependencies</li>
+					<li>Bug fixes</li>
+				</ul>
+			</description>
+		</release>
+		<release version="2.2.1" date="2024-11-03">
+			<url type="details">https://github.com/nekename/OpenDeck/releases/tag/v2.2.1</url>
+			<description>
+				<ul>
+					<li>Documentation updates</li>
+					<li>Logging improvements</li>
+					<li>Update elgato-streamdeck to 0.8</li>
+				</ul>
+			</description>
+		</release>
+		<release version="2.2.0" date="2024-10-14">
+			<url type="details">https://github.com/nekename/OpenDeck/releases/tag/v2.2.0</url>
+			<description>
+				<ul>
+					<li>Preparations for Flatpak release</li>
+					<li>Removal of unnecessary dependencies</li>
+					<li>Internal build system and formatting improvements</li>
+				</ul>
+			</description>
+		</release>
+		<release version="2.1.1" date="2024-10-09">
+			<url type="details">https://github.com/nekename/OpenDeck/release/tag/v2.1.1</url>
+			<description>
+				<ul><li>Bug fix for blank screens</li></ul>
+			</description>
+		</release>
+		<release version="2.1.0" date="2024-10-03">
+			<url type="details">https://github.com/nekename/OpenDeck/releases/tag/v2.1.0</url>
+			<description>
+				<ul>
+					<li>Changed license to the GNU GPL version 3 or later</li>
+					<li>Changed the config directory location</li>
+					<li>Migrated to Tauri v2 to reduce app size, prevent dependency issues, and fix bugs and performance issues</li>
+					<li>Minor bug fixes</li>
+				</ul>
+			</description>
+		</release>
+		<release version="2.0.0" date="2024-09-07">
+			<url type="details">https://github.com/nekename/OpenDeck/release/tag/v2.0.0</url>
+			<description>
+				<p>This is the first stable release of the completely rewritten version of OpenDeck</p>
+			</description>
+		</release>
+	</releases>
+</component>

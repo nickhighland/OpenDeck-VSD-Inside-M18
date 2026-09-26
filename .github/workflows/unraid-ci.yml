@@ -1,0 +1,58 @@
+name: Unraid verification
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    # Never run this persistent self-hosted runner for pull-request code.
+    if: github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, linux, x64, unraid]
+    timeout-minutes: 60
+    env:
+      CARGO_TARGET_DIR: /runner/persistent_files/cargo-target
+      DENO_DIR: /runner/persistent_files/deno-cache
+      CARGO_TERM_COLOR: always
+    steps:
+      - name: Check out trusted main branch
+        uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Set up Deno
+        uses: denoland/setup-deno@v1
+        with:
+          deno-version: v2.x
+
+      - name: Install Linux build dependencies
+        run: |
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libudev-dev \
+            xdg-utils \
+            libdbus-1-dev
+
+      - name: Install frontend dependencies
+        run: deno install
+
+      - name: Check Rust formatting
+        run: cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
+
+      - name: Check frontend types
+        run: deno task check
+
+      - name: Test Rust backend
+        run: cargo test --manifest-path src-tauri/Cargo.toml
+
+      - name: Build frontend
+        run: deno task build

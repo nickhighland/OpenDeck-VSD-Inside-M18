@@ -1,0 +1,73 @@
+{
+	"$schema": "https://schema.tauri.app/config/2",
+	"build": {
+		"beforeBuildCommand": "deno task build",
+		"beforeDevCommand": "deno task dev",
+		"frontendDist": "../build",
+		"devUrl": "http://localhost:5173"
+	},
+	"bundle": {
+		"active": true,
+		"targets": "all",
+		"resources": { "target/plugins/": "plugins/" },
+		"linux": {
+			"deb": {
+				"desktopTemplate": "bundle/opendeck-vsd-m18.desktop",
+				"files": {
+					"/etc/udev/rules.d/40-opendeck-m18.rules": "bundle/40-opendeck-m18.rules",
+					"/usr/share/metainfo/opendeck-vsd-m18.metainfo.xml": "bundle/opendeck-vsd-m18.metainfo.xml"
+				}
+			},
+			"rpm": {
+				"desktopTemplate": "bundle/opendeck-vsd-m18.desktop",
+				"files": {
+					"/etc/udev/rules.d/40-opendeck-m18.rules": "bundle/40-opendeck-m18.rules",
+					"/usr/share/metainfo/opendeck-vsd-m18.metainfo.xml": "bundle/opendeck-vsd-m18.metainfo.xml"
+				}
+			}
+		},
+		"publisher": "Aman Khanna (nekename)",
+		"shortDescription": "Control the VSD Inside M18",
+		"longDescription": "OpenDeck VSD M18 is a stable OpenDeck-based desktop application for the VSD Inside M18, with Stream Deck plugin compatibility, M18 hardware support, and VSD Craft profile migration.",
+		"category": "Productivity",
+		"icon": ["icons/icon.png", "icons/icon.icns", "icons/icon.ico"],
+		"macOS": {
+			"exceptionDomain": "localhost",
+			"signingIdentity": "-"
+		}
+	},
+	"productName": "OpenDeck VSD M18",
+	"mainBinaryName": "opendeck-vsd-m18",
+	"identifier": "com.nickhighland.opendeck-vsd-m18",
+	"plugins": {
+		"deep-link": {
+			"desktop": {
+				"schemes": ["opendeck", "openaction", "streamdeck"]
+			}
+		}
+	},
+	"app": {
+		"windows": [
+			{
+				"title": "OpenDeck VSD M18",
+				"backgroundThrottling": "disabled",
+				"fullscreen": false,
+				"resizable": true,
+				"width": 800,
+				"height": 600,
+				"minWidth": 800,
+				"minHeight": 600,
+				"center": true,
+				"dragDropEnabled": false
+			}
+		],
+		"security": {
+			"assetProtocol": {
+				"enable": true,
+				"scope": ["$APPDATA/**/*"]
+			},
+			"csp": "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src * data: asset: http://asset.localhost; media-src 'self' asset: http://asset.localhost; frame-src http://localhost:*; script-src 'self' 'unsafe-inline'; connect-src ipc: http://ipc.localhost https://openactionapi.github.io https://api.github.com https://raw.githubusercontent.com https://plugins.amankhanna.me;"
+		},
+		"withGlobalTauri": true
+	}
+}

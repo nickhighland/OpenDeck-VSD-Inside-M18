@@ -1,0 +1,65 @@
+# OpenDeck VSD M18
+
+OpenDeck VSD M18 is an M18-only desktop controller built from [OpenDeck](https://github.com/nekename/OpenDeck). It keeps OpenDeck's action, plugin, profile, multi-action, toggle-action, application-switching, and background-operation model, but the user-facing hardware layout is dedicated to the VSD Inside M18.
+
+## M18 layout
+
+The editor shows the physical device directly:
+
+```text
+[ LCD 1 ][ LCD 2 ][ LCD 3 ][ LCD 4 ][ LCD 5 ]
+[ LCD 6 ][ LCD 7 ][ LCD 8 ][ LCD 9 ][ LCD 10]
+[LCD 11 ][LCD 12 ][LCD 13 ][LCD 14 ][LCD 15]
+             [Bottom 1] [Bottom 2] [Bottom 3]
+```
+
+The bottom buttons are real assignable controls, but they have no LCD. Their assignments can use action titles and behavior without causing image writes to nonexistent displays. The fork does not expose the two unused positions that a generic OpenDeck 4×5 profile can contain. Internal position numbering is retained only so the OpenDeck action/plugin protocol and imported profiles remain compatible.
+
+The VSD Inside M18 hardware driver is built into the application. It is not installed, listed, spawned, or managed as an OpenDeck plugin. The core driver talks directly to VSD Inside M18 (`5548:1000`) for key press/release events, brightness, reconnects, and sleep/wake handling. OpenDeck's remaining plugin system is reserved for actions and user extensions.
+
+The built-in screensaver can loop a selected video or rotate through selected photos across the 15 LCDs while leaving the LEDs on. The first button press wakes the device and is consumed without activating its assigned action.
+
+The action list includes a built-in **M18 LED Colors** action for all 24 RGB LEDs; it does not depend on a hardware plugin process.
+
+## VSD Craft migration
+
+Use **Settings → Import VSD Craft** and select a VSD Craft `manifest.json`. The importer follows nested page profiles and creates native M18 profiles with titles, images, hotkeys, toggle hotkeys, applications, URLs, page navigation, brightness, media/system controls, and supported VSD actions.
+
+Unsupported action UUIDs are reported and retained in place with their title and image instead of being silently dropped. Dynamic VSD Craft widgets such as weather, calendars, timers, memo storage, and animated visualizers still need individual native action ports for full one-for-one parity.
+
+See [docs/VSD-M18-STATUS.md](docs/VSD-M18-STATUS.md) for the compatibility boundary and verification notes.
+
+## macOS background operation
+
+The app defaults to background/menu-bar operation. The supplied [LaunchAgent template](macos/com.opendeck.vsd-m18.plist) can keep the app running and restart it after an abnormal exit. It intentionally uses `KeepAlive=true`, so a deliberate quit also reopens it until the job is unloaded.
+
+```sh
+cp "releases/OpenDeck VSD M18.app" "/Applications/OpenDeck VSD M18.app"
+cp macos/com.opendeck.vsd-m18.plist ~/Library/LaunchAgents/
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.opendeck.vsd-m18.plist
+```
+
+The release is ad-hoc signed for local testing. macOS may require right-clicking the app and choosing **Open** on first launch. Notarization requires the user's Apple Developer credentials.
+
+## Build and verification
+
+From the repository root:
+
+```sh
+deno task check
+cargo test --manifest-path src-tauri/Cargo.toml
+deno task tauri build
+```
+
+The repository includes the built-in M18 HID driver and the VSD Craft importer. The fork does not scan for or initialize Elgato Stream Deck hardware, and it does not migrate old generic OpenDeck/Stream Deck layout files into its M18 configuration directory.
+
+## GitHub Actions on Unraid
+
+The `Unraid verification` workflow uses a dedicated repository-level Unraid runner for trusted pushes to `main` and manual runs on `main`. It runs Rust formatting/tests and frontend checks/builds. It intentionally has no `pull_request` trigger: this is a public repository, and untrusted pull-request code must not run on a persistent runner with access to the Unraid host. The release workflow continues to use GitHub-hosted macOS, Windows, and Linux runners for native release builds. See [docs/UNRAID-CI.md](docs/UNRAID-CI.md) for the runner template and safety settings.
+
+## License and upstream sources
+
+The project remains GPL-3.0-or-later, following OpenDeck and the M18 protocol implementation used by this fork.
+
+- OpenDeck: https://github.com/nekename/OpenDeck
+- M18 protocol reference: https://github.com/ibanks42/opendeck-m18
