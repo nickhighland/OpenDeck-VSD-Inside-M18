@@ -13,6 +13,7 @@ mod power_events;
 mod screensaver;
 mod shared;
 mod store;
+mod vsd_actions;
 mod vsd_import;
 mod zip_extract;
 

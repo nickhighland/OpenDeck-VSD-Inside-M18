@@ -60,7 +60,9 @@
 				imported_actions: number;
 				unsupported_actions: string[];
 			} = await invoke("import_vsd_profile");
-			const unsupported = summary.unsupported_actions.length ? `\n\nUnmapped VSD action types: ${summary.unsupported_actions.join(", ")}` : "";
+			const unsupported = summary.unsupported_actions.length
+				? `\n\nPreserved as inactive placeholders (these actions will not run until implemented):\n${summary.unsupported_actions.join(", ")}`
+				: "";
 			await message(
 				`Imported ${summary.imported_actions} actions across ${summary.profiles.length} profile(s) for ${summary.device}.${unsupported}\n\nOpenDeck VSD M18 will restart to activate the imported profiles.`,
 				{ title: "VSD Craft import complete", buttons: { ok: $t("dialog.ok") } },

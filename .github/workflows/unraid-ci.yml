@@ -51,6 +51,9 @@ jobs:
       - name: Check frontend types
         run: deno task check
 
+      - name: Test frontend action search
+        run: deno test tests/actionSearch.test.ts
+
       - name: Test Rust backend
         run: cargo test --manifest-path src-tauri/Cargo.toml
 

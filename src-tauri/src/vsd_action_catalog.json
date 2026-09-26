@@ -1,0 +1,826 @@
+[
+  {
+    "name": "Action Carousel",
+    "uuid": "com.hotspot.streamdock.multiactions.LunBo",
+    "tooltip": "Execute multiple actions",
+    "category": "Action Flows",
+    "stateCount": 1,
+    "supportedInMultiActions": true
+  },
+  {
+    "name": "Action Cycle",
+    "uuid": "com.hotspot.streamdock.multiactions.toggle",
+    "tooltip": "Execute multiple actions",
+    "category": "Action Flows",
+    "stateCount": 1,
+    "supportedInMultiActions": true
+  },
+  {
+    "name": "Delay",
+    "uuid": "com.hotspot.streamdock.multiactions.delay",
+    "tooltip": "Pause the actions sequence",
+    "category": "Action Flows",
+    "stateCount": 1,
+    "supportedInMultiActions": true
+  },
+  {
+    "name": "Multi Action",
+    "uuid": "com.hotspot.streamdock.multiactions.routine",
+    "tooltip": "Execute multiple actions",
+    "category": "Action Flows",
+    "stateCount": 1,
+    "supportedInMultiActions": true
+  },
+  {
+    "name": "Eat Gold Coins",
+    "uuid": "com.mirabox.streamdock.eatgoldcoins.action1",
+    "tooltip": "Eat Gold Coins",
+    "category": "Media & VSD Extras",
+    "stateCount": 1,
+    "supportedInMultiActions": true
+  },
+  {
+    "name": "Full Screen Paint",
+    "uuid": "com.mirabox.streamdock.pigmenteffects.action2",
+    "tooltip": "Full Screen Paint",
+    "category": "Media & VSD Extras",
+    "stateCount": 1,
+    "supportedInMultiActions": true
+  },
+  {
+    "name": "MusicalRhythm",
+    "uuid": "com.streamdock.musicalrhythma.action1",
+    "tooltip": "MusicalRhythm",
+    "category": "Media & VSD Extras",
+    "stateCount": 1,
+    "supportedInMultiActions": true
+  },
+  {
+    "name": "One-button paint",
+    "uuid": "com.mirabox.streamdock.pigmenteffects.action1",
+    "tooltip": "One-button paint",
+    "category": "Media & VSD Extras",
+    "stateCount": 1,
+    "supportedInMultiActions": true
+  },
+  {
+    "name": "Play Audio",
+    "uuid": "com.hotspot.streamdock.soundboard.playaudio",
+    "tooltip": "Play a sound bite, audio effect or music clip",
+    "category": "Media & VSD Extras",
+    "stateCount": 2,
+    "supportedInMultiActions": true
+  },
+  {
+    "name": "Stop Audio",
+    "uuid": "com.hotspot.streamdock.soundboard.stopaudioplay",
+    "tooltip": "Stop all Soundboard playback",
+    "category": "Media & VSD Extras",
+    "stateCount": 1,
+    "supportedInMultiActions": true
+  },
+  {
+    "name": "Water tank",
+    "uuid": "com.mirabox.streamdock.watertank.action1",
+    "tooltip": "water tank",
+    "category": "Media & VSD Extras",
+    "stateCount": 1,
+    "supportedInMultiActions": true
+  },
+  {
+    "name": "emoji",
+    "uuid": "com.mirabox.streamdock.emoji.emoji",
+    "tooltip": "emoji operation",
+    "category": "Media & VSD Extras",
+    "stateCount": 1,
+    "supportedInMultiActions": true
+  },
+  {
+    "name": "emoji send",
+    "uuid": "com.mirabox.streamdock.emoji.emoji_send",
+    "tooltip": "emoji operation",
+    "category": "Media & VSD Extras",
+    "stateCount": 1,
+    "supportedInMultiActions": true
+  },
+  {
+    "name": "Shortcut",
+    "uuid": "com.hotspot.streamdock.vmix.shortcut",
+    "tooltip": "Control your vmix",
+    "category": "Network & Integrations",
+    "stateCount": 13,
+    "supportedInMultiActions": true
+  },
+  {
+    "name": "UDP",
+    "uuid": "com.hotspot.streamdock.network.udp",
+    "tooltip": "UDP communication",
+    "category": "Network & Integrations",
+    "stateCount": 1,
+    "supportedInMultiActions": true
+  },
+  {
+    "name": "Create Folder",
+    "uuid": "com.hotspot.streamdock.profile.openchild",
+    "tooltip": "Create a folder",
+    "category": "Pages & Profiles",
+    "stateCount": 1,
+    "supportedInMultiActions": true
+  },
+  {
+    "name": "Go back",
+    "uuid": "com.hotspot.streamdock.profile.backtoparent",
+    "tooltip": "Go back to previous screen",
+    "category": "Pages & Profiles",
+    "stateCount": 1,
+    "supportedInMultiActions": true
+  },
+  {
+    "name": "Go to page",
+    "uuid": "com.hotspot.streamdock.page.goto",
+    "tooltip": "",
+    "category": "Pages & Profiles",
+    "stateCount": 1,
+    "supportedInMultiActions": true
+  },
+  {
+    "name": "Next page",
+    "uuid": "com.hotspot.streamdock.page.next",
+    "tooltip": "",
+    "category": "Pages & Profiles",
+    "stateCount": 1,
+    "supportedInMultiActions": true
+  },
+  {
+    "name": "Page Indicator",
+    "uuid": "com.hotspot.streamdock.page.indicator",
+    "tooltip": "",
+    "category": "Pages & Profiles",
+    "stateCount": 1,
+    "supportedInMultiActions": true
+  },
+  {
+    "name": "Previous page",
+    "uuid": "com.hotspot.streamdock.page.previous",
+    "tooltip": "",
+    "category": "Pages & Profiles",
+    "stateCount": 1,
+    "supportedInMultiActions": true
+  },
+  {
+    "name": "Back",
+    "uuid": "com.hotspot.streamdock.hotkey.browser.back",
+    "tooltip": "Return to the previous page",
+    "category": "Shortcuts & Input",
+    "stateCount": 1,
+    "supportedInMultiActions": true
+  },
+  {
+    "name": "Collect",
+    "uuid": "com.hotspot.streamdock.hotkey.browser.collect",
+    "tooltip": "Bookmark the current page",
+    "category": "Shortcuts & Input",
+    "stateCount": 1,
+    "supportedInMultiActions": true
+  },
+  {
+    "name": "Forward",
+    "uuid": "com.hotspot.streamdock.hotkey.browser.forward",
+    "tooltip": "Go to the next page",
+    "category": "Shortcuts & Input",
+    "stateCount": 1,
+    "supportedInMultiActions": true
+  },
+  {
+    "name": "HotkeySwitch",
+    "uuid": "com.hotspot.streamdock.system.hotkeySwitch",
+    "tooltip": "Activate a key command",
+    "category": "Shortcuts & Input",
+    "stateCount": 2,
+    "supportedInMultiActions": true
+  },
+  {
+    "name": "Password",
+    "uuid": "com.hotspot.streamdock.system.password",
+    "tooltip": "Type a precomposed password string",
+    "category": "Shortcuts & Input",
+    "stateCount": 1,
+    "supportedInMultiActions": true
+  },
+  {
+    "name": "Refresh",
+    "uuid": "com.hotspot.streamdock.hotkey.browser.refresh",
+    "tooltip": "Refresh the current page",
+    "category": "Shortcuts & Input",
+    "stateCount": 1,
+    "supportedInMultiActions": true
+  },
+  {
+    "name": "Text",
+    "uuid": "com.hotspot.streamdock.plain.text",
+    "tooltip": "Plain text display",
+    "category": "Shortcuts & Input",
+    "stateCount": 1,
+    "supportedInMultiActions": true
+  },
+  {
+    "name": "Text",
+    "uuid": "com.hotspot.streamdock.system.text",
+    "tooltip": "Type a precomposed text string",
+    "category": "Shortcuts & Input",
+    "stateCount": 1,
+    "supportedInMultiActions": true
+  },
+  {
+    "name": "Calculator",
+    "uuid": "com.hotspot.streamdock.quicktool.calculator",
+    "tooltip": "Open the calculator",
+    "category": "System & Apps",
+    "stateCount": 1,
+    "supportedInMultiActions": true
+  },
+  {
+    "name": "Close",
+    "uuid": "com.hotspot.streamdock.system.close",
+    "tooltip": "close app",
+    "category": "System & Apps",
+    "stateCount": 1,
+    "supportedInMultiActions": true
+  },
+  {
+    "name": "Control panel",
+    "uuid": "com.hotspot.streamdock.quicktool.controlpanel",
+    "tooltip": "Open the Control panel",
+    "category": "System & Apps",
+    "stateCount": 1,
+    "supportedInMultiActions": true
+  },
+  {
+    "name": "DND Mode",
+    "uuid": "com.hotspot.streamdock.touchbar.dndmode",
+    "tooltip": "Do not disturb mode",
+    "category": "System & Apps",
+    "stateCount": 1,
+    "supportedInMultiActions": true
+  },
+  {
+    "name": "Decrease screen brightness",
+    "uuid": "com.hotspot.streamdock.touchbar.decreasescreenbrightness",
+    "tooltip": "Decrease screen brightness",
+    "category": "System & Apps",
+    "stateCount": 1,
+    "supportedInMultiActions": true
+  },
+  {
+    "name": "Desktop Saver",
+    "uuid": "com.hotspot.streamdock.touchbar.desktopsaver",
+    "tooltip": "Desktop Saver",
+    "category": "System & Apps",
+    "stateCount": 1,
+    "supportedInMultiActions": true
+  },
+  {
+    "name": "Dictation",
+    "uuid": "com.hotspot.streamdock.touchbar.dictation",
+    "tooltip": "Dictation",
+    "category": "System & Apps",
+    "stateCount": 1,
+    "supportedInMultiActions": true
+  },
+  {
+    "name": "Dispatch Center",
+    "uuid": "com.hotspot.streamdock.touchbar.dispatchcenter",
+    "tooltip": "Dispatch Center",
+    "category": "System & Apps",
+    "stateCount": 1,
+    "supportedInMultiActions": true
+  },
+  {
+    "name": "Display desktop",
+    "uuid": "com.hotspot.streamdock.hotkey.quickcontrol.displaydesktop",
+    "tooltip": "Display the desktop",
+    "category": "System & Apps",
+    "stateCount": 1,
+    "supportedInMultiActions": true
+  },
+  {
+    "name": "Emoticons",
+    "uuid": "com.hotspot.streamdock.hotkey.quicktool.emoticons",
+    "tooltip": "Open the emoticons",
+    "category": "System & Apps",
+    "stateCount": 1,
+    "supportedInMultiActions": true
+  },
+  {
+    "name": "Fast Forward",
+    "uuid": "com.hotspot.streamdock.touchbar.fastforward",
+    "tooltip": "Fast Forward",
+    "category": "System & Apps",
+    "stateCount": 1,
+    "supportedInMultiActions": true
+  },
+  {
+    "name": "Fast Rewind",
+    "uuid": "com.hotspot.streamdock.touchbar.fastrewind",
+    "tooltip": "Fast Rewind",
+    "category": "System & Apps",
+    "stateCount": 1,
+    "supportedInMultiActions": true
+  },
+  {
+    "name": "Focus On Search",
+    "uuid": "com.hotspot.streamdock.touchbar.focusonsearch",
+    "tooltip": "Focus on search",
+    "category": "System & Apps",
+    "stateCount": 1,
+    "supportedInMultiActions": true
+  },
+  {
+    "name": "Home page",
+    "uuid": "com.hotspot.streamdock.quicktool.homepage",
+    "tooltip": "Open the home page",
+    "category": "System & Apps",
+    "stateCount": 1,
+    "supportedInMultiActions": true
+  },
+  {
+    "name": "Increase screen brightness",
+    "uuid": "com.hotspot.streamdock.touchbar.increasescreenbrightness",
+    "tooltip": "Increase screen brightness",
+    "category": "System & Apps",
+    "stateCount": 1,
+    "supportedInMultiActions": true
+  },
+  {
+    "name": "Increase the volume",
+    "uuid": "com.hotspot.streamdock.hotkey.quickcontrol.volumeup",
+    "tooltip": "Increase the volume",
+    "category": "System & Apps",
+    "stateCount": 1,
+    "supportedInMultiActions": true
+  },
+  {
+    "name": "Input Method",
+    "uuid": "com.hotspot.streamdock.touchbar.inputmethod",
+    "tooltip": "Input Method",
+    "category": "System & Apps",
+    "stateCount": 1,
+    "supportedInMultiActions": true
+  },
+  {
+    "name": "Launchpad",
+    "uuid": "com.hotspot.streamdock.touchbar.launchpad",
+    "tooltip": "Launchpad",
+    "category": "System & Apps",
+    "stateCount": 1,
+    "supportedInMultiActions": true
+  },
+  {
+    "name": "Lower the volume",
+    "uuid": "com.hotspot.streamdock.hotkey.quickcontrol.volumedown",
+    "tooltip": "Lower the volume",
+    "category": "System & Apps",
+    "stateCount": 1,
+    "supportedInMultiActions": true
+  },
+  {
+    "name": "Mail",
+    "uuid": "com.hotspot.streamdock.quicktool.mail",
+    "tooltip": "Open the mail",
+    "category": "System & Apps",
+    "stateCount": 1,
+    "supportedInMultiActions": true
+  },
+  {
+    "name": "Music",
+    "uuid": "com.hotspot.streamdock.quicktool.music",
+    "tooltip": "Turn on the music",
+    "category": "System & Apps",
+    "stateCount": 1,
+    "supportedInMultiActions": true
+  },
+  {
+    "name": "Mute",
+    "uuid": "com.hotspot.streamdock.hotkey.quickcontrol.mute",
+    "tooltip": "Mute",
+    "category": "System & Apps",
+    "stateCount": 1,
+    "supportedInMultiActions": true
+  },
+  {
+    "name": "Mute",
+    "uuid": "com.hotspot.streamdock.touchbar.mute",
+    "tooltip": "Mute",
+    "category": "System & Apps",
+    "stateCount": 1,
+    "supportedInMultiActions": true
+  },
+  {
+    "name": "Next Track",
+    "uuid": "com.hotspot.streamdock.touchbar.nexttrack",
+    "tooltip": "Next Track",
+    "category": "System & Apps",
+    "stateCount": 1,
+    "supportedInMultiActions": true
+  },
+  {
+    "name": "Notification",
+    "uuid": "com.hotspot.streamdock.hotkey.quicktool.notification",
+    "tooltip": "Open notification",
+    "category": "System & Apps",
+    "stateCount": 1,
+    "supportedInMultiActions": true
+  },
+  {
+    "name": "Notification Center",
+    "uuid": "com.hotspot.streamdock.touchbar.notificationcenter",
+    "tooltip": "Notification Center",
+    "category": "System & Apps",
+    "stateCount": 1,
+    "supportedInMultiActions": true
+  },
+  {
+    "name": "Open",
+    "uuid": "com.hotspot.streamdock.system.open",
+    "tooltip": "Open an app, file or folder",
+    "category": "System & Apps",
+    "stateCount": 1,
+    "supportedInMultiActions": true
+  },
+  {
+    "name": "OpenApps",
+    "uuid": "com.hotspot.streamdock.system.openApps",
+    "tooltip": "Open an app, file or folder",
+    "category": "System & Apps",
+    "stateCount": 1,
+    "supportedInMultiActions": true
+  },
+  {
+    "name": "Play/Pause",
+    "uuid": "com.hotspot.streamdock.touchbar.playpause",
+    "tooltip": "Play/Pause",
+    "category": "System & Apps",
+    "stateCount": 1,
+    "supportedInMultiActions": true
+  },
+  {
+    "name": "Previous Track",
+    "uuid": "com.hotspot.streamdock.touchbar.previoustrack",
+    "tooltip": "Previous Track",
+    "category": "System & Apps",
+    "stateCount": 1,
+    "supportedInMultiActions": true
+  },
+  {
+    "name": "Screen Lock",
+    "uuid": "com.hotspot.streamdock.touchbar.screenlock",
+    "tooltip": "Screen Lock",
+    "category": "System & Apps",
+    "stateCount": 1,
+    "supportedInMultiActions": true
+  },
+  {
+    "name": "Screenshot",
+    "uuid": "com.hotspot.streamdock.touchbar.screenshot",
+    "tooltip": "Screenshot",
+    "category": "System & Apps",
+    "stateCount": 1,
+    "supportedInMultiActions": true
+  },
+  {
+    "name": "Search bar",
+    "uuid": "com.hotspot.streamdock.hotkey.quicktool.searchbar",
+    "tooltip": "Open the search bar",
+    "category": "System & Apps",
+    "stateCount": 1,
+    "supportedInMultiActions": true
+  },
+  {
+    "name": "Show Desktop",
+    "uuid": "com.hotspot.streamdock.touchbar.showdesktop",
+    "tooltip": "Show Desktop",
+    "category": "System & Apps",
+    "stateCount": 1,
+    "supportedInMultiActions": true
+  },
+  {
+    "name": "Siri",
+    "uuid": "com.hotspot.streamdock.touchbar.siri",
+    "tooltip": "Wake up siri",
+    "category": "System & Apps",
+    "stateCount": 1,
+    "supportedInMultiActions": true
+  },
+  {
+    "name": "Sleep",
+    "uuid": "com.hotspot.streamdock.quickcontrol.sleep",
+    "tooltip": "Put your PC to sleep, or hibernate if your PC supports hibernation",
+    "category": "System & Apps",
+    "stateCount": 1,
+    "supportedInMultiActions": true
+  },
+  {
+    "name": "Sleep",
+    "uuid": "com.hotspot.streamdock.touchbar.sleep",
+    "tooltip": "Sleep",
+    "category": "System & Apps",
+    "stateCount": 1,
+    "supportedInMultiActions": true
+  },
+  {
+    "name": "Speech recognition",
+    "uuid": "com.hotspot.streamdock.hotkey.quickcontrol.speechrecognition",
+    "tooltip": "Turn on speech recognition",
+    "category": "System & Apps",
+    "stateCount": 1,
+    "supportedInMultiActions": true
+  },
+  {
+    "name": "Switch screen",
+    "uuid": "com.hotspot.streamdock.hotkey.quickcontrol.switchscreen",
+    "tooltip": "Switch screen",
+    "category": "System & Apps",
+    "stateCount": 1,
+    "supportedInMultiActions": true
+  },
+  {
+    "name": "Task Manager",
+    "uuid": "com.hotspot.streamdock.hotkey.quicktool.taskmanager",
+    "tooltip": "Open the task manager",
+    "category": "System & Apps",
+    "stateCount": 1,
+    "supportedInMultiActions": true
+  },
+  {
+    "name": "Volume down",
+    "uuid": "com.hotspot.streamdock.touchbar.volumedown",
+    "tooltip": "Volume down",
+    "category": "System & Apps",
+    "stateCount": 1,
+    "supportedInMultiActions": true
+  },
+  {
+    "name": "Volume up",
+    "uuid": "com.hotspot.streamdock.touchbar.volumeup",
+    "tooltip": "Volume up",
+    "category": "System & Apps",
+    "stateCount": 1,
+    "supportedInMultiActions": true
+  },
+  {
+    "name": "Website",
+    "uuid": "com.hotspot.streamdock.system.website",
+    "tooltip": "Open URL",
+    "category": "System & Apps",
+    "stateCount": 1,
+    "supportedInMultiActions": true
+  },
+  {
+    "name": "devsleep",
+    "uuid": "com.hotspot.streamdock.device.devsleep",
+    "tooltip": "control device to sleep screen",
+    "category": "System & Apps",
+    "stateCount": 1,
+    "supportedInMultiActions": true
+  },
+  {
+    "name": "Chat Message",
+    "uuid": "com.hotspot.streamdock.youtube.chatmessage",
+    "tooltip": "Post a precomposed YouTube chat message",
+    "category": "Time & Online",
+    "stateCount": 1,
+    "supportedInMultiActions": true
+  },
+  {
+    "name": "Countdown",
+    "uuid": "com.mirabox.streamdock.time.action3",
+    "tooltip": "Press the button to start/pause, double-click to restart",
+    "category": "Time & Online",
+    "stateCount": 1,
+    "supportedInMultiActions": true
+  },
+  {
+    "name": "DateTime",
+    "uuid": "com.mirabox.streamdock.dateTime.action1",
+    "tooltip": "DateTime",
+    "category": "Time & Online",
+    "stateCount": 1,
+    "supportedInMultiActions": true
+  },
+  {
+    "name": "Record to-do",
+    "uuid": "com.hotspot.streamdock.memo.action2",
+    "tooltip": "Press the button to open to-do details",
+    "category": "Time & Online",
+    "stateCount": 1,
+    "supportedInMultiActions": true
+  },
+  {
+    "name": "Remember things",
+    "uuid": "com.hotspot.streamdock.memo.action1",
+    "tooltip": "Press the button to open historical notes",
+    "category": "Time & Online",
+    "stateCount": 1,
+    "supportedInMultiActions": true
+  },
+  {
+    "name": "Timer",
+    "uuid": "com.mirabox.streamdock.time.action2",
+    "tooltip": "Press the button to start/pause, double-click to restart",
+    "category": "Time & Online",
+    "stateCount": 1,
+    "supportedInMultiActions": true
+  },
+  {
+    "name": "Viewers",
+    "uuid": "com.hotspot.streamdock.youtube.viewers",
+    "tooltip": "Show number of YouTube live stream viewers",
+    "category": "Time & Online",
+    "stateCount": 1,
+    "supportedInMultiActions": true
+  },
+  {
+    "name": "Weather query",
+    "uuid": "com.hotspot.streamdock.weather.action1",
+    "tooltip": "Enter the city to check the weather conditions in the area",
+    "category": "Time & Online",
+    "stateCount": 1,
+    "supportedInMultiActions": true
+  },
+  {
+    "name": "World Time",
+    "uuid": "com.mirabox.streamdock.time.action1",
+    "tooltip": "Drag view world time in different time zones",
+    "category": "Time & Online",
+    "stateCount": 1,
+    "supportedInMultiActions": true
+  },
+  {
+    "name": "calendar",
+    "uuid": "com.mirabox.streamdock.calendar.action1",
+    "tooltip": "Information of the day",
+    "category": "Time & Online",
+    "stateCount": 1,
+    "supportedInMultiActions": true
+  },
+  {
+    "name": "Add Edit",
+    "uuid": "com.hotspot.streamdock.hotkey.pr.addEdit",
+    "tooltip": "",
+    "category": "Utilities",
+    "stateCount": 1,
+    "supportedInMultiActions": true
+  },
+  {
+    "name": "Add Marker",
+    "uuid": "com.hotspot.streamdock.hotkey.pr.addMarker",
+    "tooltip": "",
+    "category": "Utilities",
+    "stateCount": 1,
+    "supportedInMultiActions": true
+  },
+  {
+    "name": "Copy",
+    "uuid": "com.hotspot.streamdock.hotkey.pr.copy",
+    "tooltip": "",
+    "category": "Utilities",
+    "stateCount": 1,
+    "supportedInMultiActions": true
+  },
+  {
+    "name": "Cut",
+    "uuid": "com.hotspot.streamdock.hotkey.pr.cut",
+    "tooltip": "",
+    "category": "Utilities",
+    "stateCount": 1,
+    "supportedInMultiActions": true
+  },
+  {
+    "name": "Delete",
+    "uuid": "com.hotspot.streamdock.hotkey.pr.delete",
+    "tooltip": "",
+    "category": "Utilities",
+    "stateCount": 1,
+    "supportedInMultiActions": true
+  },
+  {
+    "name": "Effects panel",
+    "uuid": "com.hotspot.streamdock.hotkey.pr.effectsPanel",
+    "tooltip": "",
+    "category": "Utilities",
+    "stateCount": 1,
+    "supportedInMultiActions": true
+  },
+  {
+    "name": "Emoticons Library",
+    "uuid": "com.mirabox.streamdock.emoticons.lib",
+    "tooltip": "Emoticons Library",
+    "category": "Utilities",
+    "stateCount": 1,
+    "supportedInMultiActions": true
+  },
+  {
+    "name": "Paste",
+    "uuid": "com.hotspot.streamdock.hotkey.pr.paste",
+    "tooltip": "",
+    "category": "Utilities",
+    "stateCount": 1,
+    "supportedInMultiActions": true
+  },
+  {
+    "name": "Pen Tool",
+    "uuid": "com.hotspot.streamdock.hotkey.pr.penTool",
+    "tooltip": "",
+    "category": "Utilities",
+    "stateCount": 1,
+    "supportedInMultiActions": true
+  },
+  {
+    "name": "Play",
+    "uuid": "com.hotspot.streamdock.hotkey.pr.play",
+    "tooltip": "",
+    "category": "Utilities",
+    "stateCount": 1,
+    "supportedInMultiActions": true
+  },
+  {
+    "name": "Razor",
+    "uuid": "com.hotspot.streamdock.hotkey.pr.razor",
+    "tooltip": "",
+    "category": "Utilities",
+    "stateCount": 1,
+    "supportedInMultiActions": true
+  },
+  {
+    "name": "Rectangle Tool",
+    "uuid": "com.hotspot.streamdock.hotkey.pr.rectangleTool",
+    "tooltip": "",
+    "category": "Utilities",
+    "stateCount": 1,
+    "supportedInMultiActions": true
+  },
+  {
+    "name": "Ripple Editing Tools",
+    "uuid": "com.hotspot.streamdock.hotkey.pr.rippleEditingTools",
+    "tooltip": "",
+    "category": "Utilities",
+    "stateCount": 1,
+    "supportedInMultiActions": true
+  },
+  {
+    "name": "Screensaver 1",
+    "uuid": "com.mirabox.streamdock.screensaver.action1",
+    "tooltip": "Screensaver 1",
+    "category": "Utilities",
+    "stateCount": 1,
+    "supportedInMultiActions": true
+  },
+  {
+    "name": "Screensaver 2",
+    "uuid": "com.mirabox.streamdock.screensaver.action2",
+    "tooltip": "Screensaver 2",
+    "category": "Utilities",
+    "stateCount": 1,
+    "supportedInMultiActions": true
+  },
+  {
+    "name": "Slelct Emoticons",
+    "uuid": "com.mirabox.streamdock.emoticons.select",
+    "tooltip": "Slelct Emoticons",
+    "category": "Utilities",
+    "stateCount": 1,
+    "supportedInMultiActions": true
+  },
+  {
+    "name": "Slelct Emoticons",
+    "uuid": "com.mirabox.streamdock.emoticons.select2",
+    "tooltip": "Slelct Emoticons",
+    "category": "Utilities",
+    "stateCount": 1,
+    "supportedInMultiActions": true
+  },
+  {
+    "name": "Toggle Full Screen",
+    "uuid": "com.hotspot.streamdock.hotkey.pr.toggleFullScreen",
+    "tooltip": "",
+    "category": "Utilities",
+    "stateCount": 1,
+    "supportedInMultiActions": true
+  },
+  {
+    "name": "Undo",
+    "uuid": "com.hotspot.streamdock.hotkey.pr.undo",
+    "tooltip": "",
+    "category": "Utilities",
+    "stateCount": 1,
+    "supportedInMultiActions": true
+  },
+  {
+    "name": "timeLine",
+    "uuid": "com.hotspot.streamdock.pr.action5",
+    "tooltip": "",
+    "category": "Utilities",
+    "stateCount": 1,
+    "supportedInMultiActions": true
+  }
+]

@@ -12,9 +12,8 @@ The M18 hardware replacement is viable, but the fork does **not** yet have one-f
 The audit found:
 
 - VSD Craft ships 123 distinct action UUIDs across its bundled and default action packages.
-- The fork currently exposes the OpenDeck action catalog plus 12 M18-native actions in the application core: OpenApps, Super Hotkeys, HotkeySwitch, Super Hotkey Switch, volume down/up, mute, Siri, native previous/next/goto page controls, and M18 LED Colors. Super Hotkey and Super Hotkey Switch still use software input; this is **not** VSD Craft Super Hotkey parity.
-- The VSD importer recognizes 62 VSD action UUIDs and translates them to generic input, command, URL, profile-switch, toggle, or brightness actions. That is migration coverage, not full behavioral parity.
-- 61 VSD action UUIDs have no importer translation.
+- The fork exposes the OpenDeck catalog plus 103 M18-keypad-compatible VSD Craft action definitions as application-core actions, grouped into searchable categories. K1 Pro/knob-only actions are excluded. Common system controls, page navigation, OpenApps, and Hotkey mappings have dedicated translations; other catalogued single actions retain their VSD UUID/settings and reach the core runtime. Super Hotkey still uses software input, not VSD Craft's distinct hardware-keyboard path.
+- Catalog visibility and import coverage are ahead of behavior parity: several vendor-specific actions still have incomplete or missing runtime behavior and action-specific inspectors. VSD Multi Action/Carousel/Cycle child serialization is not validated, and folders do not yet have native nested navigation. Those unsupported composite actions remain explicitly inactive placeholders; they are not silently treated as executable.
 - The importer supports nested M18 pages and maps supported actions to native M18/OpenDeck actions. Private profile exports and selected-app lists are intentionally excluded from this public audit.
 
 The strongest parity area is the hardware layer: the fork drives the M18 directly from the application core, including its 15 LCD keys, three physical bottom buttons, LED output, reconnect handling, and sleep/wake. The computer-idle screensaver and wake-only first press are implemented but still need physical-device verification, including full-display coverage. The largest parity gap is the action catalog and its property inspectors.
@@ -28,6 +27,8 @@ The audit used three independent sources:
 3. Read-only inspection of the fork source, especially `src-tauri/src/m18.rs`, `src-tauri/src/vsd_import.rs`, the profile manager, the action catalog, and the screensaver components.
 
 Actions were not executed when doing so would launch applications, send keystrokes, change system settings, or modify the user's profile. For those actions, the installed manifest and property-inspector definitions were used as the feature evidence.
+
+The live screenshots reviewed inline are valid evidence for visible UI parity (controls, labels, defaults, and layout); a saved screenshot archive is useful for durable review but is not a prerequisite for continuing the comparison. Static screenshots do not establish runtime semantics, so behavioral parity is assessed separately using manifest/source evidence, sanitized import fixtures, and safe action tests.
 
 ## Application-level feature matrix
 
@@ -43,15 +44,15 @@ Actions were not executed when doing so would launch applications, send keystrok
 | M18 LEDs | VSD Craft's M18 profile does not use an explicit LED action; its bundle also contains K1 Pro LED actions for another device family. | **Matched/enhanced for M18.** The fork has a built-in `M18 LED Colors` action and core LED output. |
 | Reconnect/keepalive | VSD Craft maintains a connected device session, but the user reports frequent application crashes. | **Matched at the hardware boundary.** The fork's HID session, keepalive, reconnect, and sleep/wake path are in Rust core code, outside a hardware plugin process. Stability still needs long-running real-device testing. |
 | Scenes | VSD Craft has `Create Scene`, remove, rename, backup, import, export, and a default-scene checkbox. | **Partial.** The fork has profiles, folders, create/delete/rename/duplicate, backup/restore, and application-profile selection, but not the same scene editor or scene import/export format. |
-| Pages | VSD Craft visibly has page buttons `1`, `2`, and `+`; the live device switched between two page layouts. | **Matched for the M18 workflow.** The importer creates a native M18 page set, the editor exposes its page buttons, and previous/next/goto actions switch pages without a hardware plugin. |
+| Pages | VSD Craft visibly has page buttons `1`, `2`, and `+`; the live editor exposes a Go to Page selector and checked “Show page number” option. | **Partial, implementation added.** The importer creates native M18 pages, treats VSD page numbers as one-based, preserves the page-number visibility option (defaulting to VSD Craft’s checked state), and renders page numbers for Go to Page and Page Indicator. The actual M18 visual match remains unverified. |
 | App-based automatic switching | VSD Craft Scenes settings contain three application selectors and a “following app foreground, auto-switch to scene” option. | **Partial/matched conceptually.** The fork has an application watcher and per-application profile mappings. The VSD three-slot scene UI is not replicated. |
-| Action catalog | VSD Craft has category groups, drag-to-key actions, a search field, and a large bundled catalog. | **Partial.** The fork has the OpenDeck action catalog and drag/drop model, plus 12 M18-native actions. Its action-list search is local to the fork catalog. |
-| Action property inspector | VSD Craft's selected OpenApps key showed delete, title entry, title styling, app selection, app-list reload, and icon customization. | **Partial.** The fork has the OpenDeck property-inspector model and inspectors for its current actions, but not the VSD Craft-specific title/icon/app editor for every VSD action. |
+| Action catalog | VSD Craft has category groups, drag-to-key actions, a search field, and a large bundled catalog. | **Cataloged; behavior partial.** The fork adds 103 M18-keypad-compatible VSD action entries in seven native M18 categories. Search covers labels, localized labels, tooltips, identifiers, and category names, with matching groups opened automatically. It intentionally omits K1 Pro and knob-only actions. |
+| Action property inspector | VSD Craft's selected OpenApps key showed delete, title entry, title styling, app selection, app-list reload, and icon customization. | **Partial.** The fork has dedicated inspectors for OpenApps, hotkey switches, and page navigation, plus an editor for retained scalar/JSON settings on catalogued VSD actions. This does not reproduce all VSD-specific controls or establish behavior parity. |
 | Multi-action composition | VSD Craft includes Multi Action, Action Carousel, Action Cycle, Delay, and knob variants. | **Partial.** The fork has built-in Multi Action and Toggle Action. Carousel, delay, and knob action-group variants are missing. |
-| VSD Craft profile import | VSD profiles contain nested page profiles, per-position actions, state images/titles, and device metadata. | **Matched for supported migration data.** The importer follows nested pages, maps supported actions, preserves state artwork/titles, resolves OpenApps icons, and reports unsupported UUIDs for future profiles. Private profile contents are not included here. |
+| VSD Craft profile import | VSD profiles contain nested page profiles, per-position actions, state images/titles, and device metadata. | **Partial.** The importer follows M18 pages, preserves state artwork/titles and OpenApps icons, maps known system actions, and retains catalogued single-action UUIDs/settings in native core instances. Composite actions remain identified inactive placeholders pending child-format validation; folder contents/back-navigation are not yet preserved. Private profile contents are not included here. |
 | Per-key GIF/video artwork | The installed VSD Craft profile library contains PNG, GIF, MBG, JPG, and MP4 assets. | **Partial.** GIFs can be decoded for the UI's image path, but the M18 receives a rendered JPEG frame rather than an animated stream. MP4/MBG is not a supported per-key image format. |
 | VSD Craft screensaver actions | The bundle includes `Screensaver 1` and `Screensaver 2` action plugins. | **Partial, not hardware-verified.** The fork has video/photo input, macOS-wide idle detection, LED-preserving output, and first-press wake suppression. Full 480×272 background streaming is implemented, but coverage, alignment, playback cadence, and wake behavior still need connected-device observation. It is not a VSD-style key action. |
-| Persistent boot logo | VSD Craft Settings → Device offers `Replace the boot logo (Resolution 480*272)`. | **Missing.** The fork's temporary screensaver background is not a boot-logo upload. The separate persistent upload protocol must be established and tested before exposing this option. |
+| Persistent boot logo | VSD Craft Settings → Device offers `Replace the boot logo (Resolution 480*272)`. | **Intentionally excluded per user request.** Do not implement or send logo-upload commands. |
 | Startup/update/settings | VSD Craft Settings includes version, update check, language, power-on, minimize, reset-current-device, application-folder, reset-all-devices, and auto-detect options. | **Partial.** The fork has language, autolaunch, update checks, brightness, sleep, rotation, background, backup/restore, developer/statistics, config/log folders, and VSD import. Its reset/minimize/power-on controls are not one-for-one. |
 | Store/account/notifications | The main VSD Craft window has store, account, and notification controls, plus Community/Reddit/Discord/mail links. | **Missing/partial.** The fork retains OpenDeck plugin management but does not reproduce the VSD Craft store/account/community surface. |
 | Device-specific scope | VSD Craft bundles actions for M18 and many other MiraBox/VSD devices. | **Intentional divergence.** The fork is M18-only and does not need to retain the generic Stream Deck layout/device catalogue. |
@@ -62,7 +63,7 @@ The importer follows nested M18 pages and maps supported VSD action UUIDs to nat
 
 ### Boot-logo feasibility finding
 
-The installed VSD Craft library has a separate `SDDevice::sendLogoSizeCommand(int,unsigned char)` routine. Read-only ARM64 disassembly shows a `CRT...LOG` size-negotiation packet, distinct from the temporary `BGPIC` display-background command used by the screensaver. This supports a persistent boot-logo upload path, but the image format, transfer chunks, completion acknowledgement, size limits, and recovery rules remain unknown. No boot-logo command was sent during this audit.
+The installed VSD Craft library has a separate `SDDevice::sendLogoSizeCommand(int,unsigned char)` routine. Read-only ARM64 disassembly shows a `CRT...LOG` size-negotiation packet, distinct from the temporary `BGPIC` display-background command used by the screensaver. The routine writes a device/type byte at offset 0, `CRT` at offsets 1–3, `LOG` at 6–8, a big-endian 32-bit argument at 9–12, and its one-byte second argument at 13. Separate helpers construct a `CRT...ULEND` upload-finished marker and a model-dependent `CRT...STP` finish command; queued image data is represented as `ImageStruct` entries and has backpressure handling. This is enough to confirm a persistent-upload protocol family, but not to safely implement it: exact meaning/limits of the header arguments, logo image encoding, chunk framing, device acknowledgements, error/cancel recovery, and M18-specific support remain unverified. These are static ARM64 observations, not tested packets. No boot-logo command was sent during this audit.
 
 ### Super Hotkey feasibility finding
 
@@ -87,6 +88,8 @@ The following inventory is from every `manifest.json` in VSD Craft's bundled plu
 ### Create Folder — partial
 
 - Create Folder — `com.hotspot.streamdock.profile.openchild` — importer maps to profile switching; there is no exact Create Folder action.
+
+MiraBox's [core-features guide](https://mirabox.net/it/blogs/tutorial/streamdock-core-features-guide) describes Create Folder as a nested one-page container for actions, plugins, shortcuts, and workflows; folders may nest, but each folder currently has one page. The current M18 importer recognizes the UUID as profile switching, which does not prove that it preserves folder contents or back-navigation. A dedicated native folder/page-stack model or a validated flattening strategy is still needed for parity.
 
 ### DateTime — missing
 
@@ -144,6 +147,8 @@ The M18 has no encoder/knob input, so this is not required for the target hardwa
 - Multi Action ActionTrigger (Knob) — `com.hotspot.streamdock.multiactions.ActionTrigger`
 - Multi Action ActionWheel (Knob) — `com.hotspot.streamdock.multiactions.ActionWheel`
 
+MiraBox's [Operation Flow guide](https://mirabox.net/blogs/tutorial/how-to-use-operation-flow) describes Multi Action/Action Flow as sequential execution, Carousel as advancing to the next item on each press, and Action Toggle as switching the active state on each press. The installed VSD UUID `com.hotspot.streamdock.multiactions.toggle` is its Action Cycle entry. OpenDeck's Toggle Action cycles among child actions and is a close runtime analogue, but the VSD importer currently does not map this parent UUID or reconstruct a validated VSD child sequence. A name-only mapping would silently lose behavior, so migration support remains missing. The Action Wheel and Action Trigger entries are knob-controller variants; the M18 has no knob and these are not required for the target device.
+
 ### Multimedia — partial
 
 - Multimedia — `com.hotspot.streamdock.system.multimedia` — importer maps common indices to Music transport commands.
@@ -164,9 +169,9 @@ The M18 has no encoder/knob input, so this is not required for the target hardwa
 
 ### Pages — partial
 
-- Go to page — `com.hotspot.streamdock.page.goto` — importer maps to a generated profile target.
+- Go to page — `com.hotspot.streamdock.page.goto` — importer maps its one-based VSD page number to the matching native M18 page and adds the “Show page number” control.
 - Next page — `com.hotspot.streamdock.page.next` — importer maps to the next generated profile target.
-- Page Indicator — `com.hotspot.streamdock.page.indicator` — no native page indicator; importer does not translate it.
+- Page Indicator — `com.hotspot.streamdock.page.indicator` — importer maps to the native M18 Page Indicator, which renders the current page’s one-based number in a full 72×72 key image. Visual matching on the physical display remains unverified.
 - Previous page — `com.hotspot.streamdock.page.previous` — importer maps to the previous generated profile target.
 - change page (Knob) — `com.hotspot.streamdock.page.change` — importer maps to profile switching, but M18 has no knob.
 
@@ -214,6 +219,8 @@ The fork's global M18 screensaver is designed for the requested behavior: it acc
 
 - Play Audio — `com.hotspot.streamdock.soundboard.playaudio`
 - Stop Audio — `com.hotspot.streamdock.soundboard.stopaudioplay`
+
+The installed action manifest gives Play Audio two visual states and Stop Audio one. MiraBox's [Audio Player guide](https://mirabox.net/blogs/tutorial/how-to-use-the-audio-player-feature-on-streamdock) documents four Play Audio modes—Play/Stop, Play/Overlap, Play/Replay, and Loop/Stop—plus a per-action volume and output-device selector. It lists MP3, WAV, MP4, M4A, M4B, M4P, MOV, AIFF, and FLAC support. VSD Craft's installed inspector also exposes fade type and duration, but the available vendor guide does not define those controls or their serialized setting keys. No native port is claimed until those semantics, importer mapping, and stop-all behavior are implemented and tested.
 
 ### Super Hotkeys — partial
 
@@ -321,10 +328,8 @@ These actions are preset keyboard shortcuts for Adobe Premiere-style editing. Th
 
 ## Fork-native action surface today
 
-The action list currently contains these 19 selectable actions:
+The application core currently exposes these 23 native M18 actions:
 
-- Multi Action — `opendeck.multiaction`
-- Toggle Action — `opendeck.toggleaction`
 - M18 LED Colors — `opendeck.m18.led-colors`
 - OpenApps — `opendeck.m18.open-apps`
 - Super Hotkeys — `opendeck.m18.super-hotkeys`
@@ -333,12 +338,13 @@ The action list currently contains these 19 selectable actions:
 - Volume down / Volume up — `opendeck.m18.volume-down` / `opendeck.m18.volume-up`
 - Mute — `opendeck.m18.mute`
 - Siri — `opendeck.m18.siri`
+- Dispatch Center, Screenshot, Launchpad, Desktop Saver, Sleep
+- Increase/decrease screen brightness
+- Previous Track, Play/Pause, Next Track
 - Previous / Next / Go to page — `opendeck.m18.page-previous` / `opendeck.m18.page-next` / `opendeck.m18.page-goto`
-- Run Command — `com.amansprojects.starterpack.runcommand`
-- Open URL — `com.amansprojects.starterpack.openurl`
-- Simulate Input — `com.amansprojects.starterpack.inputsimulation`
-- Switch Profile — `com.amansprojects.starterpack.switchprofile`
-- Device Brightness — `com.amansprojects.starterpack.devicebrightness`
+- Page Indicator — `opendeck.m18.page-indicator`
+
+The broader selectable catalog also includes OpenDeck's Multi Action and Toggle Action, plus generic Starter Pack actions such as Run Command, Open URL, Simulate Input, Switch Profile, and Device Brightness. The VSD catalog is not reproduced one-for-one.
 
 This is why the fork can import the current M18 setup without presenting the full VSD catalog: the importer composes a smaller number of generic primitives. That is useful for migration, but it is not yet feature parity for users who expect to create every VSD action from the action list.
 
@@ -349,7 +355,7 @@ The following order gives the highest practical value for this M18 profile and t
 1. Verify representative migrated actions, occupied-slot swaps, all three bottom buttons, computer-idle screensaver, and full-display video alignment on hardware. Distinguish ordinary Hotkey from Super Hotkey input at the transport/OS boundary.
 2. Reverse-engineer and safely test the persistent 480×272 boot-logo upload; it is separate from the temporary screensaver background.
 3. Add native text, soundboard, browser, media, sleep, screen-brightness, screenshot, and app/file/folder actions with macOS-native implementations and inspectors.
-4. Add a native page indicator if required; the M18 page navigation model already exists.
+4. Verify Go to Page and Page Indicator artwork/visibility on-device against VSD Craft, then continue with multi-action delay/cycle/carousel behavior.
 5. Add multi-action delay/cycle/carousel behavior.
 6. Add dynamic information actions: calendar, DateTime, timer/countdown, weather, memo, YouTube, and emoticons.
 7. Add specialist integrations only if needed: UDP, vMix, Premiere, pigment mixing, musical rhythm, water tank, and game-like actions.

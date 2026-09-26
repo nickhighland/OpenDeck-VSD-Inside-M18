@@ -1,6 +1,4 @@
 <script lang="ts">
-	import type { Action } from "$lib/Action";
-
 	import MagnifyingGlass from "phosphor-svelte/lib/MagnifyingGlass";
 
 	import { t } from "$lib/i18n";
@@ -8,31 +6,34 @@
 	import { copiedItem } from "$lib/propertyInspector";
 	import { localisations } from "$lib/settings";
 	import { PRODUCT_NAME } from "$lib/singletons";
+	import { filterActionCategories, shouldOpenActionCategory, type ActionCategory, type ActionLocalisations } from "$lib/actionSearch";
 
 	import { invoke } from "@tauri-apps/api/core";
 
-	let categories: { [name: string]: { icon?: string; actions: Action[] } } = {};
+	let categories: Record<string, ActionCategory> = {};
 	let plugins: any[] = [];
+	let localisationsMap: ActionLocalisations = {};
+	let categoryOpenOverrides = new Map<string, boolean>();
 	export async function reload() {
 		categories = await invoke("get_categories");
 		plugins = await invoke("list_plugins");
 	}
 	reload();
+	$: localisationsMap = $localisations ?? {};
 
 	let query: string = "";
-	let filteredCategories: [string, { icon?: string; actions: Action[] }][] = [];
-	$: {
-		let lowerCaseQuery = query.toLowerCase().trim();
-		filteredCategories = Object.entries(categories)
-			.sort((a, b) => (a[0] == PRODUCT_NAME ? -1 : b[0] == PRODUCT_NAME ? 1 : a[0].localeCompare(b[0])))
-			.map(([categoryName, { icon, actions }]): [string, { icon?: string; actions: Action[] }] => {
-				if (!categoryName.toLowerCase().includes(lowerCaseQuery)) {
-					actions = actions.filter((action) => action.name.toLowerCase().includes(lowerCaseQuery));
-				}
-				return [categoryName, { icon, actions }];
-			})
-			.filter(([_, { actions }]) => actions.length > 0);
+	let filteredCategories: [string, ActionCategory][] = [];
+
+	function categoryIsOpen(name: string): boolean {
+		return shouldOpenActionCategory(name, query, categoryOpenOverrides, PRODUCT_NAME);
 	}
+
+	function handleCategoryToggle(name: string, event: Event) {
+		const details = event.currentTarget as HTMLDetailsElement;
+		categoryOpenOverrides = new Map(categoryOpenOverrides).set(name, details.open);
+	}
+
+	$: filteredCategories = filterActionCategories(categories, query, localisationsMap, PRODUCT_NAME);
 
 	function handleListKeydown(event: KeyboardEvent) {
 		if (!["ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) return;
@@ -79,13 +80,16 @@
 <div class="flex flex-col w-[18rem] h-full bg-neutral-900 border-l border-neutral-700">
 	<div class="flex flex-row items-center m-2 bg-neutral-700 border border-neutral-600 rounded-lg">
 		<MagnifyingGlass size="13" class="ml-2 mr-1 text-neutral-300" />
-		<input bind:value={query} class="w-full p-1 text-sm text-neutral-300" placeholder={$t("action_list.search_placeholder")} type="search" spellcheck="false" />
+		<input bind:value={query} class="w-full p-1 text-sm text-neutral-300" placeholder={$t("action_list.search_placeholder")} aria-label={$t("action_list.search_placeholder")} type="search" spellcheck="false" />
 	</div>
 
 	<span id="action-list-hint" class="sr-only">{$t("action_list.hint")}</span>
 	<div class="grow overflow-auto select-none divide-y divide-neutral-800!">
+		{#if query.trim() && filteredCategories.length === 0}
+			<p class="p-4 text-sm text-neutral-400" role="status">No actions match “{query.trim()}”.</p>
+		{/if}
 		{#each filteredCategories as [name, { icon, actions }]}
-			<details open>
+			<details open={categoryIsOpen(name)} on:toggle={(event) => handleCategoryToggle(name, event)}>
 				<summary class="pl-4 py-3 text-lg font-semibold text-neutral-300 hover:bg-neutral-800 transition-colors cursor-pointer">
 					{#if icon || (actions[0] && plugins.find((x) => x.id == actions[0].plugin) && categories[name].actions.every((x) => x.plugin == actions[0].plugin))}
 						<img

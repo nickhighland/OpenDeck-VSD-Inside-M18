@@ -85,14 +85,17 @@ enum Mapping {
 	NativeVolumeUp,
 	NativeMute,
 	NativeSiri,
+	NativeSystemControl,
 	NativePagePrevious,
 	NativePageNext,
 	NativePageGoto,
+	NativePageIndicator,
 	InputSimulation,
 	RunCommand,
 	OpenUrl,
 	SwitchProfile,
 	DeviceBrightness,
+	NativeVsdAction,
 	Unsupported,
 }
 
@@ -194,6 +197,19 @@ fn mapping(uuid: &str, name: &str) -> Mapping {
 	if uuid.contains("touchbar.siri") {
 		return Mapping::NativeSiri;
 	}
+	if uuid.contains(".dispatchcenter")
+		|| uuid.contains(".screenshot")
+		|| uuid.contains(".launchpad")
+		|| uuid.contains(".desktopsaver")
+		|| uuid.ends_with(".sleep")
+		|| uuid.contains("increasescreenbrightness")
+		|| uuid.contains("decreasescreenbrightness")
+		|| uuid.contains(".previoustrack")
+		|| uuid.contains(".playpause")
+		|| uuid.contains(".nexttrack")
+	{
+		return Mapping::NativeSystemControl;
+	}
 	if uuid.contains("page.previous") {
 		return Mapping::NativePagePrevious;
 	}
@@ -203,8 +219,18 @@ fn mapping(uuid: &str, name: &str) -> Mapping {
 	if uuid.contains("page.goto") {
 		return Mapping::NativePageGoto;
 	}
+	if uuid.contains("page.indicator") {
+		return Mapping::NativePageIndicator;
+	}
 	if uuid.contains("hotkeys") || uuid.ends_with(".hotkey") || uuid.contains(".hotkey.") {
 		return Mapping::InputSimulation;
+	}
+	// Most VSD Craft actions have a direct M18 core entry. Keep their source
+	// UUID and settings instead of degrading them to plugin commands or an
+	// inactive placeholder. Composite actions and folder navigation need a
+	// validated child/profile representation and intentionally remain separate.
+	if crate::vsd_actions::definition(&uuid).is_some() && !crate::vsd_actions::is_composite_action(&uuid) && !uuid.contains("profile.openchild") && !uuid.contains("profile.backtoparent") {
+		return Mapping::NativeVsdAction;
 	}
 	if uuid.ends_with(".open") || uuid.contains(".open.") {
 		return Mapping::RunCommand;
@@ -276,8 +302,49 @@ fn action_from_categories(categories: &HashMap<String, Category>, uuid: &str, na
 	fallback_action(uuid, name, plugin)
 }
 
+fn native_system_control(uuid: &str) -> (&'static str, &'static str) {
+	let uuid = uuid.to_ascii_lowercase();
+	if uuid.contains(".dispatchcenter") {
+		(crate::m18_actions::DISPATCH_CENTER_UUID, "Dispatch Center")
+	} else if uuid.contains(".screenshot") {
+		(crate::m18_actions::SCREENSHOT_UUID, "Screenshot")
+	} else if uuid.contains(".launchpad") {
+		(crate::m18_actions::LAUNCHPAD_UUID, "Launchpad")
+	} else if uuid.contains(".desktopsaver") {
+		(crate::m18_actions::DESKTOP_SAVER_UUID, "Desktop Saver")
+	} else if uuid.ends_with(".sleep") {
+		(crate::m18_actions::SLEEP_UUID, "Sleep")
+	} else if uuid.contains("increasescreenbrightness") {
+		(crate::m18_actions::SCREEN_BRIGHTNESS_UP_UUID, "Increase screen brightness")
+	} else if uuid.contains("decreasescreenbrightness") {
+		(crate::m18_actions::SCREEN_BRIGHTNESS_DOWN_UUID, "Decrease screen brightness")
+	} else if uuid.contains(".previoustrack") {
+		(crate::m18_actions::PREVIOUS_TRACK_UUID, "Previous Track")
+	} else if uuid.contains(".playpause") {
+		(crate::m18_actions::PLAY_PAUSE_UUID, "Play/Pause")
+	} else {
+		(crate::m18_actions::NEXT_TRACK_UUID, "Next Track")
+	}
+}
+
 fn numeric_setting(settings: &Value, key: &str) -> Option<usize> {
 	settings.get(key).and_then(|value| value.as_u64().map(|value| value as usize).or_else(|| value.as_str()?.parse().ok()))
+}
+
+fn native_page_index(settings: &Value, fallback: usize) -> usize {
+	numeric_setting(settings, "PageIndex").map(|page_number| page_number.saturating_sub(1)).unwrap_or(fallback)
+}
+
+fn show_page_number(settings: &Value) -> bool {
+	settings
+		.as_object()
+		.and_then(|settings| {
+			settings.iter().find_map(|(key, value)| {
+				let normalized = key.to_ascii_lowercase().replace('_', "");
+				(normalized == "showpagenumber").then(|| value.as_bool()).flatten()
+			})
+		})
+		.unwrap_or(true)
 }
 
 fn setting_string(settings: &Value, keys: &[&str]) -> Option<String> {
@@ -553,7 +620,7 @@ fn profile_for_index(pages: &[PageSpec], index: usize) -> &str {
 fn switch_target(uuid: &str, settings: &Value, page_index: usize, pages: &[PageSpec]) -> String {
 	let uuid = uuid.to_ascii_lowercase();
 	if uuid.contains("page.goto") {
-		let requested = numeric_setting(settings, "PageIndex").unwrap_or(page_index);
+		let requested = native_page_index(settings, page_index);
 		return profile_for_index(pages, requested.min(pages.len().saturating_sub(1))).to_owned();
 	}
 	if uuid.contains("page.previous") {
@@ -626,16 +693,26 @@ fn mapped_instance(
 			let mapped = action_from_categories(categories, uuid, name, "");
 			action_instance(mapped, context, json!({}), &action.states, base_dir, action.state)
 		}
-		Mapping::NativePagePrevious | Mapping::NativePageNext | Mapping::NativePageGoto => {
+		Mapping::NativeSystemControl => {
+			let (uuid, name) = native_system_control(&action.uuid);
+			let mapped = action_from_categories(categories, uuid, name, "");
+			action_instance(mapped, context, json!({}), &action.states, base_dir, action.state)
+		}
+		Mapping::NativePagePrevious | Mapping::NativePageNext | Mapping::NativePageGoto | Mapping::NativePageIndicator => {
 			let (uuid, name) = match kind {
 				Mapping::NativePagePrevious => (crate::m18_actions::PAGE_PREVIOUS_UUID, "Previous page"),
 				Mapping::NativePageNext => (crate::m18_actions::PAGE_NEXT_UUID, "Next page"),
 				Mapping::NativePageGoto => (crate::m18_actions::PAGE_GOTO_UUID, "Go to page"),
+				Mapping::NativePageIndicator => (crate::m18_actions::PAGE_INDICATOR_UUID, "Page Indicator"),
 				_ => unreachable!(),
 			};
 			let settings = if matches!(kind, Mapping::NativePageGoto) {
-				let index = numeric_setting(&action.settings, "PageIndex").unwrap_or(page_index);
-				json!({ "page": profile_for_index(pages, index), "pageIndex": index })
+				let index = native_page_index(&action.settings, page_index);
+				json!({
+					"page": profile_for_index(pages, index),
+					"pageIndex": index,
+					"showPageNumber": show_page_number(&action.settings),
+				})
 			} else {
 				json!({})
 			};
@@ -677,12 +754,32 @@ fn mapped_instance(
 			};
 			action_instance(mapped, context, json!({ "action": brightness_action, "value": value }), &action.states, base_dir, action.state)
 		}
+		Mapping::NativeVsdAction => {
+			let Some(definition) = crate::vsd_actions::definition(&action.uuid) else {
+				unreachable!("NativeVsdAction is selected only for catalogue entries")
+			};
+			let mapped = action_from_categories(categories, &definition.uuid, &definition.name, "");
+			action_instance(mapped, context, action.settings.clone(), &action.states, base_dir, action.state)
+		}
 		Mapping::Unsupported => {
 			if !unsupported.contains(&action.uuid) {
 				unsupported.push(action.uuid.clone());
 			}
-			let mapped = action_from_categories(categories, "com.amansprojects.starterpack.runcommand", "Run Command", STARTER_PLUGIN);
-			action_instance(mapped, context, json!({ "down": "true" }), &action.states, base_dir, action.state)
+			let mut mapped = fallback_action(crate::m18_actions::UNSUPPORTED_VSD_UUID, "Unsupported VSD Craft action", "");
+			mapped.tooltip = "Preserved from VSD Craft; behavior is not implemented and this key will not execute".to_owned();
+			mapped.visible_in_action_list = false;
+			action_instance(
+				mapped,
+				context,
+				json!({
+					"sourceName": action.name,
+					"sourceUuid": action.uuid,
+					"sourceSettings": action.settings,
+				}),
+				&action.states,
+				base_dir,
+				action.state,
+			)
 		}
 	}
 }
@@ -806,10 +903,12 @@ mod tests {
 
 	#[test]
 	fn maps_vsd_coordinates_to_all_eighteen_m18_buttons() {
-		assert_eq!(key_position("0,0"), Some(0));
-		assert_eq!(key_position("4,2"), Some(14));
-		assert_eq!(key_position("5,0"), Some(15));
-		assert_eq!(key_position("5,2"), Some(17));
+		for y in 0..3 {
+			for x in 0..5 {
+				assert_eq!(key_position(&format!("{x},{y}")), Some(x + y * 5));
+			}
+			assert_eq!(key_position(&format!("5,{y}")), Some(15 + y));
+		}
 		assert_eq!(key_position("6,0"), None);
 	}
 
@@ -859,7 +958,161 @@ mod tests {
 		assert!(matches!(mapping("com.hotspot.streamdock.system.hotkeySwitch", "HotkeySwitch"), Mapping::NativeHotkeySwitch));
 		assert!(matches!(mapping("com.hotspot.streamdock.system.openApps", "OpenApps"), Mapping::NativeOpenApps));
 		assert!(matches!(mapping("com.hotspot.streamdock.page.next", "Next page"), Mapping::NativePageNext));
+		assert!(matches!(mapping("com.hotspot.streamdock.page.indicator", "Page Indicator"), Mapping::NativePageIndicator));
 		assert!(matches!(mapping("com.hotspot.streamdock.touchbar.siri", "Siri"), Mapping::NativeSiri));
+		assert!(matches!(mapping("com.hotspot.streamdock.touchbar.dispatchcenter", "Dispatch Center"), Mapping::NativeSystemControl));
+		assert!(matches!(mapping("com.hotspot.streamdock.touchbar.screenshot", "Screenshot"), Mapping::NativeSystemControl));
+		assert!(matches!(
+			mapping("com.hotspot.streamdock.touchbar.increasescreenbrightness", "Increase screen brightness"),
+			Mapping::NativeSystemControl
+		));
+		assert!(matches!(mapping("com.hotspot.streamdock.touchbar.playpause", "Play/Pause"), Mapping::NativeSystemControl));
+	}
+
+	#[test]
+	fn imports_vsd_page_targets_as_one_based_numbers_and_preserves_number_visibility() {
+		assert_eq!(native_page_index(&json!({ "PageIndex": 1 }), 1), 0);
+		assert_eq!(native_page_index(&json!({ "PageIndex": 2 }), 0), 1);
+		assert_eq!(native_page_index(&json!({}), 1), 1);
+		assert!(show_page_number(&json!({})));
+		assert!(!show_page_number(&json!({ "ShowPageNumber": false })));
+		assert!(!show_page_number(&json!({ "show_page_number": false })));
+
+		let action = VsdAction {
+			controller: "Keypad".to_owned(),
+			name: "Go to Page".to_owned(),
+			settings: json!({ "PageIndex": 1 }),
+			state: 0,
+			states: vec![],
+			uuid: "com.hotspot.streamdock.page.goto".to_owned(),
+		};
+		let pages = vec![
+			PageSpec {
+				path: PathBuf::from("page-1"),
+				manifest: VsdManifest {
+					actions: HashMap::new(),
+					device_serial_number: String::new(),
+					device_uuid: String::new(),
+					name: "Page 1".to_owned(),
+					pages: Value::Null,
+				},
+				profile_id: "Page 1".to_owned(),
+			},
+			PageSpec {
+				path: PathBuf::from("page-2"),
+				manifest: VsdManifest {
+					actions: HashMap::new(),
+					device_serial_number: String::new(),
+					device_uuid: String::new(),
+					name: "Page 2".to_owned(),
+					pages: Value::Null,
+				},
+				profile_id: "Page 2".to_owned(),
+			},
+		];
+		let context = ActionContext {
+			device: "18-test".to_owned(),
+			profile: "Page 1".to_owned(),
+			controller: "Keypad".to_owned(),
+			position: 15,
+			index: 0,
+		};
+		let mut unsupported = vec![];
+		let instance = mapped_instance(&HashMap::new(), &action, context, 0, &pages, Path::new("."), "18-test", &mut unsupported);
+
+		assert_eq!(instance.action.uuid, crate::m18_actions::PAGE_GOTO_UUID);
+		assert_eq!(instance.settings["pageIndex"], 0);
+		assert_eq!(instance.settings["page"], "Page 1");
+		assert_eq!(instance.settings["showPageNumber"], true);
+		assert!(unsupported.is_empty());
+	}
+
+	#[test]
+	fn imports_page_indicator_as_a_native_m18_action() {
+		let action = VsdAction {
+			controller: "Keypad".to_owned(),
+			name: "Page Indicator".to_owned(),
+			settings: json!({}),
+			state: 0,
+			states: vec![],
+			uuid: "com.hotspot.streamdock.page.indicator".to_owned(),
+		};
+		let context = ActionContext {
+			device: "18-test".to_owned(),
+			profile: "Profile 2".to_owned(),
+			controller: "Keypad".to_owned(),
+			position: 0,
+			index: 0,
+		};
+		let mut unsupported = vec![];
+		let instance = mapped_instance(&HashMap::new(), &action, context, 1, &[], Path::new("."), "18-test", &mut unsupported);
+
+		assert_eq!(instance.action.uuid, crate::m18_actions::PAGE_INDICATOR_UUID);
+		assert_eq!(instance.action.name, "Page Indicator");
+		assert!(crate::m18_actions::is_native_action(&instance.action.uuid));
+		assert!(unsupported.is_empty());
+	}
+
+	#[test]
+	fn preserves_unsupported_actions_as_explicit_inactive_placeholders() {
+		let action = VsdAction {
+			controller: "Keypad".to_owned(),
+			name: "Action Carousel".to_owned(),
+			settings: json!({ "items": ["private action config"] }),
+			state: 0,
+			states: vec![VsdState {
+				image: String::new(),
+				title: "Carousel".to_owned(),
+			}],
+			uuid: "com.hotspot.streamdock.multiactions.LunBo".to_owned(),
+		};
+		let context = ActionContext {
+			device: "18-test".to_owned(),
+			profile: "test".to_owned(),
+			controller: "Keypad".to_owned(),
+			position: 0,
+			index: 0,
+		};
+		let mut unsupported = vec![];
+		let instance = mapped_instance(&HashMap::new(), &action, context, 0, &[], Path::new("."), "18-test", &mut unsupported);
+
+		assert_eq!(instance.action.uuid, crate::m18_actions::UNSUPPORTED_VSD_UUID);
+		assert_eq!(instance.action.name, "Unsupported VSD Craft action");
+		assert_eq!(instance.states[0].text, "Carousel");
+		assert_eq!(instance.settings["sourceName"], "Action Carousel");
+		assert_eq!(instance.settings["sourceUuid"], "com.hotspot.streamdock.multiactions.LunBo");
+		assert_eq!(instance.settings["sourceSettings"]["items"][0], "private action config");
+		assert_eq!(unsupported, vec!["com.hotspot.streamdock.multiactions.LunBo"]);
+		assert!(crate::m18_actions::is_native_action(&instance.action.uuid));
+		assert!(futures::executor::block_on(crate::m18_actions::key_down(&instance)).is_ok());
+		assert!(!futures::executor::block_on(crate::m18_actions::key_up(&instance)).unwrap());
+	}
+
+	#[test]
+	fn imports_catalogued_single_actions_as_native_core_actions_with_settings() {
+		let mut categories = HashMap::new();
+		crate::vsd_actions::insert_catalog(&mut categories);
+		let action = VsdAction {
+			controller: "Keypad".to_owned(),
+			name: "UDP".to_owned(),
+			settings: json!({ "Host": "192.0.2.4", "Port": 9000, "Message": "toggle" }),
+			state: 0,
+			states: vec![],
+			uuid: "com.hotspot.streamdock.network.udp".to_owned(),
+		};
+		let context = ActionContext {
+			device: "18-test".to_owned(),
+			profile: "Profile A".to_owned(),
+			controller: "Keypad".to_owned(),
+			position: 17,
+			index: 0,
+		};
+		let instance = mapped_instance(&categories, &action, context, 0, &[], Path::new("/tmp"), "device", &mut vec![]);
+
+		assert_eq!(instance.action.uuid, action.uuid);
+		assert!(instance.action.plugin.is_empty());
+		assert_eq!(instance.settings, action.settings);
+		assert!(crate::m18_actions::is_native_action(&instance.action.uuid));
 	}
 
 	#[test]

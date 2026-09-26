@@ -499,6 +499,30 @@ pub static CATEGORIES: LazyLock<RwLock<HashMap<String, Category>>> = LazyLock::n
 					}
 				))
 				.unwrap(),
+			],
+		},
+	);
+	hashmap.insert(
+		"M18 · Apps & Hotkeys".to_owned(),
+		Category {
+			icon: Some("opendeck/apps-hotkeys.svg".to_owned()),
+			actions: vec![
+				m18_action("OpenApps", crate::m18_actions::OPEN_APPS_UUID, "Open an application"),
+				m18_action("Super Hotkeys", crate::m18_actions::SUPER_HOTKEYS_UUID, "Send a configured hotkey"),
+				m18_action("HotkeySwitch", crate::m18_actions::HOTKEY_SWITCH_UUID, "Cycle through configured hotkeys"),
+				m18_action(
+					"Super Hotkey Switch",
+					crate::m18_actions::SUPER_HOTKEY_SWITCH_UUID,
+					"Cycle through Super Hotkeys (macOS software-input fallback)",
+				),
+			],
+		},
+	);
+	hashmap.insert(
+		"M18 · Device Controls".to_owned(),
+		Category {
+			icon: Some("opendeck/device-controls.svg".to_owned()),
+			actions: vec![
 				serde_json::from_value(serde_json::json!(
 					{
 						"name": "M18 LED Colors",
@@ -512,23 +536,89 @@ pub static CATEGORIES: LazyLock<RwLock<HashMap<String, Category>>> = LazyLock::n
 					}
 				))
 				.unwrap(),
-				m18_action("OpenApps", crate::m18_actions::OPEN_APPS_UUID, "Open an application"),
-				m18_action("Super Hotkeys", crate::m18_actions::SUPER_HOTKEYS_UUID, "Send a configured hotkey"),
-				m18_action("HotkeySwitch", crate::m18_actions::HOTKEY_SWITCH_UUID, "Cycle through configured hotkeys"),
-				m18_action(
-					"Super Hotkey Switch",
-					crate::m18_actions::SUPER_HOTKEY_SWITCH_UUID,
-					"Cycle through Super Hotkeys (macOS software-input fallback)",
-				),
+			],
+		},
+	);
+	hashmap.insert(
+		"M18 · Page Navigation".to_owned(),
+		Category {
+			icon: Some("opendeck/page-navigation.svg".to_owned()),
+			actions: vec![
+				m18_action("Previous page", crate::m18_actions::PAGE_PREVIOUS_UUID, "Switch to the previous M18 page"),
+				m18_action("Next page", crate::m18_actions::PAGE_NEXT_UUID, "Switch to the next M18 page"),
+				m18_action("Go to page", crate::m18_actions::PAGE_GOTO_UUID, "Switch to a selected M18 page"),
+				m18_action("Page Indicator", crate::m18_actions::PAGE_INDICATOR_UUID, "Display the number of the current M18 page"),
+			],
+		},
+	);
+	hashmap.insert(
+		"M18 · System Controls".to_owned(),
+		Category {
+			icon: Some("opendeck/system-controls.svg".to_owned()),
+			actions: vec![
 				m18_action("Volume down", crate::m18_actions::VOLUME_DOWN_UUID, "Lower macOS output volume"),
 				m18_action("Volume up", crate::m18_actions::VOLUME_UP_UUID, "Raise macOS output volume"),
 				m18_action("Mute", crate::m18_actions::MUTE_UUID, "Toggle macOS output mute"),
 				m18_action("Siri", crate::m18_actions::SIRI_UUID, "Open Siri"),
-				m18_action("Previous page", crate::m18_actions::PAGE_PREVIOUS_UUID, "Switch to the previous M18 page"),
-				m18_action("Next page", crate::m18_actions::PAGE_NEXT_UUID, "Switch to the next M18 page"),
-				m18_action("Go to page", crate::m18_actions::PAGE_GOTO_UUID, "Switch to a selected M18 page"),
+				m18_action("Dispatch Center", crate::m18_actions::DISPATCH_CENTER_UUID, "Open macOS Control Center"),
+				m18_action("Screenshot", crate::m18_actions::SCREENSHOT_UUID, "Capture a selected area to the clipboard"),
+				m18_action("Launchpad", crate::m18_actions::LAUNCHPAD_UUID, "Open Launchpad"),
+				m18_action("Desktop Saver", crate::m18_actions::DESKTOP_SAVER_UUID, "Start the macOS screen saver"),
+				m18_action("Sleep", crate::m18_actions::SLEEP_UUID, "Put the display to sleep"),
+				m18_action("Increase screen brightness", crate::m18_actions::SCREEN_BRIGHTNESS_UP_UUID, "Increase Mac display brightness"),
+				m18_action("Decrease screen brightness", crate::m18_actions::SCREEN_BRIGHTNESS_DOWN_UUID, "Decrease Mac display brightness"),
+				m18_action("Previous Track", crate::m18_actions::PREVIOUS_TRACK_UUID, "Play the previous track in Music"),
+				m18_action("Play/Pause", crate::m18_actions::PLAY_PAUSE_UUID, "Toggle playback in Music"),
+				m18_action("Next Track", crate::m18_actions::NEXT_TRACK_UUID, "Play the next track in Music"),
 			],
 		},
 	);
+	crate::vsd_actions::insert_catalog(&mut hashmap);
 	RwLock::new(hashmap)
 });
+
+#[cfg(test)]
+mod m18_action_catalog_tests {
+	use super::CATEGORIES;
+
+	#[test]
+	fn native_m18_actions_are_grouped_for_discovery() {
+		let categories = CATEGORIES.blocking_read();
+		let expected = [
+			(
+				"M18 · Apps & Hotkeys",
+				vec![
+					crate::m18_actions::OPEN_APPS_UUID,
+					crate::m18_actions::SUPER_HOTKEYS_UUID,
+					crate::m18_actions::HOTKEY_SWITCH_UUID,
+					crate::m18_actions::SUPER_HOTKEY_SWITCH_UUID,
+				],
+			),
+			(
+				"M18 · System Controls",
+				vec![
+					crate::m18_actions::SIRI_UUID,
+					crate::m18_actions::VOLUME_DOWN_UUID,
+					crate::m18_actions::VOLUME_UP_UUID,
+					crate::m18_actions::MUTE_UUID,
+				],
+			),
+			(
+				"M18 · Page Navigation",
+				vec![
+					crate::m18_actions::PAGE_PREVIOUS_UUID,
+					crate::m18_actions::PAGE_NEXT_UUID,
+					crate::m18_actions::PAGE_GOTO_UUID,
+					crate::m18_actions::PAGE_INDICATOR_UUID,
+				],
+			),
+		];
+
+		for (category_name, expected_uuids) in expected {
+			let category = categories.get(category_name).unwrap_or_else(|| panic!("missing category {category_name}"));
+			for uuid in expected_uuids {
+				assert!(category.actions.iter().any(|action| action.uuid == uuid), "missing {uuid} from {category_name}");
+			}
+		}
+	}
+}

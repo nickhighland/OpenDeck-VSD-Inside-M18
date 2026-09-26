@@ -155,6 +155,18 @@ pub fn is_active(device: &str) -> bool {
 	ACTIVE_DEVICES.contains_key(device)
 }
 
+/// Start the configured device screensaver immediately from a VSD Craft
+/// screensaver action. This does not change the global idle-trigger setting.
+pub async fn start_device(device: &str) {
+	if !is_m18(device) || !has_media_configured() || crate::device_sleep::is_device_sleeping(device) {
+		return;
+	}
+	LAST_DEVICE_INTERACTION.insert(device.to_owned(), Instant::now());
+	if ACTIVE_DEVICES.insert(device.to_owned(), ()).is_none() {
+		emit("screensaver_start", device);
+	}
+}
+
 pub fn active_devices() -> Vec<String> {
 	ACTIVE_DEVICES.iter().map(|entry| entry.key().clone()).collect()
 }

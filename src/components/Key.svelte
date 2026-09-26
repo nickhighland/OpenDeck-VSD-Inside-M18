@@ -17,6 +17,7 @@
 
 	import { invoke } from "@tauri-apps/api/core";
 	import { listen } from "@tauri-apps/api/event";
+	import { onMount } from "svelte";
 	import { tick } from "svelte";
 
 	export let context: Context | null;
@@ -45,11 +46,46 @@
 	let pressed: boolean = false;
 
 	let state: ActionState | undefined;
+	let m18PageSet: { pages: { profile: string }[]; selected: number } = { pages: [], selected: 0 };
+	onMount(() => {
+		const device = context?.device;
+		if (!device?.startsWith("18-")) return;
+		let disposed = false;
+		let unlisten: (() => void) | undefined;
+		void (async () => {
+			try {
+				const [pageSet, stopListening] = await Promise.all([
+					invoke<typeof m18PageSet>("get_m18_pages", { device }),
+					listen("m18_pages_changed", ({ payload }: { payload: { device: string; pageSet: typeof m18PageSet } }) => {
+						if (payload.device === device) m18PageSet = payload.pageSet;
+					}),
+				]);
+				if (disposed) stopListening();
+				else {
+					m18PageSet = pageSet;
+					unlisten = stopListening;
+				}
+			} catch {}
+		})();
+		return () => {
+			disposed = true;
+			unlisten?.();
+		};
+	});
 	$: {
 		if (!slot) {
 			state = undefined;
 		} else {
-			state = slot.states[slot.current_state];
+			const currentState = slot.states[slot.current_state];
+			if (currentState && slot.action.uuid === "opendeck.m18.page-goto" && slot.settings?.showPageNumber !== false && !currentState.text.trim()) {
+				state = { ...currentState, text: String(Number(slot.settings?.pageIndex ?? 0) + 1), show: true, alignment: "middle", size: 20, colour: "#ffffff", stroke_colour: "#000000", stroke_size: 1 };
+			} else if (currentState && slot.action.uuid === "opendeck.m18.page-indicator") {
+				const pageIndex = m18PageSet.pages.findIndex((page) => page.profile === context?.profile);
+				const pageNumber = (pageIndex >= 0 ? pageIndex : m18PageSet.selected) + 1;
+				state = { ...currentState, text: String(pageNumber), show: true, alignment: "middle", size: 20, colour: "#ffffff", stroke_colour: "#000000", stroke_size: 1 };
+			} else {
+				state = currentState;
+			}
 		}
 	}
 

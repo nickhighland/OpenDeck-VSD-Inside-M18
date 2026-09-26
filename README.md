@@ -21,11 +21,13 @@ The built-in screensaver can loop a selected video or rotate through selected ph
 
 The action list includes a built-in **M18 LED Colors** action for all 24 RGB LEDs; it does not depend on a hardware plugin process.
 
+Native M18 actions are grouped into Apps & Hotkeys, Device Controls, Page Navigation, and System Controls. Search covers action names, localized labels, tooltips, identifiers, plugin IDs, and category names.
+
 ## VSD Craft migration
 
 Use **Settings → Import VSD Craft** and select a VSD Craft `manifest.json`. The importer follows nested page profiles and creates native M18 profiles with titles, images, hotkeys, toggle hotkeys, applications, URLs, page navigation, brightness, media/system controls, and supported VSD actions.
 
-Unsupported action UUIDs are reported and retained in place with their title and image instead of being silently dropped. Dynamic VSD Craft widgets such as weather, calendars, timers, memo storage, and animated visualizers still need individual native action ports for full one-for-one parity.
+Unsupported action UUIDs are reported and retained with their original settings, title, and image as clearly labeled inactive placeholders; they will not execute until implemented. Dynamic VSD Craft widgets such as weather, calendars, timers, memo storage, and animated visualizers still need individual native action ports for full one-for-one parity.
 
 See [docs/VSD-M18-STATUS.md](docs/VSD-M18-STATUS.md) for the compatibility boundary and verification notes.
 
@@ -55,7 +57,7 @@ The repository includes the built-in M18 HID driver and the VSD Craft importer. 
 
 ## GitHub Actions on Unraid
 
-The `Unraid verification` workflow uses a dedicated repository-level Unraid runner for trusted pushes to `main` and manual runs on `main`. It runs Rust formatting/tests and frontend checks/builds. It intentionally has no `pull_request` trigger: this is a public repository, and untrusted pull-request code must not run on a persistent runner with access to the Unraid host. The release workflow continues to use GitHub-hosted macOS, Windows, and Linux runners for native release builds. See [docs/UNRAID-CI.md](docs/UNRAID-CI.md) for the runner template and safety settings.
+The `Unraid verification` workflow uses a dedicated repository-level Unraid runner for trusted pushes to `main` and manual runs on `main`. It runs Rust formatting/tests and frontend checks/builds. It intentionally has no `pull_request` trigger: this is a public repository, and untrusted pull-request code must not run on a persistent runner with access to the Unraid host. The release workflow continues to use GitHub-hosted macOS, Windows, and Linux runners for native release builds. See [docs/UNRAID-CI.md](docs/UNRAID-CI.md) for runner safety and [docs/SETUP-RECOVERY.md](docs/SETUP-RECOVERY.md) for setup and recovery instructions.
 
 ## License and upstream sources
 

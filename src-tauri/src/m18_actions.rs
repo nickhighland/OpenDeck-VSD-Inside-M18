@@ -11,6 +11,7 @@ use enigo::{
 	Enigo, Settings,
 	agent::{Agent, Token},
 };
+use image::{Rgb, RgbImage};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::fs;
@@ -27,9 +28,23 @@ pub const VOLUME_DOWN_UUID: &str = "opendeck.m18.volume-down";
 pub const VOLUME_UP_UUID: &str = "opendeck.m18.volume-up";
 pub const MUTE_UUID: &str = "opendeck.m18.mute";
 pub const SIRI_UUID: &str = "opendeck.m18.siri";
+pub const DISPATCH_CENTER_UUID: &str = "opendeck.m18.dispatch-center";
+pub const SCREENSHOT_UUID: &str = "opendeck.m18.screenshot";
+pub const LAUNCHPAD_UUID: &str = "opendeck.m18.launchpad";
+pub const DESKTOP_SAVER_UUID: &str = "opendeck.m18.desktop-saver";
+pub const SLEEP_UUID: &str = "opendeck.m18.sleep";
+pub const SCREEN_BRIGHTNESS_UP_UUID: &str = "opendeck.m18.screen-brightness-up";
+pub const SCREEN_BRIGHTNESS_DOWN_UUID: &str = "opendeck.m18.screen-brightness-down";
+pub const PREVIOUS_TRACK_UUID: &str = "opendeck.m18.previous-track";
+pub const PLAY_PAUSE_UUID: &str = "opendeck.m18.play-pause";
+pub const NEXT_TRACK_UUID: &str = "opendeck.m18.next-track";
 pub const PAGE_PREVIOUS_UUID: &str = "opendeck.m18.page-previous";
 pub const PAGE_NEXT_UUID: &str = "opendeck.m18.page-next";
 pub const PAGE_GOTO_UUID: &str = "opendeck.m18.page-goto";
+pub const PAGE_INDICATOR_UUID: &str = "opendeck.m18.page-indicator";
+/// Import-only marker for VSD actions whose behavior has not been ported.
+/// It is deliberately excluded from the selectable action catalog.
+pub const UNSUPPORTED_VSD_UUID: &str = "opendeck.m18.unsupported-vsd-action";
 
 static ENIGO: OnceLock<Mutex<Option<Enigo>>> = OnceLock::new();
 static APP_ICON_CACHE: OnceLock<Mutex<HashMap<String, Option<String>>>> = OnceLock::new();
@@ -45,14 +60,26 @@ pub fn is_native_action(uuid: &str) -> bool {
 			| VOLUME_UP_UUID
 			| MUTE_UUID
 			| SIRI_UUID
+			| DISPATCH_CENTER_UUID
+			| SCREENSHOT_UUID
+			| LAUNCHPAD_UUID
+			| DESKTOP_SAVER_UUID
+			| SLEEP_UUID
+			| SCREEN_BRIGHTNESS_UP_UUID
+			| SCREEN_BRIGHTNESS_DOWN_UUID
+			| PREVIOUS_TRACK_UUID
+			| PLAY_PAUSE_UUID
+			| NEXT_TRACK_UUID
 			| PAGE_PREVIOUS_UUID
 			| PAGE_NEXT_UUID
 			| PAGE_GOTO_UUID
-	)
+			| PAGE_INDICATOR_UUID
+			| UNSUPPORTED_VSD_UUID
+	) || (crate::vsd_actions::is_vsd_action(uuid) && !crate::vsd_actions::is_composite_action(uuid))
 }
 
 pub fn is_switch_action(uuid: &str) -> bool {
-	matches!(uuid, HOTKEY_SWITCH_UUID | SUPER_HOTKEY_SWITCH_UUID)
+	matches!(uuid, HOTKEY_SWITCH_UUID | SUPER_HOTKEY_SWITCH_UUID) || crate::vsd_actions::is_hotkey_switch(uuid)
 }
 
 pub fn default_settings(uuid: &str) -> Value {
@@ -60,8 +87,8 @@ pub fn default_settings(uuid: &str) -> Value {
 		OPEN_APPS_UUID => serde_json::json!({ "appPath": "" }),
 		SUPER_HOTKEYS_UUID => serde_json::json!({ "down": "", "up": "" }),
 		HOTKEY_SWITCH_UUID | SUPER_HOTKEY_SWITCH_UUID => serde_json::json!({ "hotkeys": [{ "down": "", "up": "" }, { "down": "", "up": "" }], "index": 0 }),
-		PAGE_GOTO_UUID => serde_json::json!({ "page": "", "pageIndex": 0 }),
-		_ => Value::Object(serde_json::Map::new()),
+		PAGE_GOTO_UUID => serde_json::json!({ "page": "", "pageIndex": 0, "showPageNumber": true }),
+		_ => crate::vsd_actions::default_settings(uuid),
 	}
 }
 
@@ -229,16 +256,158 @@ pub fn refresh_open_app_icon(instance: &mut ActionInstance) {
 	}
 }
 
+fn page_number_for_profile(pages: &[crate::m18_pages::M18Page], selected: usize, profile: &str) -> Option<usize> {
+	if pages.is_empty() {
+		return None;
+	}
+	Some(pages.iter().position(|page| page.profile == profile).unwrap_or_else(|| selected.min(pages.len() - 1)) + 1)
+}
+
+fn current_page_number(instance: &ActionInstance) -> Option<usize> {
+	let page_set = crate::m18_pages::get(&instance.context.device).ok()?;
+	page_number_for_profile(&page_set.pages, page_set.selected, &instance.context.profile)
+}
+
+fn draw_page_number(image: &mut RgbImage, number: usize) {
+	const DIGITS: [[u8; 7]; 10] = [
+		[0b01110, 0b10001, 0b10011, 0b10101, 0b11001, 0b10001, 0b01110],
+		[0b00100, 0b01100, 0b00100, 0b00100, 0b00100, 0b00100, 0b01110],
+		[0b01110, 0b10001, 0b00001, 0b00010, 0b00100, 0b01000, 0b11111],
+		[0b11110, 0b00001, 0b00001, 0b01110, 0b00001, 0b00001, 0b11110],
+		[0b00010, 0b00110, 0b01010, 0b10010, 0b11111, 0b00010, 0b00010],
+		[0b11111, 0b10000, 0b10000, 0b11110, 0b00001, 0b00001, 0b11110],
+		[0b00110, 0b01000, 0b10000, 0b11110, 0b10001, 0b10001, 0b01110],
+		[0b11111, 0b00001, 0b00010, 0b00100, 0b01000, 0b01000, 0b01000],
+		[0b01110, 0b10001, 0b10001, 0b01110, 0b10001, 0b10001, 0b01110],
+		[0b01110, 0b10001, 0b10001, 0b01111, 0b00001, 0b00010, 0b11100],
+	];
+
+	let text = number.to_string();
+	let digits: Vec<usize> = text.bytes().rev().take(12).collect::<Vec<_>>().into_iter().rev().map(|byte| (byte - b'0') as usize).collect();
+	let scale = (60 / (digits.len() * 5 + digits.len().saturating_sub(1))).clamp(1, 7) as u32;
+	let character_width = 5 * scale;
+	let gap = scale;
+	let text_width = digits.len() as u32 * character_width + digits.len().saturating_sub(1) as u32 * gap;
+	let left = (72 - text_width) / 2;
+	let top = (72 - 7 * scale) / 2;
+
+	for (digit_index, digit) in digits.iter().enumerate() {
+		for (row, bits) in DIGITS[*digit].iter().enumerate() {
+			for column in 0..5 {
+				if bits & (1 << (4 - column)) == 0 {
+					continue;
+				}
+				let x = left + digit_index as u32 * (character_width + gap) + column * scale;
+				let y = top + row as u32 * scale;
+				for dy in 0..scale {
+					for dx in 0..scale {
+						if x + dx + 1 < image.width() && y + dy + 1 < image.height() {
+							image.put_pixel(x + dx + 1, y + dy + 1, Rgb([5, 7, 12]));
+						}
+						image.put_pixel(x + dx, y + dy, Rgb([245, 247, 250]));
+					}
+				}
+			}
+		}
+	}
+}
+
+fn encode_key_image(image: &RgbImage) -> Option<String> {
+	let mut bytes = Vec::new();
+	image::codecs::jpeg::JpegEncoder::new_with_quality(&mut bytes, 92)
+		.encode_image(&image::DynamicImage::ImageRgb8(image.clone()))
+		.ok()?;
+	Some(format!("data:image/jpeg;base64,{}", base64::engine::general_purpose::STANDARD.encode(bytes)))
+}
+
+fn page_number_image(number: usize) -> Option<String> {
+	let mut image = RgbImage::from_pixel(72, 72, Rgb([12, 18, 31]));
+	draw_page_number(&mut image, number);
+	encode_key_image(&image)
+}
+
+fn page_number_over_image(number: usize, source: Option<&str>) -> Option<String> {
+	let decoded = source
+		.and_then(image_data_url)
+		.and_then(|data_url| data_url.split_once(',').map(|(_, data)| data.to_owned()))
+		.and_then(|data| base64::engine::general_purpose::STANDARD.decode(data).ok())
+		.and_then(|bytes| image::load_from_memory(&bytes).ok());
+	let mut image = decoded
+		.map(|image| image.resize_exact(72, 72, image::imageops::FilterType::Lanczos3).to_rgb8())
+		.unwrap_or_else(|| RgbImage::from_pixel(72, 72, Rgb([12, 18, 31])));
+	draw_page_number(&mut image, number);
+	encode_key_image(&image)
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn page_indicator_uses_its_profile_position_then_selected_page_as_fallback() {
+		let pages = vec![
+			crate::m18_pages::M18Page {
+				id: "one".to_owned(),
+				name: "First".to_owned(),
+				profile: "Profile A".to_owned(),
+			},
+			crate::m18_pages::M18Page {
+				id: "two".to_owned(),
+				name: "Second".to_owned(),
+				profile: "Profile B".to_owned(),
+			},
+		];
+
+		assert_eq!(page_number_for_profile(&pages, 0, "Profile B"), Some(2));
+		assert_eq!(page_number_for_profile(&pages, 1, "unlisted profile"), Some(2));
+		assert_eq!(page_number_for_profile(&[], 0, "unlisted profile"), None);
+	}
+
+	#[test]
+	fn page_indicator_artwork_is_a_full_key_image() {
+		let data_url = page_number_image(2).expect("page number should render");
+		let encoded = data_url.strip_prefix("data:image/jpeg;base64,").expect("jpeg data URL");
+		let bytes = base64::engine::general_purpose::STANDARD.decode(encoded).expect("base64 image");
+		let image = image::load_from_memory(&bytes).expect("valid JPEG image");
+		assert_eq!((image.width(), image.height()), (72, 72));
+		let number_pixel = image.to_rgb8().get_pixel(28, 14).0;
+		assert!(number_pixel.iter().all(|channel| *channel > 180), "page number glyph should be visible");
+
+		let red_background = encode_key_image(&RgbImage::from_pixel(72, 72, Rgb([210, 20, 30]))).expect("encode source image");
+		let overlaid = page_number_over_image(1, Some(&red_background)).expect("page number overlays a source image");
+		let encoded_overlay = overlaid.strip_prefix("data:image/jpeg;base64,").expect("overlay data URL");
+		let overlay_bytes = base64::engine::general_purpose::STANDARD.decode(encoded_overlay).expect("overlay base64");
+		let overlay_image = image::load_from_memory(&overlay_bytes).expect("valid overlaid JPEG image").to_rgb8();
+		assert_eq!((overlay_image.width(), overlay_image.height()), (72, 72));
+		let preserved_background = overlay_image.get_pixel(1, 1).0;
+		assert!(
+			preserved_background[0] > 170 && preserved_background[1] < 70 && preserved_background[2] < 80,
+			"overlay should preserve the source artwork"
+		);
+	}
+}
+
 pub async fn render(instance: &ActionInstance) -> Result<(), anyhow::Error> {
 	let image = if instance.action.uuid == OPEN_APPS_UUID {
 		app_icon_data_url(&instance.settings).or_else(|| instance.states.get(instance.current_state as usize).and_then(|state| image_data_url(&state.image)))
+	} else if instance.action.uuid == PAGE_INDICATOR_UUID {
+		current_page_number(instance)
+			.and_then(page_number_image)
+			.or_else(|| instance.states.get(instance.current_state as usize).and_then(|state| image_data_url(&state.image)))
+	} else if instance.action.uuid == PAGE_GOTO_UUID
+		&& instance.settings.get("showPageNumber").and_then(Value::as_bool).unwrap_or(true)
+		&& instance.states.get(instance.current_state as usize).is_some_and(|state| state.text.trim().is_empty())
+	{
+		let page_number = instance.settings.get("pageIndex").and_then(Value::as_u64).unwrap_or(0).saturating_add(1) as usize;
+		let state = instance.states.get(instance.current_state as usize);
+		page_number_over_image(page_number, state.map(|state| state.image.as_str())).or_else(|| state.and_then(|state| image_data_url(&state.image)))
 	} else {
 		instance.states.get(instance.current_state as usize).and_then(|state| image_data_url(&state.image))
 	};
 	crate::events::outbound::devices::update_image((&instance.context).into(), image).await
 }
 
-async fn execute_input(input: Option<String>) -> Result<(), anyhow::Error> {
+pub(crate) async fn execute_input(input: Option<String>) -> Result<(), anyhow::Error> {
 	let Some(input) = input.filter(|value| !value.trim().is_empty()) else {
 		return Ok(());
 	};
@@ -306,6 +475,16 @@ async fn system_command(uuid: &str) -> Result<(), anyhow::Error> {
 			.await
 		}
 		SIRI_UUID => run_process("/usr/bin/open", vec!["-a".to_owned(), "Siri".to_owned()]).await,
+		DISPATCH_CENTER_UUID => run_process("/usr/bin/open", vec!["-a".to_owned(), "ControlCenter".to_owned()]).await,
+		SCREENSHOT_UUID => run_process("/usr/sbin/screencapture", vec!["-i".to_owned(), "-c".to_owned()]).await,
+		LAUNCHPAD_UUID => run_process("/usr/bin/open", vec!["-a".to_owned(), "Launchpad".to_owned()]).await,
+		DESKTOP_SAVER_UUID => run_process("/usr/bin/open", vec!["-a".to_owned(), "ScreenSaverEngine".to_owned()]).await,
+		SLEEP_UUID => run_process("/usr/bin/pmset", vec!["displaysleepnow".to_owned()]).await,
+		SCREEN_BRIGHTNESS_UP_UUID => run_process("/usr/bin/osascript", vec!["-e".to_owned(), "tell application \"System Events\" to key code 144".to_owned()]).await,
+		SCREEN_BRIGHTNESS_DOWN_UUID => run_process("/usr/bin/osascript", vec!["-e".to_owned(), "tell application \"System Events\" to key code 145".to_owned()]).await,
+		PREVIOUS_TRACK_UUID => run_process("/usr/bin/osascript", vec!["-e".to_owned(), "tell application \"Music\" to previous track".to_owned()]).await,
+		PLAY_PAUSE_UUID => run_process("/usr/bin/osascript", vec!["-e".to_owned(), "tell application \"Music\" to playpause".to_owned()]).await,
+		NEXT_TRACK_UUID => run_process("/usr/bin/osascript", vec!["-e".to_owned(), "tell application \"Music\" to next track".to_owned()]).await,
 		_ => Ok(()),
 	}
 }
@@ -324,6 +503,7 @@ pub async fn key_down(instance: &ActionInstance) -> Result<(), anyhow::Error> {
 				.map(str::to_owned);
 			execute_input(input).await
 		}
+		_ if crate::vsd_actions::is_vsd_action(&instance.action.uuid) => crate::vsd_actions::key_down(instance).await,
 		_ => Ok(()),
 	}
 }
@@ -352,7 +532,20 @@ pub async fn key_up(instance: &ActionInstance) -> Result<bool, anyhow::Error> {
 			open_application(&instance.settings).await?;
 			Ok(false)
 		}
-		VOLUME_DOWN_UUID | VOLUME_UP_UUID | MUTE_UUID | SIRI_UUID => {
+		VOLUME_DOWN_UUID
+		| VOLUME_UP_UUID
+		| MUTE_UUID
+		| SIRI_UUID
+		| DISPATCH_CENTER_UUID
+		| SCREENSHOT_UUID
+		| LAUNCHPAD_UUID
+		| DESKTOP_SAVER_UUID
+		| SLEEP_UUID
+		| SCREEN_BRIGHTNESS_UP_UUID
+		| SCREEN_BRIGHTNESS_DOWN_UUID
+		| PREVIOUS_TRACK_UUID
+		| PLAY_PAUSE_UUID
+		| NEXT_TRACK_UUID => {
 			system_command(&instance.action.uuid).await?;
 			Ok(false)
 		}
@@ -370,6 +563,7 @@ pub async fn key_up(instance: &ActionInstance) -> Result<bool, anyhow::Error> {
 			crate::m18_pages::switch_to(&instance.context.device, target.as_deref(), index, 0).await?;
 			Ok(false)
 		}
+		_ if crate::vsd_actions::is_vsd_action(&instance.action.uuid) => crate::vsd_actions::key_up(instance).await,
 		_ => Ok(false),
 	}
 }

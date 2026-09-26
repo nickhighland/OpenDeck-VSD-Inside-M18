@@ -24,6 +24,8 @@
 	$: isHotkeySwitch = uuid == "opendeck.m18.hotkey-switch";
 	$: isSuperHotkeySwitch = uuid == "opendeck.m18.super-hotkey-switch";
 	$: isPageGoto = uuid == "opendeck.m18.page-goto";
+	$: isUnsupportedVsd = uuid == "opendeck.m18.unsupported-vsd-action";
+	$: isVsdCoreAction = uuid.startsWith("com.hotspot.streamdock.") || uuid.startsWith("com.mirabox.streamdock.") || uuid.startsWith("com.streamdock.");
 
 	onMount(async () => {
 		if (device?.id) {
@@ -60,6 +62,32 @@
 		const page = pages[Number((event.currentTarget as HTMLSelectElement).value)];
 		settings = { ...settings, page: page?.profile ?? "", pageIndex: page ? pages.indexOf(page) : 0 };
 		void persist();
+	}
+
+	function setShowPageNumber(event: Event) {
+		settings = { ...settings, showPageNumber: (event.currentTarget as HTMLInputElement).checked };
+		void persist();
+	}
+
+	function setVsdSetting(key: string, event: Event, kind: "text" | "number" | "boolean") {
+		const field = event.currentTarget as HTMLInputElement;
+		const value = kind === "boolean" ? field.checked : kind === "number" ? Number(field.value) : field.value;
+		settings = { ...settings, [key]: value };
+		void persist();
+	}
+
+	function setVsdJsonSetting(key: string, event: Event) {
+		try {
+			const value = JSON.parse((event.currentTarget as HTMLTextAreaElement).value);
+			settings = { ...settings, [key]: value };
+			void persist();
+		} catch {
+			// Keep the last valid setting until the edited JSON parses.
+		}
+	}
+
+	function settingLabel(key: string): string {
+		return key.replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/^./, (letter) => letter.toUpperCase());
 	}
 
 	function hotkeys(): { down: string; up: string; display?: string }[] {
@@ -133,6 +161,41 @@
 				<option value={index}>{page.name} — {page.profile}</option>
 			{/each}
 		</select>
+		<label class="mt-3 flex items-center gap-2 text-sm text-neutral-300" for="m18-show-page-number">
+			<input id="m18-show-page-number" type="checkbox" checked={settings.showPageNumber !== false} on:change={setShowPageNumber} disabled={saving} />
+			Show page number
+		</label>
+	{:else if isUnsupportedVsd}
+		<h2 class="font-semibold text-amber-300">Unsupported VSD Craft action</h2>
+		<p class="mt-2 text-sm text-neutral-300">This button, its artwork, and its original settings were preserved, but its behavior is not implemented yet. Pressing it will not run the VSD action.</p>
+		<p class="mt-3 text-xs text-neutral-400">Original action: {settings.sourceName ?? "Unknown"}</p>
+		<p class="mt-1 break-all font-mono text-xs text-neutral-400">{settings.sourceUuid ?? "Unknown UUID"}</p>
+	{:else if isVsdCoreAction}
+		<h2 class="font-semibold">{instance?.action?.name ?? "VSD Craft action"}</h2>
+		<p class="mt-1 text-xs text-neutral-400">This M18 action runs in the app core, not as an action plugin. Imported VSD Craft settings are retained below.</p>
+		{#if Object.keys(settings ?? {}).length > 0}
+			<div class="mt-4 space-y-3">
+				{#each Object.keys(settings) as key}
+					{#if typeof settings[key] === "boolean"}
+						<label class="flex items-center gap-2 text-sm text-neutral-300" for={`vsd-setting-${key}`}>
+							<input id={`vsd-setting-${key}`} type="checkbox" checked={settings[key]} on:change={(event) => setVsdSetting(key, event, "boolean")} disabled={saving} />
+							{settingLabel(key)}
+						</label>
+					{:else if typeof settings[key] === "number"}
+						<label class="block text-xs text-neutral-400" for={`vsd-setting-${key}`}>{settingLabel(key)}</label>
+						<input id={`vsd-setting-${key}`} type="number" class="mt-1 w-full rounded border border-neutral-600 bg-neutral-900 px-2 py-1 text-sm" value={settings[key]} on:input={(event) => setVsdSetting(key, event, "number")} disabled={saving} />
+					{:else if typeof settings[key] === "string"}
+						<label class="block text-xs text-neutral-400" for={`vsd-setting-${key}`}>{settingLabel(key)}</label>
+						<input id={`vsd-setting-${key}`} class="mt-1 w-full rounded border border-neutral-600 bg-neutral-900 px-2 py-1 text-sm" value={settings[key]} on:input={(event) => setVsdSetting(key, event, "text")} disabled={saving} />
+					{:else}
+					<label class="block text-xs text-neutral-400" for={`vsd-setting-${key}`}>{settingLabel(key)} (JSON)</label>
+					<textarea id={`vsd-setting-${key}`} rows="4" class="mt-1 w-full rounded border border-neutral-600 bg-neutral-900 px-2 py-1 font-mono text-xs" value={JSON.stringify(settings[key], null, 2)} on:change={(event) => setVsdJsonSetting(key, event)} disabled={saving}></textarea>
+					{/if}
+				{/each}
+			</div>
+		{:else}
+			<p class="mt-3 text-xs text-neutral-400">No settings were serialized by VSD Craft for this action.</p>
+		{/if}
 	{:else}
 		<h2 class="font-semibold">{instance?.action?.name ?? "M18 action"}</h2>
 		<p class="mt-1 text-xs text-neutral-400">This action is built into the M18 core and has no plugin settings.</p>
