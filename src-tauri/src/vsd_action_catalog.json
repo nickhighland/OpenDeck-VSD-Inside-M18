@@ -32,6 +32,14 @@
     "supportedInMultiActions": true
   },
   {
+    "name": "Brightness",
+    "uuid": "com.hotspot.streamdock.device.brightness",
+    "tooltip": "Adjust the brightness of your device",
+    "category": "Device Controls",
+    "stateCount": 1,
+    "supportedInMultiActions": false
+  },
+  {
     "name": "Eat Gold Coins",
     "uuid": "com.mirabox.streamdock.eatgoldcoins.action1",
     "tooltip": "Eat Gold Coins",
@@ -168,6 +176,14 @@
     "supportedInMultiActions": true
   },
   {
+    "name": "Scene Shift",
+    "uuid": "com.hotspot.streamdock.profile.rotate",
+    "tooltip": "Switch to another preconfigured scenario",
+    "category": "Pages & Profiles",
+    "stateCount": 1,
+    "supportedInMultiActions": true
+  },
+  {
     "name": "Back",
     "uuid": "com.hotspot.streamdock.hotkey.browser.back",
     "tooltip": "Return to the previous page",
@@ -192,11 +208,27 @@
     "supportedInMultiActions": true
   },
   {
+    "name": "Hotkey",
+    "uuid": "com.hotspot.streamdock.system.hotkey",
+    "tooltip": "Activate a key command",
+    "category": "Shortcuts & Input",
+    "stateCount": 1,
+    "supportedInMultiActions": true
+  },
+  {
     "name": "HotkeySwitch",
     "uuid": "com.hotspot.streamdock.system.hotkeySwitch",
     "tooltip": "Activate a key command",
     "category": "Shortcuts & Input",
     "stateCount": 2,
+    "supportedInMultiActions": true
+  },
+  {
+    "name": "Mouse event",
+    "uuid": "com.hotspot.streamdock.mouse.event",
+    "tooltip": "Simulated mouse event",
+    "category": "Shortcuts & Input",
+    "stateCount": 1,
     "supportedInMultiActions": true
   },
   {
@@ -216,9 +248,9 @@
     "supportedInMultiActions": true
   },
   {
-    "name": "Text",
-    "uuid": "com.hotspot.streamdock.plain.text",
-    "tooltip": "Plain text display",
+    "name": "Super Hotkeys",
+    "uuid": "com.hotspot.streamdock.system.super.hotkey",
+    "tooltip": "Activate a key command using physical-keyboard input",
     "category": "Shortcuts & Input",
     "stateCount": 1,
     "supportedInMultiActions": true
@@ -392,12 +424,28 @@
     "supportedInMultiActions": true
   },
   {
+    "name": "Microphone",
+    "uuid": "com.hotspot.streamdock.quickcontrol.microphone",
+    "tooltip": "Mute/unmute the microphone",
+    "category": "System & Apps",
+    "stateCount": 1,
+    "supportedInMultiActions": true
+  },
+  {
     "name": "Music",
     "uuid": "com.hotspot.streamdock.quicktool.music",
     "tooltip": "Turn on the music",
     "category": "System & Apps",
     "stateCount": 1,
     "supportedInMultiActions": true
+  },
+  {
+    "name": "Multimedia",
+    "uuid": "com.hotspot.streamdock.system.multimedia",
+    "tooltip": "Control your media playback",
+    "category": "System & Apps",
+    "stateCount": 1,
+    "supportedInMultiActions": false
   },
   {
     "name": "Mute",

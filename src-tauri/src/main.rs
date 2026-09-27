@@ -8,10 +8,13 @@ mod events;
 mod m18;
 mod m18_actions;
 mod m18_pages;
+#[cfg(target_os = "macos")]
+mod macos_audio;
 mod plugins;
 mod power_events;
 mod screensaver;
 mod shared;
+mod soundboard;
 mod store;
 mod vsd_actions;
 mod vsd_import;
@@ -102,6 +105,8 @@ async fn main() {
 			m18_pages::get_m18_pages,
 			m18_pages::switch_m18_page,
 			m18_pages::switch_m18_page_index,
+			m18_actions::get_mouse_position,
+			soundboard::get_audio_output_devices,
 			frontend::property_inspector::make_info,
 			frontend::property_inspector::switch_property_inspector,
 			frontend::property_inspector::open_url,

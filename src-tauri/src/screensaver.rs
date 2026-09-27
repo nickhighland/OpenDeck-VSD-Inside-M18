@@ -8,10 +8,12 @@ use tauri::Emitter;
 
 static ENABLED: AtomicBool = AtomicBool::new(false);
 static TIMEOUT_MINUTES: AtomicU64 = AtomicU64::new(5);
-// M18 presses are a fallback wake signal: they do not necessarily reset macOS's
-// keyboard/mouse idle clock, but must not immediately restart the screensaver.
+// Used as the idle clock only on platforms without a computer-wide idle API.
 static LAST_DEVICE_INTERACTION: LazyLock<DashMap<String, Instant>> = LazyLock::new(DashMap::new);
 static ACTIVE_DEVICES: LazyLock<DashMap<String, ()>> = LazyLock::new(DashMap::new);
+// Dismissing the saver on the M18 must leave it awake while the Mac remains
+// idle; otherwise the expired system-idle clock would turn it back on at once.
+static AWAITING_COMPUTER_ACTIVITY: LazyLock<DashMap<String, ()>> = LazyLock::new(DashMap::new);
 static WAKE_PRESSES: LazyLock<DashMap<(String, u8), ()>> = LazyLock::new(DashMap::new);
 
 #[cfg(target_os = "macos")]
@@ -33,6 +35,23 @@ fn computer_idle_duration() -> Option<Duration> {
 #[cfg(not(target_os = "macos"))]
 fn computer_idle_duration() -> Option<Duration> {
 	None
+}
+
+fn idle_duration_for_screensaver(computer_idle: Option<Duration>, device_idle: Duration) -> Option<Duration> {
+	#[cfg(target_os = "macos")]
+	{
+		let _ = device_idle;
+		computer_idle
+	}
+	#[cfg(not(target_os = "macos"))]
+	{
+		let _ = computer_idle;
+		Some(device_idle)
+	}
+}
+
+fn should_activate_screensaver(enabled: bool, sleeping: bool, awaiting_computer_activity: bool, idle: Option<Duration>, idle_after: Duration) -> bool {
+	enabled && !sleeping && !awaiting_computer_activity && idle.is_some_and(|duration| duration >= idle_after)
 }
 
 #[derive(Clone, Serialize)]
@@ -97,15 +116,22 @@ async fn check_idle_devices() {
 		if !is_m18(&device) {
 			continue;
 		}
-		let Some(last_interaction) = LAST_DEVICE_INTERACTION.get(&device).map(|entry| *entry.value()) else {
-			LAST_DEVICE_INTERACTION.insert(device, now);
-			continue;
-		};
-		let device_idle = now.duration_since(last_interaction);
-		// On macOS both clocks must be idle: ordinary computer use blocks the
-		// saver, while an M18 wake press starts a fresh timeout on its own.
-		let idle = computer_idle.map_or(device_idle, |system_idle| system_idle.min(device_idle));
-		if !enabled || crate::device_sleep::is_device_sleeping(&device) || idle < idle_after {
+		let device_idle = LAST_DEVICE_INTERACTION.get(&device).map(|entry| now.duration_since(*entry.value())).unwrap_or_else(|| {
+			LAST_DEVICE_INTERACTION.insert(device.clone(), now);
+			Duration::ZERO
+		});
+		let idle = idle_duration_for_screensaver(computer_idle, device_idle);
+		if computer_idle.is_some_and(|duration| duration < idle_after) {
+			AWAITING_COMPUTER_ACTIVITY.remove(&device);
+		}
+		let should_activate = should_activate_screensaver(
+			enabled,
+			crate::device_sleep::is_device_sleeping(&device),
+			AWAITING_COMPUTER_ACTIVITY.contains_key(&device),
+			idle,
+			idle_after,
+		);
+		if !should_activate {
 			if ACTIVE_DEVICES.contains_key(&device) {
 				stop_device(&device).await;
 			}
@@ -122,12 +148,14 @@ pub fn apply_initial_device(device: &str) {
 	if is_m18(device) {
 		LAST_DEVICE_INTERACTION.insert(device.to_owned(), Instant::now());
 		ACTIVE_DEVICES.remove(device);
+		AWAITING_COMPUTER_ACTIVITY.remove(device);
 	}
 }
 
 pub fn deregister_device(device: &str) {
 	LAST_DEVICE_INTERACTION.remove(device);
 	ACTIVE_DEVICES.remove(device);
+	AWAITING_COMPUTER_ACTIVITY.remove(device);
 	WAKE_PRESSES.retain(|(id, _), _| id != device);
 }
 
@@ -135,6 +163,8 @@ pub fn deregister_device(device: &str) {
 pub async fn note_button_activity(device: &str, position: u8) -> bool {
 	LAST_DEVICE_INTERACTION.insert(device.to_owned(), Instant::now());
 	if ACTIVE_DEVICES.remove(device).is_some() {
+		#[cfg(target_os = "macos")]
+		AWAITING_COMPUTER_ACTIVITY.insert(device.to_owned(), ());
 		WAKE_PRESSES.insert((device.to_owned(), position), ());
 		emit("screensaver_stop", device);
 		clear_device_background(device).await;
@@ -188,10 +218,49 @@ pub async fn update_settings(enabled: bool, timeout_minutes: u16) {
 		for device in devices {
 			stop_device(&device).await;
 		}
+		AWAITING_COMPUTER_ACTIVITY.clear();
 	} else {
 		let now = Instant::now();
 		for device in crate::shared::DEVICES.iter().map(|entry| entry.key().clone()) {
 			LAST_DEVICE_INTERACTION.insert(device, now);
 		}
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[cfg(target_os = "macos")]
+	#[test]
+	fn mac_screensaver_uses_computer_idle_not_m18_idle() {
+		let timeout = Duration::from_secs(300);
+		assert_eq!(idle_duration_for_screensaver(Some(Duration::from_secs(20)), Duration::from_secs(900)), Some(Duration::from_secs(20)));
+		assert_eq!(idle_duration_for_screensaver(Some(Duration::from_secs(900)), Duration::from_secs(20)), Some(Duration::from_secs(900)));
+		assert!(!should_activate_screensaver(true, false, false, Some(Duration::from_secs(20)), timeout));
+		assert!(should_activate_screensaver(true, false, false, Some(Duration::from_secs(900)), timeout));
+	}
+
+	#[cfg(target_os = "macos")]
+	#[test]
+	fn unknown_computer_idle_does_not_fall_back_to_m18_idle_on_macos() {
+		let timeout = Duration::from_secs(300);
+		let idle = idle_duration_for_screensaver(None, Duration::from_secs(900));
+		assert_eq!(idle, None);
+		assert!(!should_activate_screensaver(true, false, false, idle, timeout));
+	}
+
+	#[test]
+	fn waking_screensaver_waits_until_mac_activity_before_rearming() {
+		let timeout = Duration::from_secs(300);
+		assert!(!should_activate_screensaver(true, false, true, Some(Duration::from_secs(900)), timeout));
+		assert!(!should_activate_screensaver(true, false, false, Some(Duration::from_secs(10)), timeout));
+		assert!(should_activate_screensaver(true, false, false, Some(Duration::from_secs(900)), timeout));
+	}
+
+	#[cfg(not(target_os = "macos"))]
+	#[test]
+	fn other_platforms_keep_the_device_idle_fallback() {
+		assert_eq!(idle_duration_for_screensaver(None, Duration::from_secs(900)), Some(Duration::from_secs(900)));
 	}
 }

@@ -59,6 +59,8 @@ struct VsdAction {
 	states: Vec<VsdState>,
 	#[serde(rename = "UUID", default)]
 	uuid: String,
+	#[serde(rename = "MultiActionData", default)]
+	multi_action_data: Vec<Value>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -78,6 +80,9 @@ struct PageSpec {
 
 #[derive(Clone, Copy)]
 enum Mapping {
+	MultiAction,
+	ActionCarousel,
+	ActionCycle,
 	NativeOpenApps,
 	NativeSuperHotkeys,
 	NativeHotkeySwitch,
@@ -90,7 +95,6 @@ enum Mapping {
 	NativePageNext,
 	NativePageGoto,
 	NativePageIndicator,
-	InputSimulation,
 	RunCommand,
 	OpenUrl,
 	SwitchProfile,
@@ -172,9 +176,17 @@ fn collect_pages(root_manifest: &Path, root: &VsdManifest) -> Vec<PageSpec> {
 		.collect()
 }
 
-fn mapping(uuid: &str, name: &str) -> Mapping {
+fn mapping(uuid: &str, _name: &str) -> Mapping {
 	let uuid = uuid.to_ascii_lowercase();
-	let name = name.to_ascii_lowercase();
+	if uuid == "com.hotspot.streamdock.multiactions.routine" {
+		return Mapping::MultiAction;
+	}
+	if uuid == "com.hotspot.streamdock.multiactions.lunbo" {
+		return Mapping::ActionCarousel;
+	}
+	if uuid == "com.hotspot.streamdock.multiactions.toggle" {
+		return Mapping::ActionCycle;
+	}
 
 	if uuid.contains("hotkeyswitch") {
 		return Mapping::NativeHotkeySwitch;
@@ -222,14 +234,9 @@ fn mapping(uuid: &str, name: &str) -> Mapping {
 	if uuid.contains("page.indicator") {
 		return Mapping::NativePageIndicator;
 	}
-	if uuid.contains("hotkeys") || uuid.ends_with(".hotkey") || uuid.contains(".hotkey.") {
-		return Mapping::InputSimulation;
-	}
-	// Most VSD Craft actions have a direct M18 core entry. Keep their source
-	// UUID and settings instead of degrading them to plugin commands or an
-	// inactive placeholder. Composite actions and folder navigation need a
-	// validated child/profile representation and intentionally remain separate.
-	if crate::vsd_actions::definition(&uuid).is_some() && !crate::vsd_actions::is_composite_action(&uuid) && !uuid.contains("profile.openchild") && !uuid.contains("profile.backtoparent") {
+	// M18-applicable VSD actions execute in the application core; only composite
+	// actions with unvalidated child serialization remain on the separate path.
+	if crate::vsd_actions::definition(&uuid).is_some() && !crate::vsd_actions::is_composite_action(&uuid) {
 		return Mapping::NativeVsdAction;
 	}
 	if uuid.ends_with(".open") || uuid.contains(".open.") {
@@ -268,9 +275,6 @@ fn mapping(uuid: &str, name: &str) -> Mapping {
 		return Mapping::RunCommand;
 	}
 
-	if name.contains("hotkey") {
-		return Mapping::InputSimulation;
-	}
 	Mapping::Unsupported
 }
 
@@ -603,6 +607,41 @@ fn action_instance(action: Action, context: ActionContext, settings: Value, sour
 	}
 }
 
+fn composite_child(raw: &Value) -> Option<VsdAction> {
+	let uuid = setting_string(raw, &["UUID", "ActionUUID", "uuid", "actionUuid"]).or_else(|| setting_string(raw, &["ActionID", "actionId"]))?;
+	let name = setting_string(raw, &["Name", "name"]).unwrap_or_else(|| {
+		crate::vsd_actions::definition(&uuid)
+			.map(|definition| definition.name.clone())
+			.unwrap_or_else(|| "Unknown VSD Craft action".to_owned())
+	});
+	let settings = raw.get("Settings").or_else(|| raw.get("settings")).cloned().unwrap_or_else(|| json!({}));
+	let state = raw.get("State").or_else(|| raw.get("state")).and_then(Value::as_u64).unwrap_or(0).min(u16::MAX as u64) as u16;
+	let states = raw
+		.get("States")
+		.or_else(|| raw.get("states"))
+		.cloned()
+		.and_then(|value| serde_json::from_value(value).ok())
+		.unwrap_or_default();
+	let multi_action_data = raw.get("MultiActionData").or_else(|| raw.get("multiActionData")).and_then(Value::as_array).cloned().unwrap_or_default();
+	Some(VsdAction {
+		controller: "Keypad".to_owned(),
+		name,
+		settings,
+		state,
+		states,
+		uuid,
+		multi_action_data,
+	})
+}
+
+fn composite_action_from_categories(categories: &HashMap<String, Category>, uuid: &str) -> Action {
+	let mut action = action_from_categories(categories, uuid, "Multi Action", "");
+	// Composite actions are implemented in the application core and must never
+	// require a plugin process to exist.
+	action.plugin.clear();
+	action
+}
+
 fn key_position(key: &str) -> Option<u8> {
 	let (x, y) = key.split_once(',')?;
 	let x: u8 = x.trim().parse().ok()?;
@@ -639,6 +678,14 @@ fn switch_target(uuid: &str, settings: &Value, page_index: usize, pages: &[PageS
 	profile_for_index(pages, if pages.is_empty() { 0 } else { (page_index + 1) % pages.len() }).to_owned()
 }
 
+fn folder_target(settings: &Value, pages: &[PageSpec]) -> Option<String> {
+	let target = setting_string(settings, &["ProfileUUID", "profile", "target"])?;
+	pages
+		.iter()
+		.find(|page| page.profile_id == target || page.path.to_string_lossy().contains(&target))
+		.map(|page| page.profile_id.clone())
+}
+
 fn mapped_instance(
 	categories: &HashMap<String, Category>,
 	action: &VsdAction,
@@ -649,8 +696,143 @@ fn mapped_instance(
 	device_id: &str,
 	unsupported: &mut Vec<String>,
 ) -> ActionInstance {
+	mapped_instance_at_depth(categories, action, context, page_index, pages, base_dir, device_id, unsupported, 0)
+}
+
+fn mapped_instance_at_depth(
+	categories: &HashMap<String, Category>,
+	action: &VsdAction,
+	context: ActionContext,
+	page_index: usize,
+	pages: &[PageSpec],
+	base_dir: &Path,
+	device_id: &str,
+	unsupported: &mut Vec<String>,
+	depth: usize,
+) -> ActionInstance {
+	if depth > 0 && crate::vsd_actions::is_composite_action(&action.uuid) {
+		if !unsupported.contains(&action.uuid) {
+			unsupported.push(action.uuid.clone());
+		}
+		let mut placeholder = fallback_action(crate::m18_actions::UNSUPPORTED_VSD_UUID, "Nested VSD Craft flow needs a nested editor", "");
+		placeholder.tooltip = "Nested VSD flows are preserved but inactive until nested action editing and addressing are supported".to_owned();
+		placeholder.visible_in_action_list = false;
+		return action_instance(
+			placeholder,
+			context,
+			json!({ "sourceName": action.name, "sourceUuid": action.uuid, "sourceSettings": action.settings, "sourceCompositeChildren": action.multi_action_data }),
+			&action.states,
+			base_dir,
+			action.state,
+		);
+	}
+	if depth >= 16 {
+		if !unsupported.contains(&action.uuid) {
+			unsupported.push(action.uuid.clone());
+		}
+		let mut placeholder = fallback_action(crate::m18_actions::UNSUPPORTED_VSD_UUID, "Unsupported nested VSD Craft action", "");
+		placeholder.tooltip = "Nested action depth exceeds the import safety limit".to_owned();
+		placeholder.visible_in_action_list = false;
+		return action_instance(
+			placeholder,
+			context,
+			json!({ "sourceName": action.name, "sourceUuid": action.uuid, "sourceSettings": action.settings }),
+			&action.states,
+			base_dir,
+			action.state,
+		);
+	}
 	let kind = mapping(&action.uuid, &action.name);
 	match kind {
+		Mapping::MultiAction | Mapping::ActionCarousel | Mapping::ActionCycle => {
+			let (parent_uuid, parent_name) = match kind {
+				Mapping::MultiAction => ("opendeck.multiaction", "Multi Action"),
+				Mapping::ActionCarousel => ("opendeck.carouselaction", "Action Carousel"),
+				Mapping::ActionCycle => ("opendeck.toggleaction", "Action Cycle"),
+				_ => unreachable!(),
+			};
+			let mut mapped = composite_action_from_categories(categories, parent_uuid);
+			mapped.name = parent_name.to_owned();
+			let mut parent = action_instance(
+				mapped,
+				context.clone(),
+				json!({ "sourceUuid": action.uuid, "sourceSettings": action.settings, "delays": [] }),
+				&action.states,
+				base_dir,
+				action.state,
+			);
+			let mut children = Vec::with_capacity(action.multi_action_data.len());
+			for (index, raw_child) in action.multi_action_data.iter().enumerate() {
+				let Some(child_action) = composite_child(raw_child) else {
+					let unknown_uuid = setting_string(raw_child, &["UUID", "ActionUUID", "uuid", "actionUuid", "ActionID", "actionId"]).unwrap_or_else(|| "unknown.vsd-child".to_owned());
+					if !unsupported.contains(&unknown_uuid) {
+						unsupported.push(unknown_uuid.clone());
+					}
+					let mut placeholder = fallback_action(crate::m18_actions::UNSUPPORTED_VSD_UUID, "Malformed VSD Craft child", "");
+					placeholder.tooltip = "This composite item has no recognizable action UUID and will not execute".to_owned();
+					placeholder.visible_in_action_list = false;
+					let mut child = action_instance(
+						placeholder,
+						ActionContext {
+							index: (index + 1).min(u16::MAX as usize) as u16,
+							..context.clone()
+						},
+						json!({ "sourceUuid": unknown_uuid, "sourceItem": raw_child }),
+						&[],
+						base_dir,
+						0,
+					);
+					child.context.index = (index + 1).min(u16::MAX as usize) as u16;
+					children.push(child);
+					continue;
+				};
+				let child_context = ActionContext {
+					index: (index + 1).min(u16::MAX as usize) as u16,
+					..context.clone()
+				};
+				let mut child = mapped_instance_at_depth(categories, &child_action, child_context, page_index, pages, base_dir, device_id, unsupported, depth + 1);
+				if !child_action.name.trim().is_empty() {
+					child.action.name = child_action.name.clone();
+				}
+				if let Some(delays) = raw_child.get("MultiActionDelays").or_else(|| raw_child.get("multiActionDelays")) {
+					if !child.settings.is_object() {
+						child.settings = json!({ "value": child.settings });
+					}
+					child.settings["_vsdMultiActionDelays"] = delays.clone();
+				}
+				if let Some(image) = raw_child
+					.get("MultiActionImage")
+					.or_else(|| raw_child.get("multiActionImage"))
+					.and_then(Value::as_str)
+					.and_then(|image| image_data_url(base_dir, image))
+					&& !image.is_empty()
+				{
+					if let Some(first_state) = child.states.first_mut() {
+						first_state.image = image;
+					}
+				}
+				children.push(child);
+			}
+			if parent_uuid != "opendeck.multiaction" {
+				let template = parent.states.first().cloned().unwrap_or_default();
+				parent.states.resize(children.len().max(1), template);
+				for (index, child) in children.iter().enumerate() {
+					if let Some(child_state) = child.states.get(child.current_state as usize)
+						&& !child_state.image.is_empty()
+					{
+						parent.states[index].image = child_state.image.clone();
+					}
+				}
+				let selected_child = if matches!(kind, Mapping::ActionCycle) {
+					numeric_setting(&action.settings, "Index").unwrap_or(action.state as usize)
+				} else {
+					action.state as usize
+				};
+				parent.current_state = selected_child.min(children.len().saturating_sub(1)) as u16;
+			}
+			parent.children = Some(children);
+			parent
+		}
 		Mapping::NativeOpenApps => {
 			let mapped = action_from_categories(categories, crate::m18_actions::OPEN_APPS_UUID, "OpenApps", "");
 			let mut instance = action_instance(mapped, context, json!({ "appPath": application_target(&action.settings) }), &action.states, base_dir, action.state);
@@ -719,10 +901,6 @@ fn mapped_instance(
 			let mapped = action_from_categories(categories, uuid, name, "");
 			action_instance(mapped, context, settings, &action.states, base_dir, action.state)
 		}
-		Mapping::InputSimulation => {
-			let mapped = action_from_categories(categories, "com.amansprojects.starterpack.inputsimulation", "Simulate Input", STARTER_PLUGIN);
-			action_instance(mapped, context, hotkey_settings(&action.settings, 0), &action.states, base_dir, action.state)
-		}
 		Mapping::RunCommand => {
 			let command = if action.uuid.to_ascii_lowercase().contains("openapps") {
 				app_command(&action.settings)
@@ -759,7 +937,16 @@ fn mapped_instance(
 				unreachable!("NativeVsdAction is selected only for catalogue entries")
 			};
 			let mapped = action_from_categories(categories, &definition.uuid, &definition.name, "");
-			action_instance(mapped, context, action.settings.clone(), &action.states, base_dir, action.state)
+			let settings = if action.uuid.eq_ignore_ascii_case("com.hotspot.streamdock.profile.openchild") {
+				json!({ "profile": folder_target(&action.settings, pages).unwrap_or_default() })
+			} else if action.uuid.eq_ignore_ascii_case("com.hotspot.streamdock.profile.backtoparent") {
+				json!({})
+			} else if crate::vsd_actions::is_hotkey(&action.uuid) {
+				hotkey_settings(&action.settings, 0)
+			} else {
+				action.settings.clone()
+			};
+			action_instance(mapped, context, settings, &action.states, base_dir, action.state)
 		}
 		Mapping::Unsupported => {
 			if !unsupported.contains(&action.uuid) {
@@ -913,13 +1100,36 @@ mod tests {
 	}
 
 	#[test]
-	fn translates_a_plain_vsd_hotkey_to_input_simulation_settings() {
+	fn imports_a_plain_vsd_hotkey_as_a_native_action_without_an_action_plugin() {
 		let settings = json!({
 			"Hotkeys": [{ "VKeyCode": 79, "VKeyCodes": [79], "KeyCmd": false }]
 		});
 		assert_eq!(hotkey_settings(&settings, 0)["down"], "[r(79)]");
 		assert_eq!(hotkey_settings(&settings, 0)["display"], "F18");
 		assert_eq!(ron::from_str::<Vec<enigo::agent::Token>>("[r(79)]").unwrap().len(), 1);
+
+		let mut categories = HashMap::new();
+		crate::vsd_actions::insert_catalog(&mut categories);
+		let action = VsdAction {
+			controller: "Keypad".to_owned(),
+			name: "Hotkey".to_owned(),
+			settings,
+			state: 0,
+			states: vec![],
+			uuid: "com.hotspot.streamdock.system.hotkey".to_owned(),
+			multi_action_data: vec![],
+		};
+		let context = ActionContext {
+			device: "18-test".to_owned(),
+			profile: "Profile A".to_owned(),
+			controller: "Keypad".to_owned(),
+			position: 0,
+			index: 0,
+		};
+		let instance = mapped_instance(&categories, &action, context, 0, &[], Path::new("."), "18-test", &mut vec![]);
+		assert_eq!(instance.action.uuid, action.uuid);
+		assert!(instance.action.plugin.is_empty());
+		assert_eq!(instance.settings["down"], "[r(79)]");
 	}
 
 	#[test]
@@ -956,6 +1166,8 @@ mod tests {
 	#[test]
 	fn maps_current_m18_vsd_action_families() {
 		assert!(matches!(mapping("com.hotspot.streamdock.system.hotkeySwitch", "HotkeySwitch"), Mapping::NativeHotkeySwitch));
+		assert!(matches!(mapping("com.hotspot.streamdock.device.brightness", "Brightness"), Mapping::NativeVsdAction));
+		assert!(matches!(mapping("com.hotspot.streamdock.quickcontrol.microphone", "Microphone"), Mapping::NativeVsdAction));
 		assert!(matches!(mapping("com.hotspot.streamdock.system.openApps", "OpenApps"), Mapping::NativeOpenApps));
 		assert!(matches!(mapping("com.hotspot.streamdock.page.next", "Next page"), Mapping::NativePageNext));
 		assert!(matches!(mapping("com.hotspot.streamdock.page.indicator", "Page Indicator"), Mapping::NativePageIndicator));
@@ -985,6 +1197,7 @@ mod tests {
 			state: 0,
 			states: vec![],
 			uuid: "com.hotspot.streamdock.page.goto".to_owned(),
+			multi_action_data: vec![],
 		};
 		let pages = vec![
 			PageSpec {
@@ -1036,6 +1249,7 @@ mod tests {
 			state: 0,
 			states: vec![],
 			uuid: "com.hotspot.streamdock.page.indicator".to_owned(),
+			multi_action_data: vec![],
 		};
 		let context = ActionContext {
 			device: "18-test".to_owned(),
@@ -1054,17 +1268,36 @@ mod tests {
 	}
 
 	#[test]
-	fn preserves_unsupported_actions_as_explicit_inactive_placeholders() {
+	fn imports_vsd_composite_actions_as_native_children_and_preserves_child_delays() {
 		let action = VsdAction {
 			controller: "Keypad".to_owned(),
-			name: "Action Carousel".to_owned(),
-			settings: json!({ "items": ["private action config"] }),
+			name: "Multi Action".to_owned(),
+			settings: json!({ "layout": "sequence" }),
 			state: 0,
-			states: vec![VsdState {
-				image: String::new(),
-				title: "Carousel".to_owned(),
-			}],
-			uuid: "com.hotspot.streamdock.multiactions.LunBo".to_owned(),
+			states: vec![],
+			uuid: "com.hotspot.streamdock.multiactions.routine".to_owned(),
+			multi_action_data: vec![
+				json!({
+					"ActionID": "app-child-instance-1",
+					"UUID": "com.hotspot.streamdock.system.hotkey",
+					"Name": "Hotkey",
+					"Settings": { "Hotkeys": [{ "VKeyCodes": [79] }] },
+					"MultiActionDelays": { "Delay1": 25, "Delay2": "40" }
+				}),
+				json!({
+					"ActionID": "delay-child",
+					"UUID": "com.hotspot.streamdock.multiactions.delay",
+					"Name": "Delay",
+					"Settings": { "delay": "750" }
+				}),
+				json!({
+					"ActionID": "nested-flow",
+					"UUID": "com.hotspot.streamdock.multiactions.routine",
+					"Name": "Nested flow",
+					"Settings": {},
+					"MultiActionData": [{ "ActionID": "inner", "UUID": "com.hotspot.streamdock.system.hotkey", "Settings": {} }]
+				}),
+			],
 		};
 		let context = ActionContext {
 			device: "18-test".to_owned(),
@@ -1076,16 +1309,76 @@ mod tests {
 		let mut unsupported = vec![];
 		let instance = mapped_instance(&HashMap::new(), &action, context, 0, &[], Path::new("."), "18-test", &mut unsupported);
 
-		assert_eq!(instance.action.uuid, crate::m18_actions::UNSUPPORTED_VSD_UUID);
-		assert_eq!(instance.action.name, "Unsupported VSD Craft action");
-		assert_eq!(instance.states[0].text, "Carousel");
-		assert_eq!(instance.settings["sourceName"], "Action Carousel");
-		assert_eq!(instance.settings["sourceUuid"], "com.hotspot.streamdock.multiactions.LunBo");
-		assert_eq!(instance.settings["sourceSettings"]["items"][0], "private action config");
-		assert_eq!(unsupported, vec!["com.hotspot.streamdock.multiactions.LunBo"]);
-		assert!(crate::m18_actions::is_native_action(&instance.action.uuid));
-		assert!(futures::executor::block_on(crate::m18_actions::key_down(&instance)).is_ok());
-		assert!(!futures::executor::block_on(crate::m18_actions::key_up(&instance)).unwrap());
+		assert_eq!(instance.action.uuid, "opendeck.multiaction");
+		assert!(instance.action.plugin.is_empty());
+		assert_eq!(instance.settings["sourceUuid"], action.uuid);
+		let children = instance.children.as_ref().unwrap();
+		assert_eq!(children.len(), 3);
+		assert_eq!(children[0].action.uuid, "com.hotspot.streamdock.system.hotkey");
+		assert_eq!(children[0].settings["down"], "[r(79)]");
+		assert_eq!(children[0].settings["_vsdMultiActionDelays"]["Delay1"], 25);
+		assert_eq!(children[0].settings["_vsdMultiActionDelays"]["Delay2"], "40");
+		assert_eq!(children[1].action.uuid, "com.hotspot.streamdock.multiactions.delay");
+		assert_eq!(children[0].context.index, 1);
+		assert_eq!(children[1].context.index, 2);
+		assert_eq!(children[2].action.uuid, crate::m18_actions::UNSUPPORTED_VSD_UUID);
+		assert_eq!(children[2].settings["sourceCompositeChildren"].as_array().unwrap().len(), 1);
+		assert_eq!(children[2].context.index, 3);
+		assert_eq!(unsupported, vec!["com.hotspot.streamdock.multiactions.routine"]);
+	}
+
+	#[test]
+	fn deserializes_the_vendor_multi_action_parent_array() {
+		let parsed: VsdAction = serde_json::from_value(json!({
+			"Controller": "Keypad",
+			"Name": "Action Cycle",
+			"UUID": "com.hotspot.streamdock.multiactions.toggle",
+			"Settings": { "Index": 1 },
+			"MultiActionData": [{ "ActionID": "id-1", "UUID": "com.hotspot.streamdock.system.hotkey", "Settings": {} }]
+		}))
+		.unwrap();
+		assert_eq!(parsed.multi_action_data.len(), 1);
+		assert_eq!(parsed.multi_action_data[0]["UUID"], "com.hotspot.streamdock.system.hotkey");
+		assert_eq!(numeric_setting(&parsed.settings, "Index"), Some(1));
+		let nested = composite_child(&json!({
+			"UUID": "com.hotspot.streamdock.multiactions.routine",
+			"MultiActionData": [{ "UUID": "com.hotspot.streamdock.system.hotkey" }]
+		}))
+		.unwrap();
+		assert_eq!(nested.multi_action_data.len(), 1);
+	}
+
+	#[test]
+	fn imports_carousel_and_cycle_as_distinct_native_parents_and_respects_cycle_index() {
+		for (source_uuid, expected_uuid, index) in [
+			("com.hotspot.streamdock.multiactions.LunBo", "opendeck.carouselaction", 0),
+			("com.hotspot.streamdock.multiactions.toggle", "opendeck.toggleaction", 1),
+		] {
+			let action = VsdAction {
+				controller: "Keypad".to_owned(),
+				name: "Flow".to_owned(),
+				settings: json!({ "Index": index }),
+				state: 0,
+				states: vec![],
+				uuid: source_uuid.to_owned(),
+				multi_action_data: vec![
+					json!({ "ActionID": "one", "UUID": "com.hotspot.streamdock.system.hotkey", "Name": "First", "Settings": { "Hotkeys": [{ "VKeyCodes": [79] }] } }),
+					json!({ "ActionID": "two", "UUID": "com.hotspot.streamdock.system.hotkey", "Name": "Second", "Settings": { "Hotkeys": [{ "VKeyCodes": [107] }] } }),
+				],
+			};
+			let context = ActionContext {
+				device: "18-test".to_owned(),
+				profile: "test".to_owned(),
+				controller: "Keypad".to_owned(),
+				position: 0,
+				index: 0,
+			};
+			let instance = mapped_instance(&HashMap::new(), &action, context, 0, &[], Path::new("."), "18-test", &mut vec![]);
+			assert_eq!(instance.action.uuid, expected_uuid);
+			assert_eq!(instance.current_state, index);
+			assert_eq!(instance.children.as_ref().unwrap()[0].action.name, "First");
+			assert_eq!(instance.children.as_ref().unwrap()[1].action.name, "Second");
+		}
 	}
 
 	#[test]
@@ -1099,6 +1392,7 @@ mod tests {
 			state: 0,
 			states: vec![],
 			uuid: "com.hotspot.streamdock.network.udp".to_owned(),
+			multi_action_data: vec![],
 		};
 		let context = ActionContext {
 			device: "18-test".to_owned(),
@@ -1113,14 +1407,70 @@ mod tests {
 		assert!(instance.action.plugin.is_empty());
 		assert_eq!(instance.settings, action.settings);
 		assert!(crate::m18_actions::is_native_action(&instance.action.uuid));
+
+		let brightness = VsdAction {
+			controller: "Keypad".to_owned(),
+			name: "Brightness".to_owned(),
+			settings: json!({ "actionIdx": 1 }),
+			state: 0,
+			states: vec![],
+			uuid: "com.hotspot.streamdock.device.brightness".to_owned(),
+			multi_action_data: vec![],
+		};
+		let brightness_context = ActionContext {
+			device: "18-test".to_owned(),
+			profile: "Profile A".to_owned(),
+			controller: "Keypad".to_owned(),
+			position: 0,
+			index: 0,
+		};
+		let instance = mapped_instance(&categories, &brightness, brightness_context, 0, &[], Path::new("/tmp"), "device", &mut vec![]);
+		assert_eq!(instance.action.uuid, brightness.uuid);
+		assert!(instance.action.plugin.is_empty());
+		assert_eq!(instance.settings, brightness.settings);
 	}
 
 	#[test]
 	fn preserves_vsd_website_path_and_maps_common_system_controls() {
 		let website = json!({ "path": "https://example.com" });
 		assert_eq!(open_command(&website).as_deref(), Some("open 'https://example.com'"));
-		assert!(matches!(mapping("com.hotspot.streamdock.profile.rotate", "Scene Shift"), Mapping::SwitchProfile));
-		assert!(matches!(mapping("com.hotspot.streamdock.system.multimedia", "Multimedia"), Mapping::RunCommand));
-		assert!(system_command("com.hotspot.streamdock.system.multimedia", &json!({ "actionIdx": 1 })).contains("playpause"));
+		assert!(matches!(mapping("com.hotspot.streamdock.profile.rotate", "Scene Shift"), Mapping::NativeVsdAction));
+		assert!(matches!(mapping("com.hotspot.streamdock.profile.openchild", "Create Folder"), Mapping::NativeVsdAction));
+		assert!(matches!(mapping("com.hotspot.streamdock.profile.backtoparent", "Go back"), Mapping::NativeVsdAction));
+		assert!(matches!(mapping("com.hotspot.streamdock.system.multimedia", "Multimedia"), Mapping::NativeVsdAction));
+	}
+
+	#[test]
+	fn imports_folder_targets_as_native_m18_page_references() {
+		let page = PageSpec {
+			path: PathBuf::from("/fixtures/child/manifest.json"),
+			manifest: serde_json::from_value(json!({})).unwrap(),
+			profile_id: "VSD Craft/Child".to_owned(),
+		};
+		let pages = vec![page];
+		assert_eq!(folder_target(&json!({ "ProfileUUID": "/fixtures/child" }), &pages).as_deref(), Some("VSD Craft/Child"));
+
+		let mut categories = HashMap::new();
+		crate::vsd_actions::insert_catalog(&mut categories);
+		let action = VsdAction {
+			controller: "Keypad".to_owned(),
+			name: "Create Folder".to_owned(),
+			settings: json!({ "ProfileUUID": "/fixtures/child" }),
+			state: 0,
+			states: vec![],
+			uuid: "com.hotspot.streamdock.profile.openchild".to_owned(),
+			multi_action_data: vec![],
+		};
+		let context = ActionContext {
+			device: "18-test".to_owned(),
+			profile: "Profile A".to_owned(),
+			controller: "Keypad".to_owned(),
+			position: 0,
+			index: 0,
+		};
+		let instance = mapped_instance(&categories, &action, context, 0, &pages, Path::new("/fixtures"), "18-test", &mut vec![]);
+		assert_eq!(instance.action.uuid, action.uuid);
+		assert!(instance.action.plugin.is_empty());
+		assert_eq!(instance.settings["profile"], "VSD Craft/Child");
 	}
 }

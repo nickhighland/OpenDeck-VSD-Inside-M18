@@ -499,6 +499,19 @@ pub static CATEGORIES: LazyLock<RwLock<HashMap<String, Category>>> = LazyLock::n
 					}
 				))
 				.unwrap(),
+				serde_json::from_value(serde_json::json!(
+					{
+						"name": "Action Carousel",
+						"icon": "opendeck/toggle-action.png",
+						"plugin": "",
+						"uuid": "opendeck.carouselaction",
+						"tooltip": "Run one child action per press and cycle through the sequence",
+						"controllers": [ "Keypad" ],
+						"states": [ { "image": "opendeck/toggle-action.png" } ],
+						"supported_in_multi_actions": false
+					}
+				))
+				.unwrap(),
 			],
 		},
 	);

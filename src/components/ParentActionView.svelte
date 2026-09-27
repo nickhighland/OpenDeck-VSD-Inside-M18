@@ -23,7 +23,15 @@
 	let children: ActionInstance[];
 	$: children = profile.keys[$inspectedParentAction!.position]!.children!;
 	let parentUuid: string;
+	let isMultiAction: boolean;
+	let isCycleAction: boolean;
+	let isCarouselAction: boolean;
+	let parentTitle: string;
 	$: parentUuid = profile.keys[$inspectedParentAction!.position]!.action.uuid;
+	$: isMultiAction = parentUuid == "opendeck.multiaction";
+	$: isCycleAction = parentUuid == "opendeck.toggleaction";
+	$: isCarouselAction = parentUuid == "opendeck.carouselaction";
+	$: parentTitle = isMultiAction ? "Multi Action" : isCycleAction ? "Action Cycle" : isCarouselAction ? "Action Carousel" : "Multi Action";
 	let parentContext: string;
 	$: parentContext = profile.keys[$inspectedParentAction!.position]!.context;
 	let parentSettings: any;
@@ -36,8 +44,7 @@
 
 	async function addAction(action: Action) {
 		if (
-			(parentUuid == "opendeck.multiaction" && !action.supported_in_multi_actions) ||
-			(parentUuid == "opendeck.toggleaction" && (action.uuid == "opendeck.multiaction" || action.uuid == "opendeck.toggleaction"))
+			((isMultiAction || isCycleAction || isCarouselAction) && !action.supported_in_multi_actions)
 		) {
 			return;
 		}
@@ -128,7 +135,7 @@
 
 <div class="px-6 pt-6 pb-4 text-neutral-300">
 	<button class="float-right text-xl" on:click={() => ($inspectedParentAction = null)} aria-label={$t("settings.close")}>✕</button>
-	<h1 class="font-semibold text-2xl">{parentUuid == "opendeck.toggleaction" ? $t("parent_action_view.toggle") : $t("parent_action_view.multi")}</h1>
+	<h1 class="font-semibold text-2xl">{parentTitle}</h1>
 </div>
 
 <!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
@@ -137,14 +144,14 @@
 	class="flex flex-col h-128 overflow-auto"
 	on:click={() => ($inspectedInstance = null)}
 	role="list"
-	aria-label="{parentUuid == 'opendeck.toggleaction' ? $t('parent_action_view.toggle') : $t('parent_action_view.multi')} {$t('parent_action_view.children')}"
+	aria-label="{parentTitle} {$t('parent_action_view.children')}"
 	on:keydown={handleListKeydown}
 >
 	{#each children as instance, index}
 		<!-- svelte-ignore a11y-no-noninteractive-tabindex a11y-no-noninteractive-element-interactions -->
 		<div
 			class="flex flex-row items-center mx-4 my-1 bg-neutral-700 hover:bg-neutral-600 transition-colors border border-neutral-600 rounded-lg focus-within:outline-solid focus-within:outline-offset-2 focus-within:outline-blue-500"
-			class:my-2={parentUuid == "opendeck.toggleaction"}
+			class:my-2={!isMultiAction}
 			on:click|stopPropagation={() => ($inspectedInstance = instance.context)}
 			on:focus|stopPropagation={() => ($inspectedInstance = instance.context)}
 			on:keydown={(e) => {
@@ -160,7 +167,7 @@
 				scale={3 / 4}
 				role="presentation"
 				tabindex={-1}
-				label={(parentUuid == "opendeck.toggleaction" ? $t("parent_action_view.toggle") : $t("parent_action_view.multi")) +
+				label={parentTitle +
 					" " +
 					$t("parent_action_view.child") +
 					" " +
@@ -177,7 +184,7 @@
 			</button>
 		</div>
 
-		{#if parentUuid == "opendeck.multiaction" && index < children.length - 1}
+		{#if isMultiAction && index < children.length - 1}
 			<div class="flex flex-row items-center gap-2 mx-14 my-1 px-3 py-2 bg-neutral-800 border border-dashed border-neutral-600 rounded-lg">
 				<span class="text-xs text-neutral-400">{$t("parent_action_view.delay.label")}</span>
 				<input

@@ -167,6 +167,7 @@ struct Session {
 static SESSIONS: LazyLock<RwLock<HashMap<String, Arc<Session>>>> = LazyLock::new(|| RwLock::new(HashMap::new()));
 static CONNECTING: LazyLock<RwLock<HashMap<String, ()>>> = LazyLock::new(|| RwLock::new(HashMap::new()));
 static LED_PALETTES: LazyLock<RwLock<HashMap<String, LedPalette>>> = LazyLock::new(|| RwLock::new(HashMap::new()));
+static DEVICE_BRIGHTNESS: LazyLock<RwLock<HashMap<String, u8>>> = LazyLock::new(|| RwLock::new(HashMap::new()));
 
 fn get_device_id(device: &HidDeviceInfo) -> Option<String> {
 	Some(format!("{DEVICE_NAMESPACE}-{}", device.serial_number.clone()?))
@@ -283,6 +284,7 @@ async fn run_session(candidate: CandidateDevice) -> Result<(), anyhow::Error> {
 		device.shutdown().await.ok();
 		return Ok(());
 	}
+	DEVICE_BRIGHTNESS.write().await.insert(id.clone(), brightness);
 
 	let info = crate::shared::DeviceInfo {
 		id: id.clone(),
@@ -297,6 +299,7 @@ async fn run_session(candidate: CandidateDevice) -> Result<(), anyhow::Error> {
 	};
 	if let Err(error) = crate::events::inbound::devices::register_device("", PayloadEvent { payload: info }).await {
 		SESSIONS.write().await.remove(&id);
+		DEVICE_BRIGHTNESS.write().await.remove(&id);
 		device.shutdown().await.ok();
 		return Err(error);
 	}
@@ -321,6 +324,7 @@ async fn run_session(candidate: CandidateDevice) -> Result<(), anyhow::Error> {
 
 	let _ = crate::events::inbound::devices::deregister_device("", PayloadEvent { payload: candidate.id.clone() }).await;
 	SESSIONS.write().await.remove(&candidate.id);
+	DEVICE_BRIGHTNESS.write().await.remove(&candidate.id);
 	device.shutdown().await.ok();
 	Ok(())
 }
@@ -533,9 +537,28 @@ pub async fn clear_screen(device: &str) -> Result<(), anyhow::Error> {
 
 pub async fn set_brightness(device: &str, brightness: u8) -> Result<(), anyhow::Error> {
 	if is_m18(device) {
+		let brightness = brightness.min(100);
+		let mut brightnesses = DEVICE_BRIGHTNESS.write().await;
 		send(device, DeviceCommand::SetBrightness(brightness)).await?;
+		brightnesses.insert(device.to_owned(), brightness);
 	}
 	Ok(())
+}
+
+pub async fn adjust_brightness(device: &str, adjustment: i8) -> Result<(), anyhow::Error> {
+	if !is_m18(device) {
+		return Ok(());
+	}
+	let mut brightnesses = DEVICE_BRIGHTNESS.write().await;
+	let current = brightnesses.get(device).copied().unwrap_or_else(|| crate::store::get_settings().value.brightness);
+	let brightness = adjusted_brightness(current, adjustment);
+	send(device, DeviceCommand::SetBrightness(brightness)).await?;
+	brightnesses.insert(device.to_owned(), brightness);
+	Ok(())
+}
+
+fn adjusted_brightness(current: u8, adjustment: i8) -> u8 {
+	(i16::from(current) + i16::from(adjustment)).clamp(0, 100) as u8
 }
 
 pub async fn set_led_colors(device: &str, colors: LedPalette) -> Result<(), anyhow::Error> {
@@ -589,6 +612,14 @@ mod tests {
 		assert_eq!(device_key(14), Some(4));
 		assert_eq!(device_key(15), None);
 		assert_eq!(device_key(17), None);
+	}
+
+	#[test]
+	fn device_brightness_adjustments_are_relative_and_clamped() {
+		assert_eq!(adjusted_brightness(50, -6), 44);
+		assert_eq!(adjusted_brightness(44, -6), 38);
+		assert_eq!(adjusted_brightness(98, 6), 100);
+		assert_eq!(adjusted_brightness(3, -6), 0);
 	}
 
 	#[test]

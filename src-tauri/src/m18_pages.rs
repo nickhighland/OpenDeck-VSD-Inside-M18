@@ -21,6 +21,8 @@ pub struct M18Page {
 pub struct M18PageSet {
 	pub pages: Vec<M18Page>,
 	pub selected: usize,
+	#[serde(default)]
+	pub folder_history: Vec<usize>,
 }
 
 impl NotProfile for M18PageSet {}
@@ -37,7 +39,18 @@ fn default_page_set() -> M18PageSet {
 			profile: "Default".to_owned(),
 		}],
 		selected: 0,
+		folder_history: vec![],
 	}
+}
+
+fn push_folder_history(history: &mut Vec<usize>, current: usize, destination: usize) {
+	if current != destination {
+		history.push(current);
+	}
+}
+
+fn pop_folder_history(history: &mut Vec<usize>, page_count: usize) -> Option<usize> {
+	history.pop().filter(|index| *index < page_count)
 }
 
 fn load(device: &str) -> Result<Store<M18PageSet>, anyhow::Error> {
@@ -48,6 +61,10 @@ fn load(device: &str) -> Result<Store<M18PageSet>, anyhow::Error> {
 	}
 	if store.value.selected >= store.value.pages.len() {
 		store.value.selected = 0;
+		store.save()?;
+	}
+	if store.value.folder_history.iter().any(|index| *index >= store.value.pages.len()) {
+		store.value.folder_history.retain(|index| *index < store.value.pages.len());
 		store.save()?;
 	}
 	Ok(store)
@@ -62,6 +79,7 @@ pub fn replace(device: &str, pages: Vec<M18Page>) -> Result<M18PageSet, anyhow::
 	let previous_profile = store.value.pages.get(store.value.selected).map(|page| page.profile.clone());
 	store.value.pages = if pages.is_empty() { default_page_set().pages } else { pages };
 	store.value.selected = previous_profile.and_then(|profile| store.value.pages.iter().position(|page| page.profile == profile)).unwrap_or(0);
+	store.value.folder_history.clear();
 	store.save()?;
 	Ok(store.value)
 }
@@ -104,6 +122,40 @@ pub async fn switch_to(device: &str, target: Option<&str>, index: Option<usize>,
 	Ok(())
 }
 
+/// Enter an imported folder target, remembering the current page for Go back.
+pub async fn open_folder(device: &str, target: &str) -> Result<(), anyhow::Error> {
+	let mut store = load(device)?;
+	let Some(destination) = store.value.pages.iter().position(|page| page.id == target || page.profile == target) else {
+		log::warn!("M18 folder target is not present in this device's page set");
+		return Ok(());
+	};
+	let current = store.value.selected;
+	if current == destination {
+		return Ok(());
+	}
+	push_folder_history(&mut store.value.folder_history, current, destination);
+	let page = store.value.pages[destination].clone();
+	crate::events::frontend::profiles::set_selected_profile(device.to_owned(), page.profile.clone()).await?;
+	store.value.selected = destination;
+	store.save()?;
+	emit(crate::APP_HANDLE.get().unwrap(), device, &store.value)?;
+	Ok(())
+}
+
+/// Return to the page that opened the current folder, if there is one.
+pub async fn go_back(device: &str) -> Result<(), anyhow::Error> {
+	let mut store = load(device)?;
+	let Some(destination) = pop_folder_history(&mut store.value.folder_history, store.value.pages.len()) else {
+		return Ok(());
+	};
+	let page = store.value.pages[destination].clone();
+	crate::events::frontend::profiles::set_selected_profile(device.to_owned(), page.profile.clone()).await?;
+	store.value.selected = destination;
+	store.save()?;
+	emit(crate::APP_HANDLE.get().unwrap(), device, &store.value)?;
+	Ok(())
+}
+
 #[command]
 pub fn get_m18_pages(device: String) -> Result<M18PageSet, crate::events::frontend::Error> {
 	get(&device).map_err(Into::into)
@@ -121,8 +173,20 @@ pub async fn switch_m18_page_index(device: String, index: usize) -> Result<(), c
 
 #[cfg(test)]
 mod tests {
+	use super::{pop_folder_history, push_folder_history};
+
 	#[test]
 	fn negative_page_delta_wraps_without_underflow() {
 		assert_eq!((0isize - 1).rem_euclid(2), 1);
+	}
+
+	#[test]
+	fn folder_navigation_remembers_nested_parent_pages_in_lifo_order() {
+		let mut history = vec![];
+		push_folder_history(&mut history, 0, 2);
+		push_folder_history(&mut history, 2, 4);
+		assert_eq!(pop_folder_history(&mut history, 5), Some(2));
+		assert_eq!(pop_folder_history(&mut history, 5), Some(0));
+		assert_eq!(pop_folder_history(&mut history, 5), None);
 	}
 }

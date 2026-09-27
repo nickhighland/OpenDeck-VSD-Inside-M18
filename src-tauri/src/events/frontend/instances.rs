@@ -50,7 +50,7 @@ pub async fn create_instance(app: AppHandle, mut action: Action, context: Contex
 		crate::m18_actions::refresh_open_app_icon(&mut instance);
 		children.push(instance.clone());
 
-		if parent.action.uuid == "opendeck.toggleaction" && parent.states.len() < children.len() {
+		if matches!(parent.action.uuid.as_str(), "opendeck.toggleaction" | "opendeck.carouselaction") && parent.states.len() < children.len() {
 			parent.states.push(crate::shared::ActionState {
 				image: "opendeck/toggle-action.png".to_owned(),
 				..Default::default()
@@ -72,7 +72,7 @@ pub async fn create_instance(app: AppHandle, mut action: Action, context: Contex
 			states: action.states.clone(),
 			current_state: 0,
 			settings: default_settings,
-			children: if matches!(action.uuid.as_str(), "opendeck.multiaction" | "opendeck.toggleaction") {
+			children: if matches!(action.uuid.as_str(), "opendeck.multiaction" | "opendeck.toggleaction" | "opendeck.carouselaction") {
 				Some(vec![])
 			} else {
 				None
@@ -357,7 +357,7 @@ pub async fn remove_instance(context: ActionContext) -> Result<(), Error> {
 				break;
 			}
 		}
-		if instance.action.uuid == "opendeck.toggleaction" {
+		if matches!(instance.action.uuid.as_str(), "opendeck.toggleaction" | "opendeck.carouselaction") {
 			if instance.current_state as usize >= children.len() {
 				instance.current_state = if children.is_empty() { 0 } else { children.len() as u16 - 1 };
 			}

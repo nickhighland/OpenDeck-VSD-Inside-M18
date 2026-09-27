@@ -69,8 +69,13 @@ jobs:
         with:
           tauriScript: deno task tauri
           tagName: tv__VERSION__
-          releaseName: "OpenDeck v__VERSION__"
-          releaseBody: "See the assets to download this version. See the README for installation instructions."
+          releaseName: "OpenDeck VSD M18 v__VERSION__"
+          releaseBody: |
+            OpenDeck VSD M18 release builds for macOS, Windows, and Linux.
+
+            VSD Craft feature parity is still in progress. See [TODO.md](https://github.com/nickhighland/OpenDeck-VSD-Inside-M18/blob/main/TODO.md) and [the parity audit](https://github.com/nickhighland/OpenDeck-VSD-Inside-M18/blob/main/docs/VSD-CRAFT-PARITY.md) for verified coverage and remaining work. Boot-logo replacement is intentionally excluded.
+
+            See the README for installation instructions.
           releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}

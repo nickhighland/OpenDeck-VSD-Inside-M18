@@ -8,7 +8,7 @@ use crate::shared::ActionInstance;
 
 use base64::Engine;
 use enigo::{
-	Enigo, Settings,
+	Enigo, Mouse, Settings,
 	agent::{Agent, Token},
 };
 use image::{Rgb, RgbImage};
@@ -427,6 +427,20 @@ pub(crate) async fn execute_input(input: Option<String>) -> Result<(), anyhow::E
 	})
 	.await??;
 	Ok(())
+}
+
+#[tauri::command]
+pub async fn get_mouse_position() -> Result<(i32, i32), String> {
+	tokio::task::spawn_blocking(|| -> Result<(i32, i32), String> {
+		let store = ENIGO.get_or_init(|| Mutex::new(None));
+		let mut guard = store.lock().map_err(|_| "M18 input engine lock was poisoned".to_owned())?;
+		if guard.is_none() {
+			guard.replace(Enigo::new(&Settings::default()).map_err(|error| error.to_string())?);
+		}
+		guard.as_ref().expect("input engine was initialised").location().map_err(|error| error.to_string())
+	})
+	.await
+	.map_err(|error| error.to_string())?
 }
 
 async fn run_process(program: &'static str, args: Vec<String>) -> Result<(), anyhow::Error> {

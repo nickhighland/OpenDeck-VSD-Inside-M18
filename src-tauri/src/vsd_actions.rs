@@ -12,6 +12,7 @@ use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::process::Command;
 use std::sync::LazyLock;
+use tauri::Emitter;
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct VsdActionDefinition {
@@ -68,6 +69,12 @@ fn category_icon(category: &str) -> &'static str {
 
 pub fn insert_catalog(categories: &mut HashMap<String, Category>) {
 	for definition in definitions() {
+		// Flow containers have dedicated native parent editors/runtime below;
+		// exposing their VSD plugin UUIDs as ordinary single actions would make
+		// them look selectable without providing the required child editor.
+		if is_composite_action(&definition.uuid) {
+			continue;
+		}
 		let category_name = format!("M18 · {}", definition.category);
 		let icon = category_icon(&definition.category);
 		let category = categories.entry(category_name).or_insert_with(|| Category {
@@ -97,12 +104,52 @@ pub fn insert_catalog(categories: &mut HashMap<String, Category>) {
 			states,
 		});
 	}
+	let category = categories.entry("M18 · Action Flows".to_owned()).or_insert_with(|| Category {
+		icon: Some(category_icon("Action Flows").to_owned()),
+		actions: vec![],
+	});
+	for (name, uuid, tooltip, icon) in [
+		(
+			"Action Cycle",
+			"opendeck.toggleaction",
+			"Run one child action per press and cycle through the sequence",
+			"opendeck/toggle-action.png",
+		),
+		(
+			"Action Carousel",
+			"opendeck.carouselaction",
+			"Run one child action per press and cycle through the sequence",
+			"opendeck/toggle-action.png",
+		),
+	] {
+		category.actions.push(Action {
+			name: name.to_owned(),
+			uuid: uuid.to_owned(),
+			plugin: String::new(),
+			tooltip: tooltip.to_owned(),
+			icon: icon.to_owned(),
+			disable_automatic_states: false,
+			visible_in_action_list: true,
+			supported_in_multi_actions: false,
+			property_inspector: String::new(),
+			controllers: vec!["Keypad".to_owned()],
+			encoder: None,
+			states: vec![ActionState {
+				image: icon.to_owned(),
+				..Default::default()
+			}],
+		});
+	}
 }
 
 pub fn default_settings(uuid: &str) -> Value {
 	match uuid.to_ascii_lowercase().as_str() {
+		"com.hotspot.streamdock.device.brightness" => json!({ "actionIdx": 0 }),
+		"com.hotspot.streamdock.system.multimedia" => json!({ "actionIdx": 1 }),
+		"com.hotspot.streamdock.mouse.event" => json!({ "eventType": "click", "button": "left", "x": 0, "y": 0, "axis": "vertical", "amount": 3, "coordinate": "absolute", "modifiers": [] }),
 		"com.hotspot.streamdock.system.openapps" => json!({ "appPath": "" }),
 		"com.hotspot.streamdock.system.open" | "com.hotspot.streamdock.system.website" => json!({ "path": "" }),
+		"com.hotspot.streamdock.system.close" => json!({ "appPath": "" }),
 		"com.hotspot.streamdock.system.hotkey" | "com.hotspot.streamdock.system.super.hotkey" => json!({ "down": "", "up": "", "display": "" }),
 		"com.hotspot.streamdock.system.hotkeyswitch" => json!({ "hotkeys": [{ "down": "", "up": "" }, { "down": "", "up": "" }], "index": 0 }),
 		"com.hotspot.streamdock.system.text" | "com.hotspot.streamdock.plain.text" => json!({ "text": "" }),
@@ -111,9 +158,11 @@ pub fn default_settings(uuid: &str) -> Value {
 		"com.hotspot.streamdock.soundboard.playaudio" => json!({ "path": "", "mode": "Play/Stop", "volume": 100, "outputDevice": "default", "fadeType": "none", "fadeDuration": 0 }),
 		"com.hotspot.streamdock.youtube.chatmessage" => json!({ "videoId": "", "message": "" }),
 		"com.hotspot.streamdock.youtube.viewers" => json!({ "videoId": "" }),
-		"com.hotspot.streamdock.weather.action1" => json!({ "location": "", "units": "fahrenheit" }),
-		"com.mirabox.streamdock.time.action2" | "com.mirabox.streamdock.time.action3" => json!({ "durationSeconds": 60, "label": "" }),
-		"com.mirabox.streamdock.time.action1" => json!({ "timeZone": "local", "format": "%H:%M" }),
+		"com.hotspot.streamdock.weather.action1" => json!({ "inputCity": "", "searchList": [], "cityId": "", "tempList": "0", "title": "", "radio": "0", "radio2": "0", "theme": "Modern" }),
+		"com.hotspot.streamdock.memo.action1" | "com.hotspot.streamdock.memo.action2" => json!({ "title": "", "content": "", "time": "", "color": "#ffffff" }),
+		"com.mirabox.streamdock.time.action1" => json!({ "amplify": true, "zone": "system", "theme": "theme1", "isBackgroundHidden": false }),
+		"com.mirabox.streamdock.time.action2" => json!({ "select": "1", "deep": 0 }),
+		"com.mirabox.streamdock.time.action3" => json!({ "select": "1", "surplus": 60000, "timing": "60000", "inputTime": "0", "musicUrl": "", "color": "rgb(0,255,0)" }),
 		"com.mirabox.streamdock.datetime.action1" => json!({ "format": "%Y-%m-%d %H:%M" }),
 		"com.mirabox.streamdock.calendar.action1" => json!({ "daysAhead": 0 }),
 		_ => Value::Object(serde_json::Map::new()),
@@ -126,6 +175,103 @@ fn text_setting<'a>(settings: &'a Value, keys: &[&str]) -> Option<&'a str> {
 
 fn number_setting(settings: &Value, keys: &[&str]) -> Option<i64> {
 	keys.iter().find_map(|key| settings.get(*key).and_then(|value| value.as_i64().or_else(|| value.as_str()?.parse().ok())))
+}
+
+fn brightness_adjustment(action_index: i64) -> Option<i8> {
+	match action_index {
+		0 => Some(6),
+		1 => Some(-6),
+		_ => None,
+	}
+}
+
+fn multimedia_input(action_index: i64) -> Option<&'static str> {
+	match action_index {
+		0 => Some("[k(MediaPrevTrack)]"),
+		1 => Some("[k(MediaPlayPause)]"),
+		2 => Some("[k(MediaNextTrack)]"),
+		4 => Some("[k(VolumeMute)]"),
+		5 => Some("[k(VolumeUp)]"),
+		6 => Some("[k(VolumeDown)]"),
+		_ => None,
+	}
+}
+
+fn mouse_event_input(settings: &Value) -> Option<String> {
+	let event = text_setting(settings, &["eventType", "event", "type", "operation"])
+		.unwrap_or("click")
+		.to_ascii_lowercase()
+		.replace([' ', '_', '-'], "");
+	let button = match text_setting(settings, &["button", "mouseButton"]).unwrap_or("left").to_ascii_lowercase().as_str() {
+		"right" | "mouserightbutton" => "Right",
+		"middle" | "mousmiddlebutton" => "Middle",
+		"side1" | "back" | "mousebutton1" => "Back",
+		"side2" | "forward" | "mousebutton2" => "Forward",
+		_ => "Left",
+	};
+	let x = number_setting(settings, &["x", "X", "xAxis", "XAxis"]).unwrap_or(0).clamp(-32768, 32767);
+	let y = number_setting(settings, &["y", "Y", "yAxis", "YAxis"]).unwrap_or(0).clamp(-32768, 32767);
+	let axis = if text_setting(settings, &["axis", "scrollAxis", "wheelType"]).is_some_and(|value| value.to_ascii_lowercase().starts_with('h')) {
+		"Horizontal"
+	} else {
+		"Vertical"
+	};
+	let coordinate = if text_setting(settings, &["coordinate", "coordinateMode"]).is_some_and(|value| value.to_ascii_lowercase().starts_with('r')) {
+		"Rel"
+	} else {
+		"Abs"
+	};
+	let amount = number_setting(settings, &["amount", "scrollAmount", "wheelAmount"]).unwrap_or(3).clamp(-1000, 1000);
+	let mut modifiers = Vec::new();
+	for (keys, name) in [
+		(&["KeyCmd", "KeyCommand", "command"][..], "Meta"),
+		(&["KeyCtrl", "KeyControl", "control"][..], "Control"),
+		(&["KeyOption", "KeyAlt", "alt"][..], "Alt"),
+		(&["KeyShift", "shift"][..], "Shift"),
+	] {
+		if keys.iter().any(|key| settings.get(*key).and_then(Value::as_bool).unwrap_or(false)) {
+			modifiers.push(name);
+		}
+	}
+	if let Some(extra) = settings.get("modifiers").and_then(Value::as_array) {
+		for modifier in extra.iter().filter_map(Value::as_str).map(str::to_ascii_lowercase) {
+			let token = match modifier.as_str() {
+				"cmd" | "command" | "meta" | "win" => Some("Meta"),
+				"ctrl" | "control" => Some("Control"),
+				"alt" | "option" => Some("Alt"),
+				"shift" => Some("Shift"),
+				_ => None,
+			};
+			if let Some(token) = token
+				&& !modifiers.contains(&token)
+			{
+				modifiers.push(token);
+			}
+		}
+	}
+
+	let mut tokens = modifiers.iter().map(|modifier| format!("k({modifier},Press)")).collect::<Vec<_>>();
+	match event.as_str() {
+		"doubleclick" | "mousedoubleclick" => {
+			for _ in 0..2 {
+				tokens.push(format!("b({button},Press)"));
+				tokens.push(format!("b({button},Release)"));
+			}
+		}
+		"move" | "mousemove" => tokens.push(format!("m({x},{y},{coordinate})")),
+		"scroll" | "wheelscroll" | "mousewheelscroll" => tokens.push(format!("s({amount},{axis})")),
+		"drag" | "draganddrop" | "mousedrag" => {
+			tokens.push(format!("b({button},Press)"));
+			tokens.push(format!("m({x},{y},{coordinate})"));
+			tokens.push(format!("b({button},Release)"));
+		}
+		_ => tokens.push(format!("b({button},Click)")),
+	}
+	tokens.extend(modifiers.iter().rev().map(|modifier| format!("k({modifier},Release)")));
+	let ron = format!("[{}]", tokens.join(","));
+	// Fail closed if malformed saved settings somehow produced invalid input.
+	let parsed: Vec<Token> = ron::from_str(&ron).ok()?;
+	Some(ron::to_string(&parsed).ok()?)
 }
 
 async fn run(program: &str, args: Vec<String>) -> Result<(), anyhow::Error> {
@@ -173,38 +319,44 @@ fn configured_input(instance: &crate::shared::ActionInstance) -> Option<String> 
 	None
 }
 
-fn preset_input(uuid: &str) -> Option<&'static str> {
-	match uuid.to_ascii_lowercase().as_str() {
-		"com.hotspot.streamdock.hotkey.browser.back" => Some("[k(meta,uni('['))]"),
-		"com.hotspot.streamdock.hotkey.browser.forward" => Some("[k(meta,uni(']'))]"),
-		"com.hotspot.streamdock.hotkey.browser.refresh" => Some("[k(meta,uni('r'))]"),
-		"com.hotspot.streamdock.hotkey.browser.collect" => Some("[k(meta,uni('d'))]"),
-		"com.hotspot.streamdock.hotkey.quickcontrol.displaydesktop" | "com.hotspot.streamdock.touchbar.showdesktop" => Some("[k(uni('F11'))]"),
-		"com.hotspot.streamdock.hotkey.quicktool.searchbar" => Some("[k(meta,uni(' '))]"),
-		"com.hotspot.streamdock.hotkey.quickcontrol.speechrecognition" => Some("[k(uni('F5'))]"),
-		"com.hotspot.streamdock.hotkey.quickcontrol.switchscreen" => Some("[k(ctrl,uni('F1'))]"),
-		"com.hotspot.streamdock.touchbar.dndmode" => Some("[k(meta,ctrl,uni('d'))]"),
-		"com.hotspot.streamdock.touchbar.dictation" => Some("[k(uni('F5'))]"),
-		"com.hotspot.streamdock.touchbar.inputmethod" => Some("[k(ctrl,uni(' '))]"),
-		"com.hotspot.streamdock.touchbar.notificationcenter" | "com.hotspot.streamdock.quicktool.notification" => Some("[k(ctrl,uni('F8'))]"),
-		"com.hotspot.streamdock.touchbar.screenlock" => Some("[k(meta,ctrl,uni('q'))]"),
-		"com.hotspot.streamdock.hotkey.pr.copy" => Some("[k(meta,uni('c'))]"),
-		"com.hotspot.streamdock.hotkey.pr.paste" => Some("[k(meta,uni('v'))]"),
-		"com.hotspot.streamdock.hotkey.pr.cut" => Some("[k(meta,uni('x'))]"),
-		"com.hotspot.streamdock.hotkey.pr.play" => Some("[k(uni(' '))]"),
-		"com.hotspot.streamdock.hotkey.pr.delete" => Some("[k(uni('Delete'))]"),
-		"com.hotspot.streamdock.hotkey.pr.undo" => Some("[k(meta,uni('z'))]"),
-		"com.hotspot.streamdock.hotkey.pr.addedit" => Some("[k(meta,uni('k'))]"),
-		"com.hotspot.streamdock.hotkey.pr.effectspanel" => Some("[k(shift,uni('7'))]"),
-		"com.hotspot.streamdock.hotkey.pr.togglefullscreen" => Some("[k(ctrl,uni('`'))]"),
-		"com.hotspot.streamdock.hotkey.pr.razor" => Some("[k(uni('c'))]"),
-		"com.hotspot.streamdock.hotkey.pr.pentool" => Some("[k(uni('p'))]"),
-		"com.hotspot.streamdock.hotkey.pr.rectangletool" => Some("[k(uni('q'))]"),
-		"com.hotspot.streamdock.hotkey.pr.rippleeditingtools" => Some("[k(uni('b'))]"),
-		"com.hotspot.streamdock.hotkey.pr.addmarker" => Some("[k(uni('m'))]"),
-		"com.hotspot.streamdock.pr.action5" => Some("[k(uni('\\'))]"),
-		_ => None,
-	}
+fn shortcut(modifiers: &[enigo::Key], key: enigo::Key) -> String {
+	let mut tokens = modifiers.iter().copied().map(|key| Token::Key(key, enigo::Direction::Press)).collect::<Vec<_>>();
+	tokens.push(Token::Key(key, enigo::Direction::Click));
+	tokens.extend(modifiers.iter().rev().copied().map(|key| Token::Key(key, enigo::Direction::Release)));
+	ron::to_string(&tokens).expect("Enigo key tokens must serialize")
+}
+
+fn preset_input(uuid: &str) -> Option<String> {
+	use enigo::Key::{Control, Delete, F1, F5, F11, Meta, Shift, Space, Unicode};
+	let (modifiers, key): (&[enigo::Key], enigo::Key) = match uuid.to_ascii_lowercase().as_str() {
+		"com.hotspot.streamdock.hotkey.browser.back" => (&[Meta], Unicode('[')),
+		"com.hotspot.streamdock.hotkey.browser.forward" => (&[Meta], Unicode(']')),
+		"com.hotspot.streamdock.hotkey.browser.refresh" => (&[Meta], Unicode('r')),
+		"com.hotspot.streamdock.hotkey.browser.collect" => (&[Meta], Unicode('d')),
+		"com.hotspot.streamdock.hotkey.quickcontrol.displaydesktop" | "com.hotspot.streamdock.touchbar.showdesktop" => (&[], F11),
+		"com.hotspot.streamdock.hotkey.quicktool.searchbar" => (&[Meta], Space),
+		"com.hotspot.streamdock.hotkey.quickcontrol.speechrecognition" | "com.hotspot.streamdock.touchbar.dictation" => (&[], F5),
+		"com.hotspot.streamdock.hotkey.quickcontrol.switchscreen" => (&[Control], F1),
+		"com.hotspot.streamdock.touchbar.inputmethod" => (&[Control], Space),
+		"com.hotspot.streamdock.touchbar.screenlock" => (&[Meta, Control], Unicode('q')),
+		"com.hotspot.streamdock.hotkey.pr.copy" => (&[Meta], Unicode('c')),
+		"com.hotspot.streamdock.hotkey.pr.paste" => (&[Meta], Unicode('v')),
+		"com.hotspot.streamdock.hotkey.pr.cut" => (&[Meta], Unicode('x')),
+		"com.hotspot.streamdock.hotkey.pr.play" => (&[], Space),
+		"com.hotspot.streamdock.hotkey.pr.delete" => (&[], Delete),
+		"com.hotspot.streamdock.hotkey.pr.undo" => (&[Meta], Unicode('z')),
+		"com.hotspot.streamdock.hotkey.pr.addedit" => (&[Meta], Unicode('k')),
+		"com.hotspot.streamdock.hotkey.pr.effectspanel" => (&[Shift], Unicode('7')),
+		"com.hotspot.streamdock.hotkey.pr.togglefullscreen" => (&[Control], Unicode('`')),
+		"com.hotspot.streamdock.hotkey.pr.razor" => (&[], Unicode('c')),
+		"com.hotspot.streamdock.hotkey.pr.pentool" => (&[], Unicode('p')),
+		"com.hotspot.streamdock.hotkey.pr.rectangletool" => (&[], Unicode('q')),
+		"com.hotspot.streamdock.hotkey.pr.rippleeditingtools" => (&[], Unicode('b')),
+		"com.hotspot.streamdock.hotkey.pr.addmarker" => (&[], Unicode('m')),
+		"com.hotspot.streamdock.pr.action5" => (&[], Unicode('\\')),
+		_ => return None,
+	};
+	Some(shortcut(modifiers, key))
 }
 
 async fn send_text(text: &str) -> Result<(), anyhow::Error> {
@@ -229,6 +381,36 @@ fn app_for_uuid(uuid: &str) -> Option<&'static str> {
 async fn system_action(uuid: &str, settings: &Value) -> Result<bool, anyhow::Error> {
 	let uuid = uuid.to_ascii_lowercase();
 	let action_index = number_setting(settings, &["actionIdx", "ActionIndex", "index"]).unwrap_or(0);
+	if uuid == "com.hotspot.streamdock.system.multimedia" {
+		if let Some(input) = multimedia_input(action_index) {
+			crate::m18_actions::execute_input(Some(input.to_owned())).await?;
+			return Ok(true);
+		}
+		if action_index == 3 {
+			#[cfg(target_os = "macos")]
+			run(
+				"/usr/bin/osascript",
+				vec![
+					"-e".to_owned(),
+					"tell application \"System Events\" to set musicIsRunning to exists (process \"Music\")\nif musicIsRunning then tell application \"Music\" to stop".to_owned(),
+				],
+			)
+			.await?;
+			#[cfg(not(target_os = "macos"))]
+			crate::m18_actions::execute_input(Some("[k(MediaStop)]".to_owned())).await?;
+			return Ok(true);
+		}
+		return Ok(false);
+	}
+	if uuid == "com.hotspot.streamdock.quickcontrol.microphone" {
+		#[cfg(target_os = "macos")]
+		crate::macos_audio::toggle_default_input_mute()?;
+		#[cfg(target_os = "linux")]
+		crate::m18_actions::execute_input(Some("[k(MicMute)]".to_owned())).await?;
+		#[cfg(target_os = "windows")]
+		open_target("ms-settings:sound").await?;
+		return Ok(true);
+	}
 	let args = match uuid.as_str() {
 		"com.hotspot.streamdock.hotkey.quickcontrol.volumedown" | "com.hotspot.streamdock.touchbar.volumedown" => {
 			Some(("/usr/bin/osascript", "set volume output volume ((output volume of (get volume settings)) - 6)"))
@@ -246,13 +428,6 @@ async fn system_action(uuid: &str, settings: &Value) -> Result<bool, anyhow::Err
 		"com.hotspot.streamdock.touchbar.screenshot" => Some(("/usr/sbin/screencapture", "-i -c")),
 		"com.hotspot.streamdock.touchbar.decreasescreenbrightness" => Some(("/usr/bin/osascript", "tell application \"System Events\" to key code 145")),
 		"com.hotspot.streamdock.touchbar.increasescreenbrightness" => Some(("/usr/bin/osascript", "tell application \"System Events\" to key code 144")),
-		"com.hotspot.streamdock.system.multimedia" => match action_index {
-			1 => Some(("/usr/bin/osascript", "tell application \"Music\" to playpause")),
-			2 => Some(("/usr/bin/osascript", "tell application \"Music\" to previous track")),
-			3 => Some(("/usr/bin/osascript", "tell application \"Music\" to next track")),
-			_ => None,
-		},
-		"com.hotspot.streamdock.quickcontrol.microphone" => Some(("/usr/bin/open", "x-apple.systempreferences:com.apple.Sound-Settings.extension")),
 		"com.hotspot.streamdock.touchbar.notificationcenter" | "com.hotspot.streamdock.quicktool.notification" => None,
 		"com.hotspot.streamdock.touchbar.dndmode" => Some(("/usr/bin/open", "x-apple.systempreferences:com.apple.Focus-Settings.extension")),
 		_ => None,
@@ -306,14 +481,23 @@ pub async fn key_up(instance: &crate::shared::ActionInstance) -> Result<bool, an
 		}
 		return Ok(false);
 	}
-	if is_hotkey(&uuid) || uuid.contains(".hotkey.") || uuid.contains("hotkey.pr.") {
-		if let Some(input) = configured_input(instance).or_else(|| preset_input(&uuid).map(str::to_owned)) {
+	let notification_action = uuid == "com.hotspot.streamdock.quicktool.notification";
+	if is_hotkey(&uuid) || (uuid.contains(".hotkey.") && !notification_action) || uuid.contains("hotkey.pr.") {
+		if let Some(input) = configured_input(instance).or_else(|| preset_input(&uuid)) {
 			crate::m18_actions::execute_input(Some(input)).await?;
 		}
 		return Ok(false);
 	}
 	if let Some(app) = app_for_uuid(&uuid) {
 		open_target(app).await?;
+		return Ok(false);
+	}
+	if !is_hotkey(&uuid)
+		&& !uuid.contains(".hotkey.")
+		&& !uuid.contains("hotkey.pr.")
+		&& let Some(input) = preset_input(&uuid)
+	{
+		crate::m18_actions::execute_input(Some(input.to_owned())).await?;
 		return Ok(false);
 	}
 	if uuid == "com.hotspot.streamdock.system.openapps" {
@@ -325,6 +509,27 @@ pub async fn key_up(instance: &crate::shared::ActionInstance) -> Result<bool, an
 	if matches!(uuid.as_str(), "com.hotspot.streamdock.system.open" | "com.hotspot.streamdock.system.website") {
 		if let Some(target) = text_setting(&instance.settings, &["path", "Path", "url", "URL", "website", "link", "file", "folder"]) {
 			open_target(target).await?;
+		}
+		return Ok(false);
+	}
+	if uuid == "com.hotspot.streamdock.mouse.event" {
+		if let Some(input) = mouse_event_input(&instance.settings) {
+			crate::m18_actions::execute_input(Some(input)).await?;
+		}
+		return Ok(false);
+	}
+	if uuid == "com.hotspot.streamdock.device.brightness" {
+		let action_index = number_setting(&instance.settings, &["actionIdx", "ActionIndex"]).unwrap_or(0);
+		let Some(adjustment) = brightness_adjustment(action_index) else {
+			log::warn!("VSD M18 brightness action has an unknown action index: {action_index}");
+			return Ok(false);
+		};
+		crate::m18::adjust_brightness(&instance.context.device, adjustment).await?;
+		if let Some(app) = crate::APP_HANDLE.get() {
+			app.emit(
+				"device_brightness",
+				json!({ "action": if adjustment > 0 { "increase" } else { "decrease" }, "value": adjustment.unsigned_abs() }),
+			)?;
 		}
 		return Ok(false);
 	}
@@ -376,11 +581,16 @@ pub async fn key_up(instance: &crate::shared::ActionInstance) -> Result<bool, an
 		return Ok(false);
 	}
 	if uuid == "com.hotspot.streamdock.profile.backtoparent" {
-		let target = text_setting(&instance.settings, &["parentProfile", "parent", "ProfileUUID"]).unwrap_or("Default");
-		crate::m18_pages::switch_to(&instance.context.device, Some(target), None, 0).await?;
+		crate::m18_pages::go_back(&instance.context.device).await?;
 		return Ok(false);
 	}
-	if uuid == "com.hotspot.streamdock.profile.openchild" || uuid == "com.hotspot.streamdock.profile.rotate" {
+	if uuid == "com.hotspot.streamdock.profile.openchild" {
+		if let Some(target) = text_setting(&instance.settings, &["profile", "ProfileUUID", "target"]) {
+			crate::m18_pages::open_folder(&instance.context.device, target).await?;
+		}
+		return Ok(false);
+	}
+	if uuid == "com.hotspot.streamdock.profile.rotate" {
 		if let Some(target) = text_setting(&instance.settings, &["profile", "ProfileUUID", "target"]) {
 			crate::m18_pages::switch_to(&instance.context.device, Some(target), None, 0).await?;
 		} else {
@@ -409,13 +619,17 @@ pub async fn key_up(instance: &crate::shared::ActionInstance) -> Result<bool, an
 		}
 		return Ok(false);
 	}
+	if uuid == "com.hotspot.streamdock.soundboard.playaudio" {
+		return crate::soundboard::play(instance).await;
+	}
 	if uuid == "com.hotspot.streamdock.soundboard.stopaudioplay" {
+		crate::soundboard::stop_all()?;
 		return Ok(false);
 	}
 	if uuid == "com.hotspot.streamdock.multiactions.delay" {
 		return Ok(false);
 	}
-	if uuid.contains("quickcontrol") || uuid.contains("touchbar") || uuid.contains("system.multimedia") {
+	if uuid.contains("quickcontrol") || uuid.contains("touchbar") {
 		return Ok(false);
 	}
 	if uuid.contains("dateTime")
@@ -450,9 +664,57 @@ mod tests {
 	use super::*;
 
 	#[test]
+	fn brightness_actions_use_device_relative_steps() {
+		assert_eq!(brightness_adjustment(0), Some(6));
+		assert_eq!(brightness_adjustment(1), Some(-6));
+		assert_eq!(brightness_adjustment(2), None);
+	}
+
+	#[test]
+	fn multimedia_actions_cover_all_seven_vsd_operations() {
+		assert_eq!(multimedia_input(0), Some("[k(MediaPrevTrack)]"));
+		assert_eq!(multimedia_input(1), Some("[k(MediaPlayPause)]"));
+		assert_eq!(multimedia_input(2), Some("[k(MediaNextTrack)]"));
+		assert_eq!(multimedia_input(3), None); // Stop is handled per platform.
+		assert_eq!(multimedia_input(4), Some("[k(VolumeMute)]"));
+		assert_eq!(multimedia_input(5), Some("[k(VolumeUp)]"));
+		assert_eq!(multimedia_input(6), Some("[k(VolumeDown)]"));
+		assert_eq!(multimedia_input(7), None);
+	}
+
+	#[test]
+	fn local_shortcut_catalog_actions_generate_valid_enigo_tokens() {
+		for uuid in [
+			"com.hotspot.streamdock.hotkey.browser.back",
+			"com.hotspot.streamdock.hotkey.browser.collect",
+			"com.hotspot.streamdock.hotkey.browser.forward",
+			"com.hotspot.streamdock.hotkey.browser.refresh",
+			"com.hotspot.streamdock.hotkey.quickcontrol.displaydesktop",
+			"com.hotspot.streamdock.hotkey.quicktool.searchbar",
+			"com.hotspot.streamdock.hotkey.quickcontrol.speechrecognition",
+			"com.hotspot.streamdock.hotkey.quickcontrol.switchscreen",
+			"com.hotspot.streamdock.touchbar.dictation",
+			"com.hotspot.streamdock.touchbar.inputmethod",
+			"com.hotspot.streamdock.touchbar.screenlock",
+			"com.hotspot.streamdock.touchbar.showdesktop",
+		] {
+			let input = preset_input(uuid).unwrap_or_else(|| panic!("missing key sequence for {uuid}"));
+			assert!(!ron::from_str::<Vec<Token>>(&input).unwrap().is_empty(), "invalid Enigo token sequence for {uuid}");
+		}
+	}
+
+	#[test]
 	fn catalog_contains_every_supported_keypad_action_without_action_plugins() {
-		assert_eq!(definitions().len(), 103);
+		assert_eq!(definitions().len(), 109);
 		assert!(definition("com.hotspot.streamdock.touchbar.siri").is_some());
+		assert!(definition("com.hotspot.streamdock.device.brightness").is_some());
+		assert!(definition("com.hotspot.streamdock.profile.rotate").is_some());
+		assert!(definition("com.hotspot.streamdock.mouse.event").is_some());
+		assert!(definition("com.hotspot.streamdock.system.hotkey").is_some());
+		assert!(definition("com.hotspot.streamdock.system.super.hotkey").is_some());
+		assert!(definition("com.hotspot.streamdock.system.multimedia").is_some());
+		assert!(definition("com.hotspot.streamdock.quickcontrol.microphone").is_some());
+		assert!(definition("com.hotspot.streamdock.plain.text").is_none());
 		assert!(definition("com.hotspot.streamdock.multiactions.ActionWheel").is_none());
 		assert!(definition("com.hotspot.streamdock.device.k1proLED+").is_none());
 		assert!(is_composite_action("com.hotspot.streamdock.multiactions.routine"));
@@ -464,10 +726,71 @@ mod tests {
 		let mut categories = HashMap::new();
 		insert_catalog(&mut categories);
 		for definition in definitions() {
+			if is_composite_action(&definition.uuid) {
+				continue;
+			}
 			let category = format!("M18 · {}", definition.category);
 			let action = categories[&category].actions.iter().find(|action| action.uuid == definition.uuid).unwrap();
 			assert!(action.plugin.is_empty());
 			assert_eq!(action.controllers, ["Keypad"]);
 		}
+	}
+
+	#[test]
+	fn composite_actions_are_offered_as_native_parent_actions() {
+		let mut categories = HashMap::new();
+		insert_catalog(&mut categories);
+		let flow_actions = &categories["M18 · Action Flows"].actions;
+		assert!(flow_actions.iter().any(|action| action.name == "Action Cycle" && action.uuid == "opendeck.toggleaction"));
+		assert!(flow_actions.iter().any(|action| action.name == "Action Carousel" && action.uuid == "opendeck.carouselaction"));
+		assert!(!flow_actions.iter().any(|action| is_composite_action(&action.uuid)));
+		assert!(flow_actions.iter().all(|action| action.plugin.is_empty()));
+	}
+
+	#[test]
+	fn defaults_match_the_vsd_time_action_settings_schema() {
+		assert_eq!(
+			default_settings("com.mirabox.streamdock.time.action1"),
+			json!({
+				"amplify": true,
+				"zone": "system",
+				"theme": "theme1",
+				"isBackgroundHidden": false
+			})
+		);
+		assert_eq!(default_settings("com.mirabox.streamdock.time.action2"), json!({ "select": "1", "deep": 0 }));
+		assert_eq!(
+			default_settings("com.mirabox.streamdock.time.action3"),
+			json!({
+				"select": "1",
+				"surplus": 60000,
+				"timing": "60000",
+				"inputTime": "0",
+				"musicUrl": "",
+				"color": "rgb(0,255,0)"
+			})
+		);
+	}
+
+	#[test]
+	fn mouse_action_tokens_cover_click_move_scroll_drag_and_modifiers() {
+		let click = mouse_event_input(&json!({ "eventType": "click", "button": "right" })).unwrap();
+		assert_eq!(ron::from_str::<Vec<Token>>(&click).unwrap(), vec![Token::Button(enigo::Button::Right, enigo::Direction::Click)]);
+
+		let double = mouse_event_input(&json!({ "eventType": "doubleClick", "button": "left" })).unwrap();
+		assert_eq!(ron::from_str::<Vec<Token>>(&double).unwrap().len(), 4);
+
+		let movement = mouse_event_input(&json!({ "eventType": "move", "x": -42, "y": 18, "coordinate": "relative" })).unwrap();
+		assert_eq!(ron::from_str::<Vec<Token>>(&movement).unwrap(), vec![Token::MoveMouse(-42, 18, enigo::Coordinate::Rel)]);
+
+		let scroll = mouse_event_input(&json!({ "eventType": "scroll", "amount": -5, "axis": "horizontal" })).unwrap();
+		assert_eq!(ron::from_str::<Vec<Token>>(&scroll).unwrap(), vec![Token::Scroll(-5, enigo::Axis::Horizontal)]);
+
+		let drag = mouse_event_input(&json!({ "eventType": "drag", "x": 30, "y": -20, "button": "middle", "coordinate": "relative", "modifiers": ["shift"] })).unwrap();
+		let drag_tokens = ron::from_str::<Vec<Token>>(&drag).unwrap();
+		assert_eq!(drag_tokens.len(), 5);
+		assert!(matches!(drag_tokens.first(), Some(Token::Key(enigo::Key::Shift, enigo::Direction::Press))));
+		assert!(matches!(drag_tokens.get(2), Some(Token::MoveMouse(30, -20, enigo::Coordinate::Rel))));
+		assert!(matches!(drag_tokens.last(), Some(Token::Key(enigo::Key::Shift, enigo::Direction::Release))));
 	}
 }
