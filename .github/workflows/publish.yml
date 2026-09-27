@@ -53,13 +53,17 @@ jobs:
 
       # macOS ties permissions such as Accessibility to the app's signature.
       # Ad-hoc signatures change with every build, so users would have to
-      # grant them again after each update; a certificate that stays the same
-      # keeps them. See docs/MACOS-SIGNING.md.
-      - name: import the macOS signing certificate
+      # grant them again after each update; a Developer ID signature stays the
+      # same, and notarization lets Gatekeeper open the app without a warning.
+      # See docs/MACOS-SIGNING.md.
+      - name: set up macOS signing and notarization
         if: matrix.platform == 'macos-latest'
         env:
           MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
           MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          NOTARY_APPLE_ID: ${{ secrets.APPLE_ID }}
+          NOTARY_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          NOTARY_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           if [ -z "$MACOS_CERTIFICATE" ]; then
             echo "::warning::No MACOS_CERTIFICATE secret: this build is ad-hoc signed, so macOS asks for permissions again after updating."
@@ -76,15 +80,27 @@ jobs:
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$keychain_password" "$keychain" > /dev/null
           security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
           rm "$certificate"
-          # A self-signed certificate is not "valid" to `find-identity -v`, so
-          # sign by its hash, which codesign accepts either way.
-          identity="$(security find-identity -p codesigning "$keychain" | awk '/^ *1\)/ { print $2; exit }')"
+          # Sign by the certificate's hash: a self-signed certificate is not
+          # "valid" to `find-identity -v`, and codesign accepts a hash either way.
+          identities="$(security find-identity -p codesigning "$keychain")"
+          identity="$(awk '/"Developer ID Application:/ { print $2; exit }' <<< "$identities")"
+          [ -n "$identity" ] || identity="$(awk '/^ *1\)/ { print $2; exit }' <<< "$identities")"
           if [ -z "$identity" ]; then
             echo "::error::MACOS_CERTIFICATE contains no code-signing identity."
             exit 1
           fi
           echo "Signing with certificate $identity"
           echo "APPLE_SIGNING_IDENTITY=$identity" >> "$GITHUB_ENV"
+          # Tauri notarizes when all three are set; empty values would fail.
+          if [ -n "$NOTARY_APPLE_ID" ] && [ -n "$NOTARY_PASSWORD" ] && [ -n "$NOTARY_TEAM_ID" ]; then
+            {
+              echo "APPLE_ID=$NOTARY_APPLE_ID"
+              echo "APPLE_PASSWORD=$NOTARY_PASSWORD"
+              echo "APPLE_TEAM_ID=$NOTARY_TEAM_ID"
+            } >> "$GITHUB_ENV"
+          else
+            echo "::warning::No APPLE_ID, APPLE_PASSWORD, and APPLE_TEAM_ID secrets: this build is signed but not notarized."
+          fi
 
       - uses: tauri-apps/tauri-action@v0
         env:

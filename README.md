@@ -41,9 +41,9 @@ cp macos/com.opendeck.vsd-m18.plist ~/Library/LaunchAgents/
 launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.opendeck.vsd-m18.plist
 ```
 
-The release is ad-hoc signed for local testing. macOS may require right-clicking the app and choosing **Open** on first launch. Notarization requires the user's Apple Developer credentials.
+Releases are signed with a Developer ID certificate and notarized when the repository's signing secrets are set; see [docs/MACOS-SIGNING.md](docs/MACOS-SIGNING.md). Ad-hoc signed builds may need right-clicking the app and choosing **Open** on first launch.
 
-Hotkeys, typed text, and media keys need the **Accessibility** permission (System Settings › Privacy & Security › Accessibility). Because releases are ad-hoc signed, macOS ties that permission to each build: after installing an update, remove OpenDeck VSD M18 from the Accessibility list with **−** and add it again, even if it still appears switched on. The app explains this when macOS refuses a key, and **Settings › General** shows whether keystrokes are allowed. Signing releases with a stable certificate keeps the permission across updates; see [docs/MACOS-SIGNING.md](docs/MACOS-SIGNING.md).
+Hotkeys, typed text, and media keys need the **Accessibility** permission (System Settings › Privacy & Security › Accessibility). macOS ties it to the app's signature: after installing an ad-hoc signed build, or the first Developer ID build, remove OpenDeck VSD M18 from the Accessibility list with **−** and add it again, even if it still appears switched on. The app explains this when macOS refuses a key, and **Settings › General** shows whether keystrokes are allowed.
 
 ## Build and verification
 
