@@ -273,12 +273,18 @@ pub async fn move_instance(source: Context, destination: Context, retain: bool) 
 	*get_slot_mut(&destination, &mut locks).await? = Some(moved.clone());
 
 	if !retain {
-		let _ = crate::events::outbound::will_appear::will_disappear(&original, true).await;
+		let _ = crate::events::outbound::will_appear::will_disappear(&original, source.profile == destination.profile).await;
 		for child in original.children.iter().flatten() {
 			let _ = remove_dir_all(instance_images_dir(&child.context)).await;
 		}
 		let _ = remove_dir_all(instance_images_dir(&original.context)).await;
 		*get_slot_mut(&source, &mut locks).await? = None;
+		// A key moved in from another page: that page is not the selected
+		// profile, so it has to be saved explicitly or the key would reappear.
+		if source.profile != destination.profile {
+			let device = crate::store::profiles::device_info(&source.device)?;
+			locks.profile_stores.get_profile_store_mut(&device, &source.profile).await?.save()?;
+		}
 	}
 
 	save_profile_now(&destination.device, &mut locks).await?;
