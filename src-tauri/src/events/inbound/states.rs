@@ -29,6 +29,21 @@ pub struct SetFeedbackLayoutPayload {
 	layout: String,
 }
 
+// An instance can have more states than its action definition (a Cycle
+// grows one state per child), so defaults are looked up without indexing.
+fn default_state_text(action: &crate::shared::Action, state: usize) -> String {
+	action.states.get(state).or(action.states.last()).map(|state| state.text.clone()).unwrap_or_default()
+}
+
+fn default_state_image(action: &crate::shared::Action, state: usize) -> String {
+	action
+		.states
+		.get(state)
+		.or(action.states.last())
+		.map(|state| state.image.clone())
+		.unwrap_or_else(|| action.icon.clone())
+}
+
 pub async fn set_title(event: ContextAndPayloadEvent<SetTitlePayload>) -> Result<(), anyhow::Error> {
 	let mut locks = acquire_locks_mut().await;
 
@@ -38,7 +53,7 @@ pub async fn set_title(event: ContextAndPayloadEvent<SetTitlePayload>) -> Result
 				return Err(anyhow::anyhow!("State index out of bounds ({} > {})", state, instance.states.len() - 1));
 			}
 
-			let text = event.payload.title.unwrap_or(instance.action.states[state as usize].text.clone());
+			let text = event.payload.title.unwrap_or_else(|| default_state_text(&instance.action, state as usize));
 			if instance.states[state as usize].text == text {
 				return Ok(());
 			}
@@ -48,13 +63,13 @@ pub async fn set_title(event: ContextAndPayloadEvent<SetTitlePayload>) -> Result
 				.states
 				.iter()
 				.enumerate()
-				.all(|(index, state)| state.text == event.payload.title.clone().unwrap_or(instance.action.states[index].text.clone()))
+				.all(|(index, state)| state.text == event.payload.title.clone().unwrap_or_else(|| default_state_text(&instance.action, index)))
 			{
 				return Ok(());
 			}
 
 			for (index, state) in instance.states.iter_mut().enumerate() {
-				state.text = event.payload.title.clone().unwrap_or(instance.action.states[index].text.clone());
+				state.text = event.payload.title.clone().unwrap_or_else(|| default_state_text(&instance.action, index));
 			}
 		}
 		update_state(crate::APP_HANDLE.get().unwrap(), instance.context.clone(), &mut locks).await?;
@@ -88,10 +103,10 @@ pub async fn set_image(mut event: ContextAndPayloadEvent<SetImagePayload>) -> Re
 			if state as usize >= instance.states.len() {
 				return Err(anyhow::anyhow!("State index out of bounds ({} > {})", state, instance.states.len() - 1));
 			}
-			instance.states[state as usize].image = event.payload.image.clone().unwrap_or(instance.action.states[state as usize].image.clone());
+			instance.states[state as usize].image = event.payload.image.clone().unwrap_or_else(|| default_state_image(&instance.action, state as usize));
 		} else {
 			for (index, state) in instance.states.iter_mut().enumerate() {
-				state.image = event.payload.image.clone().unwrap_or(instance.action.states[index].image.clone());
+				state.image = event.payload.image.clone().unwrap_or_else(|| default_state_image(&instance.action, index));
 			}
 		}
 		update_state(crate::APP_HANDLE.get().unwrap(), instance.context.clone(), &mut locks).await?;

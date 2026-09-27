@@ -24,16 +24,19 @@ impl std::fmt::Display for DiskActionContext {
 }
 
 impl std::str::FromStr for DiskActionContext {
-	type Err = std::num::ParseIntError;
+	type Err = String;
 	fn from_str(s: &str) -> Result<Self, Self::Err> {
 		let segments: Vec<&str> = s.split('.').collect();
-		let mut offset: usize = 0;
-		if segments.len() == 5 {
-			offset = 2;
-		}
+		let offset = match segments.len() {
+			5 => 2,
+			3.. => 0,
+			// A malformed context in a hand-edited or damaged profile must be a
+			// parse error (the store then falls back to its backup), not a panic.
+			_ => return Err(format!("invalid action context `{s}`")),
+		};
 		let controller = segments[offset].to_owned();
-		let position = u8::from_str(segments[1 + offset])?;
-		let index = u16::from_str(segments[2 + offset])?;
+		let position = u8::from_str(segments[1 + offset]).map_err(|error| format!("invalid position in `{s}`: {error}"))?;
+		let index = u16::from_str(segments[2 + offset]).map_err(|error| format!("invalid index in `{s}`: {error}"))?;
 		Ok(Self { controller, position, index })
 	}
 }

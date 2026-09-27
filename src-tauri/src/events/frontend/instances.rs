@@ -253,66 +253,39 @@ pub async fn move_instance(source: Context, destination: Context, retain: bool) 
 		return Ok(None);
 	}
 
-	{
-		let locks = crate::store::profiles::acquire_locks().await;
-		let dst = crate::store::profiles::get_slot(&destination, &locks).await?;
-		if dst.is_some() {
-			return Ok(None);
-		}
-	}
-
 	let mut locks = acquire_locks_mut().await;
-	let src = get_slot_mut(&source, &mut locks).await?;
-
-	let Some(mut new) = src.clone() else {
+	if get_slot_mut(&destination, &mut locks).await?.is_some() {
+		return Ok(None);
+	}
+	let Some(original) = get_slot_mut(&source, &mut locks).await?.clone() else {
 		return Ok(None);
 	};
-	new.context = ActionContext::from_context(destination.clone(), 0);
-	if let Some(children) = &mut new.children {
-		for (index, instance) in children.iter_mut().enumerate() {
-			instance.context = ActionContext::from_context(destination.clone(), index as u16 + 1);
-			for (i, state) in instance.states.iter_mut().enumerate() {
-				if !instance.action.states[i].image.is_empty() {
-					state.image = instance.action.states[i].image.clone();
-				} else {
-					state.image = instance.action.icon.clone();
-				}
-			}
-		}
-	}
 
-	let old_dir = instance_images_dir(&src.as_ref().unwrap().context);
-	let new_dir = instance_images_dir(&new.context);
-	let _ = tokio::fs::create_dir_all(&new_dir).await;
-	if let Ok(files) = old_dir.read_dir() {
-		for file in files.flatten() {
-			let _ = tokio::fs::copy(file.path(), new_dir.join(file.file_name())).await;
-		}
-	}
-	for state in new.states.iter_mut() {
-		let path = std::path::Path::new(&state.image);
-		if path.starts_with(&old_dir) {
-			state.image = new_dir.join(path.strip_prefix(&old_dir).unwrap()).to_string_lossy().into_owned();
-		}
-	}
-
-	let dst = get_slot_mut(&destination, &mut locks).await?;
-	*dst = Some(new.clone());
+	// Relocate exactly like a swap does: every state image of the instance and
+	// of its children is copied to the destination, so custom artwork survives
+	// the move (child artwork used to be reset to the action's defaults).
+	let nonce = format!(
+		"move-{}-{}",
+		std::process::id(),
+		std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_nanos()
+	);
+	let moved = copy_instance_to_swap_position(&original, &destination, &nonce, &config_dir().join("images"))?;
+	*get_slot_mut(&destination, &mut locks).await? = Some(moved.clone());
 
 	if !retain {
-		let src = get_slot_mut(&source, &mut locks).await?;
-		if let Some(old) = src {
-			let _ = crate::events::outbound::will_appear::will_disappear(old, true).await;
-			let _ = remove_dir_all(instance_images_dir(&old.context)).await;
+		let _ = crate::events::outbound::will_appear::will_disappear(&original, true).await;
+		for child in original.children.iter().flatten() {
+			let _ = remove_dir_all(instance_images_dir(&child.context)).await;
 		}
-		*src = None;
+		let _ = remove_dir_all(instance_images_dir(&original.context)).await;
+		*get_slot_mut(&source, &mut locks).await? = None;
 	}
 
-	let _ = crate::events::outbound::will_appear::will_appear(&new).await;
-
 	save_profile_now(&destination.device, &mut locks).await?;
+	drop(locks);
+	let _ = crate::events::outbound::will_appear::will_appear(&moved).await;
 
-	Ok(Some(new))
+	Ok(Some(moved))
 }
 
 #[command]
@@ -334,7 +307,9 @@ pub async fn remove_instance(context: ActionContext) -> Result<(), Error> {
 		let _ = remove_dir_all(instance_images_dir(&instance.context)).await;
 		*slot = None;
 	} else {
-		let children = instance.children.as_mut().unwrap();
+		let Some(children) = instance.children.as_mut() else {
+			return Ok(());
+		};
 		for (index, child) in children.iter().enumerate() {
 			if child.context == context {
 				let _ = crate::events::outbound::will_appear::will_disappear(child, true).await;
@@ -403,8 +378,14 @@ pub fn show_alert(context: &ActionContext) {
 #[command]
 pub async fn set_state(context: ActionContext, index: u16, state: ActionState) -> Result<(), Error> {
 	let mut locks = acquire_locks_mut().await;
-	let reference = get_instance_mut(&context, &mut locks).await?.unwrap();
-	reference.states[index as usize] = state;
+	// The appearance editor can save once more just after its key was removed.
+	let Some(reference) = get_instance_mut(&context, &mut locks).await? else {
+		return Ok(());
+	};
+	let Some(slot) = reference.states.get_mut(index as usize) else {
+		return Err(anyhow::anyhow!("State {} does not exist on this key", index + 1).into());
+	};
+	*slot = state;
 	let clone = reference.clone();
 	save_profile_now(&context.device, &mut locks).await?;
 	if crate::m18_actions::is_native_action(&clone.action.uuid) {

@@ -40,24 +40,34 @@ pub fn init_application_watcher() {
 			};
 
 			if app_name != previous {
-				let application_profiles = &APPLICATION_PROFILES.read().await.value;
-				let application = application_profiles.get(&app_name);
-				let default = application_profiles.get("opendeck_default");
-				for value in crate::shared::DEVICES.iter() {
-					let device = value.key();
-					let Some(profile) = application.and_then(|d| d.get(device)).or(default.and_then(|d| d.get(device))) else {
-						continue;
-					};
-					if crate::store::profiles::DEVICE_STORES.write().await.get_selected_profile(device).ok().as_ref() == Some(profile) {
+				// Collect the switches first: no registry or settings guard may be
+				// held while a page switch awaits the profile locks.
+				let switches = {
+					let application_profiles = &APPLICATION_PROFILES.read().await.value;
+					let application = application_profiles.get(&app_name);
+					let default = application_profiles.get("opendeck_default");
+					let devices = crate::shared::DEVICES.iter().map(|entry| entry.key().clone()).collect::<Vec<_>>();
+					devices
+						.into_iter()
+						.filter_map(|device| {
+							let profile = application.and_then(|d| d.get(&device)).or(default.and_then(|d| d.get(&device)))?.clone();
+							Some((device, profile))
+						})
+						.collect::<Vec<_>>()
+				};
+				for (device, profile) in switches {
+					if crate::store::profiles::DEVICE_STORES.write().await.get_selected_profile(&device).ok().as_ref() == Some(&profile) {
 						continue;
 					}
-					let _ = app_handle.emit(
-						"switch_profile",
-						SwitchProfileEvent {
-							device: device.clone(),
-							profile: profile.clone(),
-						},
-					);
+					if crate::m18::is_m18(&device) {
+						// Switch M18 pages in the core, so automatic switching works
+						// whether or not the editor window is open.
+						if let Err(error) = crate::m18_pages::switch_to_profile(&device, &profile).await {
+							log::warn!("Failed to switch {device} to the page for {app_name}: {error:#}");
+						}
+						continue;
+					}
+					let _ = app_handle.emit("switch_profile", SwitchProfileEvent { device, profile });
 				}
 				previous = app_name;
 			}
@@ -107,6 +117,24 @@ pub fn init_application_watcher() {
 			tokio::time::sleep(std::time::Duration::from_millis(500)).await;
 		}
 	});
+}
+
+/// Remove automatic-switching rules that point at a deleted profile.
+pub async fn forget_profile(device: &str, profile: &str) {
+	let mut store = APPLICATION_PROFILES.write().await;
+	let mut changed = false;
+	for devices in store.value.values_mut() {
+		if devices.get(device).is_some_and(|mapped| mapped == profile) {
+			devices.remove(device);
+			changed = true;
+		}
+	}
+	if changed {
+		store.value.retain(|_, devices| !devices.is_empty());
+		if let Err(error) = store.save() {
+			log::warn!("Failed to save application switching rules: {error:#}");
+		}
+	}
 }
 
 pub async fn start_monitoring(plugin: &str, applications: &Vec<String>) {

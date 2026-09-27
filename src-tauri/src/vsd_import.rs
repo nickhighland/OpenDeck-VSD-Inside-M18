@@ -1024,7 +1024,17 @@ pub async fn import_vsd_profile(app: AppHandle) -> Result<ImportSummary, Error> 
 		.iter()
 		.find_map(|page| (!page.manifest.device_serial_number.is_empty()).then(|| page.manifest.device_serial_number.clone()))
 		.unwrap_or_else(|| "VSDM18".to_owned());
-	let device_id = format!("{M18_DEVICE_NAMESPACE}-{serial}");
+	let exported_device_id = format!("{M18_DEVICE_NAMESPACE}-{serial}");
+	let connected = crate::shared::DEVICES.iter().map(|entry| entry.key().clone()).filter(|id| crate::m18::is_m18(id)).collect::<Vec<_>>();
+	// Import onto the M18 that is plugged in when the export names another
+	// unit (or none): otherwise the import succeeds but nothing appears.
+	let device_id = match connected.as_slice() {
+		[only] if *only != exported_device_id => {
+			log::info!("Importing the VSD Craft profile onto the connected M18 instead of the unit recorded in the export");
+			only.clone()
+		}
+		_ => exported_device_id,
+	};
 
 	let categories = CATEGORIES.read().await.clone();
 	let mut unsupported = vec![];
@@ -1053,27 +1063,32 @@ pub async fn import_vsd_profile(app: AppHandle) -> Result<ImportSummary, Error> 
 	// can be disconnected while importing, so it is deliberately not inserted
 	// into the live device registry here.
 	let selected_profile = profiles.first().map(|profile| profile.id.clone());
-	let mut locks = acquire_locks_mut().await;
-	for profile in profiles {
-		let store = locks.profile_stores.get_profile_store_mut(&device, &profile.id).await?;
-		store.value = profile;
-		store.save()?;
+	{
+		let mut locks = acquire_locks_mut().await;
+		for profile in profiles {
+			let store = locks.profile_stores.get_profile_store_mut(&device, &profile.id).await?;
+			store.value = profile;
+			store.save()?;
+		}
+		if let Some(selected_profile) = selected_profile {
+			locks.device_stores.set_selected_profile(&device.id, selected_profile)?;
+		}
 	}
-	if let Some(selected_profile) = selected_profile {
-		locks.device_stores.set_selected_profile(&device.id, selected_profile)?;
-	}
+	// The page lock is always taken before the profile locks, so the profile
+	// locks above must be released first.
 	crate::m18_pages::replace(
 		&device_id,
 		pages
 			.iter()
-			.enumerate()
-			.map(|(index, page)| crate::m18_pages::M18Page {
+			.map(|page| crate::m18_pages::M18Page {
 				id: page.profile_id.clone(),
-				name: (index + 1).to_string(),
+				// Unnamed: the editor labels imported pages by their position.
+				name: String::new(),
 				profile: page.profile_id.clone(),
 			})
 			.collect(),
-	)?;
+	)
+	.await?;
 
 	Ok(ImportSummary {
 		device: device_id,

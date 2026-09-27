@@ -320,8 +320,15 @@ pub async fn acquire_locks_mut() -> LocksMut<'static> {
 	LocksMut { device_stores, profile_stores }
 }
 
+/// A copy of a connected device's info. Copying it avoids holding a registry
+/// guard across `.await`, which can stall a runtime thread when a device
+/// registers or disconnects at the same moment.
+pub fn device_info(id: &str) -> Result<DeviceInfo, anyhow::Error> {
+	DEVICES.get(id).map(|entry| entry.value().clone()).ok_or_else(|| anyhow!("device not found"))
+}
+
 pub async fn get_slot<'a>(context: &crate::shared::Context, locks: &'a Locks<'_>) -> Result<&'a Option<crate::shared::ActionInstance>, anyhow::Error> {
-	let device = DEVICES.get(&context.device).ok_or_else(|| anyhow!("device not found"))?;
+	let device = device_info(&context.device)?;
 	let store = locks.profile_stores.get_profile_store(&device, &context.profile)?;
 
 	let configured = match &context.controller[..] {
@@ -334,7 +341,7 @@ pub async fn get_slot<'a>(context: &crate::shared::Context, locks: &'a Locks<'_>
 }
 
 pub async fn get_slot_mut<'a>(context: &crate::shared::Context, locks: &'a mut LocksMut<'_>) -> Result<&'a mut Option<crate::shared::ActionInstance>, anyhow::Error> {
-	let device = DEVICES.get(&context.device).ok_or_else(|| anyhow!("device not found"))?;
+	let device = device_info(&context.device)?;
 	let store = locks.profile_stores.get_profile_store_mut(&device, &context.profile).await?;
 
 	let configured = match &context.controller[..] {
@@ -380,7 +387,7 @@ pub async fn get_instance_mut<'a>(context: &crate::shared::ActionContext, locks:
 
 pub async fn mark_profile_stale(device_id: &str, locks: &mut LocksMut<'_>) -> Result<(), anyhow::Error> {
 	let selected_profile = locks.device_stores.get_selected_profile(device_id)?;
-	let device = DEVICES.get(device_id).ok_or_else(|| anyhow!("device not found"))?;
+	let device = device_info(device_id)?;
 	let store = locks.profile_stores.get_profile_store_mut(&device, &selected_profile).await?;
 	store.value.stale = true;
 	Ok(())
@@ -404,7 +411,7 @@ pub async fn save_profile_now(device_id: &str, locks: &mut LocksMut<'_>) -> Resu
 		return Ok(());
 	}
 	let selected_profile = locks.device_stores.get_selected_profile(device_id)?;
-	let device = DEVICES.get(device_id).ok_or_else(|| anyhow!("device not found"))?;
+	let device = device_info(device_id)?;
 	let store = locks.profile_stores.get_profile_store_mut(&device, &selected_profile).await?;
 
 	store.save()?;

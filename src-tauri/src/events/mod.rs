@@ -28,9 +28,11 @@ pub async fn register_plugin(event: RegisterEvent, stream: WebSocketStream<TcpSt
 	match event {
 		RegisterEvent::RegisterPlugin { uuid } => {
 			log::debug!("Registered plugin {}", uuid);
-			if let Some(queue) = PLUGIN_QUEUES.read().await.get(&uuid) {
+			// Deliver what was queued while the plugin was offline exactly once.
+			// Leaving it queued replayed old key presses on every reconnect.
+			if let Some(queue) = PLUGIN_QUEUES.write().await.remove(&uuid) {
 				for message in queue {
-					let _ = read.feed(message.clone()).await;
+					let _ = read.feed(message).await;
 				}
 				let _ = read.flush().await;
 			}
@@ -42,9 +44,9 @@ pub async fn register_plugin(event: RegisterEvent, stream: WebSocketStream<TcpSt
 			});
 		}
 		RegisterEvent::RegisterPropertyInspector { uuid } => {
-			if let Some(queue) = PROPERTY_INSPECTOR_QUEUES.read().await.get(&uuid) {
+			if let Some(queue) = PROPERTY_INSPECTOR_QUEUES.write().await.remove(&uuid) {
 				for message in queue {
-					let _ = read.feed(message.clone()).await;
+					let _ = read.feed(message).await;
 				}
 				let _ = read.flush().await;
 			}

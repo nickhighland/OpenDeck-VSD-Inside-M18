@@ -13,77 +13,84 @@ pub fn get_profiles(device: &str) -> Result<Vec<String>, Error> {
 #[command]
 pub async fn get_selected_profile(device: String) -> Result<crate::shared::Profile, Error> {
 	let mut locks = acquire_locks_mut().await;
-	if !DEVICES.contains_key(&device) {
+	let Some(device_info) = DEVICES.get(&device).map(|entry| entry.value().clone()) else {
 		return Err(Error::new(format!("device {device} not found")));
-	}
+	};
 
 	let selected_profile = locks.device_stores.get_selected_profile(&device)?;
-	let profile = locks.profile_stores.get_profile_store(&DEVICES.get(&device).unwrap(), &selected_profile)?;
+	// Load the store if needed: a page that was never opened has no store yet.
+	let profile = locks.profile_stores.get_profile_store_mut(&device_info, &selected_profile).await?;
 
 	Ok(profile.value.clone())
 }
 
-#[allow(clippy::flat_map_identity)]
+/// Instances that receive appear/disappear events for a slot: composite
+/// parents (Multi Action, Cycle, Carousel) are drawn by the editor, and only
+/// their children belong to plugins.
+fn event_targets(instance: &crate::shared::ActionInstance) -> Vec<&crate::shared::ActionInstance> {
+	match instance.children.as_ref() {
+		Some(children) if matches!(instance.action.uuid.as_str(), "opendeck.multiaction" | "opendeck.toggleaction" | "opendeck.carouselaction") => children.iter().collect(),
+		_ => vec![instance],
+	}
+}
+
 #[command]
 pub async fn set_selected_profile(device: String, id: String) -> Result<(), Error> {
-	let mut locks = acquire_locks_mut().await;
-	if !DEVICES.contains_key(&device) {
-		return Err(Error::new(format!("device {device} not found")));
+	select_profile(&device, &id).await?;
+	if crate::m18::is_m18(&device) {
+		crate::m18_pages::sync_selected_profile(&device, &id).await?;
 	}
+	Ok(())
+}
+
+/// Make `id` the device's active profile and render it. The M18 page set is
+/// not touched here: page navigation calls this while holding the page lock.
+#[allow(clippy::flat_map_identity)]
+pub async fn select_profile(device: &str, id: &str) -> Result<(), anyhow::Error> {
+	let mut locks = acquire_locks_mut().await;
+	// Clone the device info instead of holding a registry guard across awaits.
+	let device_info = DEVICES.get(device).map(|entry| entry.value().clone()).ok_or_else(|| anyhow::anyhow!("device {device} not found"))?;
 
 	// If a profile save is pending for this device, save it immediately to prevent losing profile data
-	if let Err(error) = save_profile_now(&device, &mut locks).await {
+	if let Err(error) = save_profile_now(device, &mut locks).await {
 		log::error!("Failed to save profile for device {device}: {error}");
 	}
 
-	let selected_profile = locks.device_stores.get_selected_profile(&device)?;
+	let selected_profile = locks.device_stores.get_selected_profile(device)?;
 
 	if selected_profile != id {
-		let old_profile = &locks.profile_stores.get_profile_store(&DEVICES.get(&device).unwrap(), &selected_profile)?.value;
+		let old_profile = &locks.profile_stores.get_profile_store(&device_info, &selected_profile)?.value;
 		for instance in old_profile
 			.keys
 			.iter()
 			.flatten()
-			.chain(&mut old_profile.sliders.iter().flatten())
-			.chain(&mut old_profile.infobars.iter().flatten())
+			.chain(old_profile.sliders.iter().flatten())
+			.chain(old_profile.infobars.iter().flatten())
 		{
-			if !matches!(instance.action.uuid.as_str(), "opendeck.multiaction" | "opendeck.toggleaction") {
-				let _ = crate::events::outbound::will_appear::will_disappear(instance, false).await;
-			} else {
-				for child in instance.children.as_ref().unwrap() {
-					let _ = crate::events::outbound::will_appear::will_disappear(child, false).await;
-				}
+			for target in event_targets(instance) {
+				let _ = crate::events::outbound::will_appear::will_disappear(target, false).await;
 			}
 		}
-		let _ = crate::events::outbound::devices::clear_screen(device.clone()).await;
+		let _ = crate::events::outbound::devices::clear_screen(device.to_owned()).await;
 	}
 
 	// We must use the mutable version of get_profile_store in order to create the store if it does not exist.
-	let store = locks.profile_stores.get_profile_store_mut(&DEVICES.get(&device).unwrap(), &id).await?;
+	let store = locks.profile_stores.get_profile_store_mut(&device_info, id).await?;
 	let new_profile = &store.value;
 	for instance in new_profile
 		.keys
 		.iter()
 		.flatten()
-		.chain(&mut new_profile.sliders.iter().flatten())
-		.chain(&mut new_profile.infobars.iter().flatten())
+		.chain(new_profile.sliders.iter().flatten())
+		.chain(new_profile.infobars.iter().flatten())
 	{
-		if !matches!(instance.action.uuid.as_str(), "opendeck.multiaction" | "opendeck.toggleaction") {
-			let _ = crate::events::outbound::will_appear::will_appear(instance).await;
-		} else {
-			for child in instance.children.as_ref().unwrap() {
-				let _ = crate::events::outbound::will_appear::will_appear(child).await;
-			}
+		for target in event_targets(instance) {
+			let _ = crate::events::outbound::will_appear::will_appear(target).await;
 		}
 	}
 	store.save()?;
 
-	let selected_profile = id.clone();
-	locks.device_stores.set_selected_profile(&device, id)?;
-	if crate::m18::is_m18(&device) {
-		crate::m18_pages::sync_selected_profile(&device, &selected_profile)?;
-	}
-
+	locks.device_stores.set_selected_profile(device, id.to_owned())?;
 	Ok(())
 }
 

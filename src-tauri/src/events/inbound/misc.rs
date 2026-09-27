@@ -49,6 +49,11 @@ pub struct SwitchProfileEvent {
 }
 
 pub async fn switch_profile(event: SwitchProfileEvent) -> Result<(), anyhow::Error> {
+	// The M18 page set lives in the core, so switch it here; the editor
+	// follows through the page-change event.
+	if crate::m18::is_m18(&event.device) {
+		return crate::m18_pages::switch_to_profile(&event.device, &event.profile).await;
+	}
 	let app_handle = crate::APP_HANDLE.get().unwrap();
 	app_handle.emit("switch_profile", event)?;
 	Ok(())

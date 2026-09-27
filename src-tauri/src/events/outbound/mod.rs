@@ -36,7 +36,12 @@ impl GenericInstancePayload {
 				column: instance.context.position,
 			},
 			_ => {
-				let columns = crate::shared::DEVICES.get(&instance.context.device).unwrap().columns;
+				// The device can disconnect while an event is being prepared.
+				let columns = crate::shared::DEVICES
+					.get(&instance.context.device)
+					.map(|device| device.columns)
+					.unwrap_or(crate::m18::COL_COUNT as u8)
+					.max(1);
 				Coordinates {
 					row: instance.context.position / columns,
 					column: instance.context.position % columns,
@@ -54,7 +59,16 @@ impl GenericInstancePayload {
 	}
 }
 
+/// Messages kept for a plugin that has not connected yet. A plugin that never
+/// starts (for example because Node.js is missing) must not make the queue
+/// grow for as long as the app runs; the newest messages are the relevant ones.
+const MAX_QUEUED_PLUGIN_MESSAGES: usize = 500;
+
 async fn send_to_plugin(plugin: &str, data: &impl Serialize) -> Result<(), anyhow::Error> {
+	// Built-in actions have no plugin process; nothing could ever receive this.
+	if plugin.is_empty() {
+		return Ok(());
+	}
 	let message = tokio_tungstenite::tungstenite::Message::Text(serde_json::to_string(data)?.into());
 	let mut sockets = super::PLUGIN_SOCKETS.lock().await;
 
@@ -62,10 +76,11 @@ async fn send_to_plugin(plugin: &str, data: &impl Serialize) -> Result<(), anyho
 		socket.send(message).await?;
 	} else {
 		let mut queues = super::PLUGIN_QUEUES.write().await;
-		if queues.contains_key(plugin) {
-			queues.get_mut(plugin).unwrap().push(message);
-		} else {
-			queues.insert(plugin.to_owned(), vec![message]);
+		let queue = queues.entry(plugin.to_owned()).or_default();
+		queue.push(message);
+		if queue.len() > MAX_QUEUED_PLUGIN_MESSAGES {
+			let excess = queue.len() - MAX_QUEUED_PLUGIN_MESSAGES;
+			queue.drain(..excess);
 		}
 	}
 
