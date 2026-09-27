@@ -13,16 +13,34 @@ here="$(cd "$(dirname "$0")" && pwd)"
 command -v gh > /dev/null || { echo "Install the GitHub CLI first: brew install gh"; exit 1; }
 gh auth status > /dev/null 2>&1 || { echo "Sign in to the GitHub CLI first: gh auth login"; exit 1; }
 
-identity="$(security find-identity -v -p codesigning | grep '"Developer ID Application:' | head -n 1 || true)"
-if [ -z "$identity" ]; then
+# When the keychain holds several Developer ID certificates, use the one that
+# stays valid longest.
+expiry() {
+	security find-certificate -a -Z -p -c "Developer ID Application" \
+		| awk -v hash="$1" '/^SHA-1 hash:/ { keep = ($3 == hash) } keep && /-----BEGIN CERTIFICATE-----/, /-----END CERTIFICATE-----/ { print }' \
+		| openssl x509 -noout -enddate | cut -d= -f2
+}
+fingerprint=""
+expires=0
+while read -r hash; do
+	end="$(date -j -f "%b %e %T %Y %Z" "$(expiry "$hash")" +%s)"
+	if [ "$end" -gt "$expires" ]; then
+		fingerprint="$hash"
+		expires="$end"
+	fi
+done < <(security find-identity -v -p codesigning | awk '/"Developer ID Application:/ { print $2 }')
+if [ -z "$fingerprint" ]; then
 	echo "No Developer ID Application certificate is in your keychain."
 	echo "Create one in Xcode: Settings > Accounts > Manage Certificates > + > Developer ID Application."
 	exit 1
 fi
-fingerprint="$(awk '{ print $2 }' <<< "$identity")"
-name="$(sed -E 's/^[^"]*"(.*)"$/\1/' <<< "$identity")"
+name="$(security find-identity -v -p codesigning | grep "$fingerprint" | sed -E 's/^[^"]*"(.*)"$/\1/')"
 team_id="$(sed -E 's/.*\(([A-Z0-9]{10})\)$/\1/' <<< "$name")"
-echo "Certificate: $name"
+echo "Certificate: $name, valid until $(date -r "$expires" "+%B %-d, %Y")"
+if [ $((expires - $(date +%s))) -lt $((180 * 24 * 3600)) ]; then
+	echo "It expires within six months. After that, releases cannot be signed until you create a"
+	echo "new Developer ID Application certificate and run this script again."
+fi
 
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
