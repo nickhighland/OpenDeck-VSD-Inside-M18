@@ -609,6 +609,19 @@ pub fn is_coming_soon(uuid: &str) -> bool {
 	entry(uuid).is_some_and(|entry| entry.group == Group::ComingSoon) || uuid.to_ascii_lowercase().starts_with("com.mirabox.streamdock.screensaver.")
 }
 
+/// The library's default appearance for one state of an action: its key
+/// artwork with no title. Switch actions start each new shortcut from it.
+pub fn default_state(uuid: &str, index: usize) -> Option<ActionState> {
+	let entry = entry(uuid)?;
+	Some(ActionState {
+		image: face_path(entry.face),
+		name: format!("{} {}", entry.name, index + 1),
+		// Titles sit below the icon on built-in artwork.
+		alignment: "bottom".to_owned(),
+		..Default::default()
+	})
+}
+
 fn action(entry: &Entry, plugin: &str, state_count: usize, supported_in_multi_actions: bool) -> Action {
 	let image = face_path(entry.face);
 	let state_count = state_count.max(1);

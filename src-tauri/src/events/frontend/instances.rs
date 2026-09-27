@@ -414,9 +414,7 @@ pub async fn set_instance_settings(context: ActionContext, settings: serde_json:
 	instance.settings = settings;
 	if crate::m18_actions::is_switch_action(&instance.action.uuid) {
 		let count = instance.settings.get("hotkeys").and_then(serde_json::Value::as_array).map(Vec::len).unwrap_or(0).max(1);
-		let template = instance.states.first().cloned().unwrap_or_default();
-		instance.states.resize(count, template.clone());
-		instance.action.states.resize(count, template);
+		match_switch_states(instance, count);
 		instance.current_state = instance.settings.get("index").and_then(serde_json::Value::as_u64).unwrap_or(0).min((count - 1) as u64) as u16;
 	}
 	let clone = instance.clone();
@@ -426,6 +424,76 @@ pub async fn set_instance_settings(context: ActionContext, settings: serde_json:
 	}
 	let _ = update_state(crate::APP_HANDLE.get().unwrap(), context, &mut locks).await;
 	Ok(())
+}
+
+/// Give a switch action exactly one state (image and title) per shortcut.
+/// New shortcuts start from the library's artwork rather than a copy of
+/// another shortcut's image.
+fn match_switch_states(instance: &mut ActionInstance, count: usize) {
+	for states in [&mut instance.states, &mut instance.action.states] {
+		states.truncate(count);
+		while states.len() < count {
+			let index = states.len();
+			let fresh = crate::action_library::default_state(&instance.action.uuid, index).unwrap_or_default();
+			states.push(fresh);
+		}
+	}
+}
+
+/// Remove shortcut `index` from a switch action together with its image and
+/// title, keeping the next press on the same shortcut while it exists.
+fn remove_shortcut(instance: &mut ActionInstance, index: usize) -> Result<(), anyhow::Error> {
+	if !crate::m18_actions::is_switch_action(&instance.action.uuid) {
+		return Err(anyhow::anyhow!("{} has no shortcuts to remove", instance.action.name));
+	}
+	let Some(hotkeys) = instance.settings.get_mut("hotkeys").and_then(serde_json::Value::as_array_mut) else {
+		return Err(anyhow::anyhow!("This key has no shortcuts"));
+	};
+	if hotkeys.len() < 2 || index >= hotkeys.len() {
+		return Err(anyhow::anyhow!("A switch keeps at least one shortcut"));
+	}
+	hotkeys.remove(index);
+	let count = hotkeys.len();
+
+	// Saved images are named after their state's position, so the states that
+	// move up carry their image inline until the profile is saved under the
+	// new positions; otherwise a later image could overwrite theirs.
+	for state in instance.states.iter_mut().skip(index + 1) {
+		if std::path::Path::new(&state.image).is_absolute()
+			&& let Some(image) = crate::m18_actions::image_data_url(&state.image)
+		{
+			state.image = image;
+		}
+	}
+	for states in [&mut instance.states, &mut instance.action.states] {
+		if index < states.len() {
+			states.remove(index);
+		}
+	}
+	match_switch_states(instance, count);
+
+	let next = instance.settings.get("index").and_then(serde_json::Value::as_u64).unwrap_or(0) as usize;
+	let next = if index < next { next - 1 } else { next.min(count - 1) };
+	instance.settings["index"] = serde_json::json!(next);
+	instance.current_state = next as u16;
+	Ok(())
+}
+
+/// Remove one of a switch action's shortcuts together with its image and title.
+#[command]
+pub async fn remove_switch_shortcut(context: ActionContext, index: usize) -> Result<Option<ActionInstance>, Error> {
+	let mut locks = acquire_locks_mut().await;
+	let Some(instance) = get_instance_mut(&context, &mut locks).await? else {
+		return Ok(None);
+	};
+	remove_shortcut(instance, index)?;
+	let clone = instance.clone();
+	save_profile_now(&context.device, &mut locks).await?;
+	if crate::m18_actions::is_native_action(&clone.action.uuid) {
+		let _ = crate::m18_actions::render(&clone).await;
+	}
+	let _ = update_state(crate::APP_HANDLE.get().unwrap(), context, &mut locks).await;
+	Ok(Some(clone))
 }
 
 #[command]
@@ -519,4 +587,85 @@ struct KeyMovedEvent {
 pub async fn key_moved(app: &AppHandle, context: Context, pressed: bool) -> Result<(), anyhow::Error> {
 	app.emit("key_moved", KeyMovedEvent { context, pressed })?;
 	Ok(())
+}
+
+#[cfg(test)]
+mod switch_tests {
+	use super::*;
+
+	fn switch(texts: &[&str], next: usize) -> ActionInstance {
+		let categories = crate::action_library::categories();
+		let action = categories
+			.values()
+			.flat_map(|category| category.actions.iter())
+			.find(|action| action.uuid == crate::m18_actions::HOTKEY_SWITCH_UUID)
+			.cloned()
+			.unwrap();
+		let hotkeys: Vec<_> = texts.iter().map(|text| serde_json::json!({ "down": format!("[t(\"{text}\")]"), "up": "" })).collect();
+		let mut instance = ActionInstance {
+			action,
+			context: ActionContext {
+				device: "18-TEST".to_owned(),
+				profile: "Default".to_owned(),
+				controller: "Keypad".to_owned(),
+				position: 0,
+				index: 0,
+			},
+			states: Vec::new(),
+			current_state: next as u16,
+			settings: serde_json::json!({ "hotkeys": hotkeys, "index": next }),
+			children: None,
+		};
+		match_switch_states(&mut instance, texts.len());
+		for (state, text) in instance.states.iter_mut().zip(texts) {
+			state.text = (*text).to_owned();
+		}
+		instance
+	}
+
+	fn titles(instance: &ActionInstance) -> Vec<&str> {
+		instance.states.iter().map(|state| state.text.as_str()).collect()
+	}
+
+	#[test]
+	fn each_shortcut_keeps_its_own_image_and_title() {
+		let mut instance = switch(&["START SCRIPT", "END SCRIPT"], 0);
+		assert_eq!(titles(&instance), ["START SCRIPT", "END SCRIPT"]);
+
+		// A new shortcut starts from the library's artwork, not a copy of another.
+		instance.states[0].image = "data:image/png;base64,Y3VzdG9t".to_owned();
+		match_switch_states(&mut instance, 3);
+		assert_eq!(instance.states.len(), 3);
+		assert_eq!(instance.action.states.len(), 3);
+		assert_eq!(instance.states[2].image, "opendeck/keys/hotkey-switch.svg");
+		assert_eq!(instance.states[2].text, "");
+	}
+
+	#[test]
+	fn removing_a_shortcut_removes_its_appearance_and_keeps_the_next_press() {
+		let mut instance = switch(&["A", "B", "C"], 2);
+		remove_shortcut(&mut instance, 0).unwrap();
+		assert_eq!(titles(&instance), ["B", "C"]);
+		assert_eq!(instance.settings["hotkeys"].as_array().unwrap().len(), 2);
+		assert_eq!((instance.settings["index"].as_u64(), instance.current_state), (Some(1), 1), "still points at C");
+
+		let mut instance = switch(&["A", "B", "C"], 2);
+		remove_shortcut(&mut instance, 2).unwrap();
+		assert_eq!(titles(&instance), ["A", "B"]);
+		assert_eq!(instance.current_state, 1, "the removed shortcut was next, so the last one is");
+
+		let mut instance = switch(&["A"], 0);
+		assert!(remove_shortcut(&mut instance, 0).is_err(), "a switch keeps one shortcut");
+	}
+
+	#[test]
+	fn images_of_moved_shortcuts_are_carried_inline() {
+		let path = std::env::temp_dir().join(format!("opendeck-switch-test-{}.png", std::process::id()));
+		std::fs::write(&path, b"image bytes").unwrap();
+		let mut instance = switch(&["A", "B"], 0);
+		instance.states[1].image = path.to_string_lossy().into_owned();
+		remove_shortcut(&mut instance, 0).unwrap();
+		let _ = std::fs::remove_file(&path);
+		assert!(instance.states[0].image.starts_with("data:image/png;base64,"), "{}", instance.states[0].image);
+	}
 }

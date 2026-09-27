@@ -1,28 +1,39 @@
 <script lang="ts">
 	import type { ActionInstance } from "$lib/ActionInstance";
+	import type { ActionState } from "$lib/ActionState";
 	import type { DeviceInfo } from "$lib/DeviceInfo";
 
 	import Crosshair from "phosphor-svelte/lib/Crosshair";
 	import Eye from "phosphor-svelte/lib/Eye";
 	import EyeSlash from "phosphor-svelte/lib/EyeSlash";
 	import FolderOpen from "phosphor-svelte/lib/FolderOpen";
+	import ImageSquare from "phosphor-svelte/lib/ImageSquare";
 	import Info from "phosphor-svelte/lib/Info";
 	import Plus from "phosphor-svelte/lib/Plus";
 	import Trash from "phosphor-svelte/lib/Trash";
 	import Warning from "phosphor-svelte/lib/Warning";
+	import KeyFace from "./KeyFace.svelte";
 	import ShortcutRecorder from "./ShortcutRecorder.svelte";
 
-	import { actionIndex } from "$lib/catalog";
 	import { COMING_SOON } from "$lib/actionLibrary";
+	import { isDefaultArtwork } from "$lib/appIcons";
+	import { actionIndex } from "$lib/catalog";
 	import { pageLabel, pageSets } from "$lib/pages";
+	import { resizeImage } from "$lib/rendererHelper";
 	import { describeSequenceText } from "$lib/shortcuts";
+	import { errorText, toast } from "$lib/toast";
 
 	import { invoke } from "@tauri-apps/api/core";
+	import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 	import { open } from "@tauri-apps/plugin-dialog";
-	import { onDestroy, onMount } from "svelte";
+	import { createEventDispatcher, onDestroy, onMount } from "svelte";
 
 	export let instance: ActionInstance;
 	export let device: DeviceInfo;
+
+	// Appearance changes are made to `instance` in place; this tells the
+	// inspector to redraw its header.
+	const dispatch = createEventDispatcher<{ edit: void }>();
 
 	let context = "";
 	let settings: any = {};
@@ -32,6 +43,7 @@
 
 	$: if (instance && instance.context !== context) {
 		flushPending();
+		void flushStates();
 		context = instance.context;
 		settings = structuredClone(instance.settings ?? {});
 		revealPassword = false;
@@ -74,6 +86,25 @@
 		} catch {}
 	});
 
+	onMount(() => {
+		let disposed = false;
+		let unlisten: UnlistenFn | undefined;
+		// A press moves a switch on to its next shortcut, and adding or removing
+		// shortcuts changes its states: follow the key's saved state.
+		listen<{ context: string; contents: ActionInstance | null }>("update_state", ({ payload }) => {
+			const contents = payload.contents;
+			if (!instance || !contents || payload.context !== instance.context || !(isHotkeySwitch || isSuperHotkeySwitch)) return;
+			// Keep appearance edits that are still being saved.
+			instance.states = contents.states.map((state, index) => (pendingStates.has(index) ? (instance.states[index] ?? state) : state));
+			instance.current_state = contents.current_state;
+			if (typeof contents.settings?.index === "number") settings = { ...settings, index: contents.settings.index };
+		}).then((stop) => (disposed ? stop() : (unlisten = stop)));
+		return () => {
+			disposed = true;
+			unlisten?.();
+		};
+	});
+
 	async function persist() {
 		if (!instance) return;
 		clearTimeout(pendingTimer);
@@ -96,7 +127,67 @@
 	function flushPending() {
 		if (pendingTimer !== undefined) void persist();
 	}
-	onDestroy(flushPending);
+	onDestroy(() => {
+		flushPending();
+		void flushStates();
+	});
+
+	// Each shortcut of a switch has its own appearance: the key's state with
+	// the same position. Titles save shortly after the last keystroke.
+	type PendingState = { timer: ReturnType<typeof setTimeout>; send: () => Promise<void> };
+	const pendingStates = new Map<number, PendingState>();
+
+	function saveState(index: number, immediate: boolean) {
+		const state = instance?.states?.[index];
+		if (!state) return;
+		clearTimeout(pendingStates.get(index)?.timer);
+		const request = { context: instance.context, index, state: structuredClone(state) };
+		const send = async () => {
+			pendingStates.delete(index);
+			try {
+				await invoke("set_state", request);
+			} catch (error) {
+				console.warn("Failed to save the shortcut's appearance", error);
+			}
+		};
+		if (immediate) void send();
+		else pendingStates.set(index, { timer: setTimeout(send, 300), send });
+		dispatch("edit");
+	}
+
+	async function flushStates() {
+		const pending = [...pendingStates.values()];
+		for (const { timer } of pending) clearTimeout(timer);
+		await Promise.all(pending.map(({ send }) => send()));
+	}
+
+	function setAppearance(index: number, patch: Partial<ActionState>, immediate = true) {
+		const state = instance?.states?.[index];
+		if (!state) return;
+		Object.assign(state, patch);
+		instance = instance;
+		saveState(index, immediate);
+	}
+
+	let imageInput: HTMLInputElement;
+	let imageFor = 0;
+	function chooseImage(index: number) {
+		imageFor = index;
+		imageInput.click();
+	}
+
+	async function useImage(file: File | undefined, index: number) {
+		if (!file || !file.type.startsWith("image/")) return;
+		const source = await new Promise<string>((resolve, reject) => {
+			const reader = new FileReader();
+			reader.onload = () => resolve(String(reader.result));
+			reader.onerror = () => reject(reader.error);
+			reader.readAsDataURL(file);
+		});
+		setAppearance(index, { image: (await resizeImage(source)) ?? source, image_scale: 100 });
+	}
+
+	$: defaultFace = libraryEntry?.action.icon ?? instance?.action.icon ?? "";
 
 	function update(patch: Record<string, unknown>, immediate = true) {
 		settings = { ...settings, ...patch };
@@ -142,9 +233,21 @@
 		update({ hotkeys: [...hotkeys(), { down: "", up: "" }] });
 	}
 
-	function removeHotkey(index: number) {
-		const next = hotkeys().filter((_, hotkeyIndex) => hotkeyIndex !== index);
-		update({ hotkeys: next.length ? next : [{ down: "", up: "" }], index: Math.min(Number(settings.index ?? 0), Math.max(next.length - 1, 0)) });
+	// A shortcut is removed together with its image and title.
+	async function removeHotkey(index: number) {
+		if (pendingTimer !== undefined) await persist();
+		await flushStates();
+		try {
+			const updated = await invoke<ActionInstance | null>("remove_switch_shortcut", { context: instance.context, index });
+			if (!updated) return;
+			settings = structuredClone(updated.settings);
+			instance.settings = updated.settings;
+			instance.states = updated.states;
+			instance.current_state = updated.current_state;
+			dispatch("edit");
+		} catch (error) {
+			toast("error", "Could not remove the shortcut", errorText(error));
+		}
 	}
 
 	function setMouseModifier(modifier: string, checked: boolean) {
@@ -247,18 +350,58 @@
 			<span>VSD Craft sends Super Hotkeys as a hardware keyboard. This app sends them as software input, which works in almost every app.</span>
 		</div>
 	{:else if isHotkeySwitch || isSuperHotkeySwitch}
-		<p class="hint">Each press sends the current shortcut, then moves on to the next one, and the key's image follows.</p>
+		<p class="hint">Each press sends one shortcut and moves on to the next. The key shows the image and title of the shortcut that the next press sends.</p>
 		<div class="flex flex-col gap-2">
 			{#each hotkeyList as hotkey, index}
-				<div class="card flex items-start gap-3 p-3">
-					<span class="mt-2.5 flex size-5 shrink-0 items-center justify-center rounded-md bg-press text-[11px] font-bold text-ink-muted tabular-nums">{index + 1}</span>
-					<div class="min-w-0 flex-1">
-						<ShortcutRecorder value={hotkey.down ?? ""} display={hotkey.display ?? ""} label={`Shortcut ${index + 1}`} on:change={({ detail }) => setHotkey(index, { down: detail.down, display: detail.display })} />
+				{@const state = instance.states[index]}
+				{@const next = Number(settings.index ?? 0) === index}
+				<div class="card flex items-start gap-3 p-3" class:next-shortcut={next}>
+					<div class="flex w-16 shrink-0 flex-col items-center gap-1">
+						<button
+							class="group relative size-16 overflow-hidden rounded-[22%] shadow-[inset_0_0_0_1px_rgb(255_255_255/0.08)]"
+							on:click={() => chooseImage(index)}
+							on:dragover|preventDefault
+							on:drop|preventDefault={(event) => useImage(event.dataTransfer?.files?.[0], index)}
+							title="Choose an image for this shortcut"
+							aria-label={`Choose an image for shortcut ${index + 1}`}
+						>
+							<KeyFace {state} fallback={defaultFace} />
+							<span class="absolute inset-0 flex items-center justify-center bg-black/60 opacity-0 transition-opacity group-hover:opacity-100"><ImageSquare size="18" class="text-white" /></span>
+						</button>
+						{#if state && !isDefaultArtwork(state.image)}
+							<button class="whitespace-nowrap text-[10.5px] text-ink-faint hover:text-ink-muted" on:click={() => setAppearance(index, { image: defaultFace, image_scale: 100 })}>Default image</button>
+						{:else}
+							<span class="whitespace-nowrap text-[10.5px] text-ink-faint tabular-nums">Shortcut {index + 1}</span>
+						{/if}
 					</div>
-					<button class="btn btn-ghost btn-icon mt-1" on:click={() => removeHotkey(index)} disabled={hotkeyList.length < 2} aria-label={`Remove shortcut ${index + 1}`}><Trash size="14" /></button>
+					<div class="flex min-w-0 flex-1 flex-col gap-2">
+						<ShortcutRecorder value={hotkey.down ?? ""} display={hotkey.display ?? ""} label={`Shortcut ${index + 1}`} on:change={({ detail }) => setHotkey(index, { down: detail.down, display: detail.display })} />
+						<input
+							class="input"
+							value={state?.text ?? ""}
+							placeholder="Title on the key, such as START SCRIPT"
+							disabled={!state}
+							aria-label={`Title for shortcut ${index + 1}`}
+							on:input={(event) => setAppearance(index, { text: event.currentTarget.value, show: true }, false)}
+						/>
+					</div>
+					<div class="flex shrink-0 flex-col items-end gap-1.5">
+						{#if next}<span class="badge text-accent">Next</span>{/if}
+						<button class="btn btn-ghost btn-icon" on:click={() => removeHotkey(index)} disabled={hotkeyList.length < 2} aria-label={`Remove shortcut ${index + 1}`}><Trash size="14" /></button>
+					</div>
 				</div>
 			{/each}
 		</div>
+		<input
+			bind:this={imageInput}
+			type="file"
+			accept="image/*"
+			class="hidden"
+			on:change={() => {
+				useImage(imageInput.files?.[0], imageFor);
+				imageInput.value = "";
+			}}
+		/>
 		<div class="flex items-center justify-between gap-3">
 			<button class="btn btn-sm" on:click={addHotkey}><Plus size="13" weight="bold" /> Add shortcut</button>
 			<label class="flex items-center gap-2 text-xs text-ink-muted">
@@ -561,6 +704,10 @@
 </div>
 
 <style>
+	.next-shortcut {
+		border-color: rgb(139 123 255 / 0.45);
+		box-shadow: 0 0 0 1px rgb(139 123 255 / 0.18);
+	}
 	.field {
 		display: flex;
 		flex-direction: column;

@@ -11,7 +11,9 @@
 	import TextItalic from "phosphor-svelte/lib/TextItalic";
 	import TextUnderline from "phosphor-svelte/lib/TextUnderline";
 
+	import { isSwitchAction } from "$lib/actionLibrary";
 	import { iconSource, isDefaultArtwork, launchesSomething, resolveState } from "$lib/appIcons";
+	import { actionIndex } from "$lib/catalog";
 	import { t } from "$lib/i18n";
 	import { CanvasLock, renderImage, resizeImage } from "$lib/rendererHelper";
 
@@ -56,8 +58,13 @@
 	$: automaticIcon = launches && isDefaultArtwork(current?.image);
 	$: source = iconSource(instance.action.uuid);
 
+	// A switch's states are its shortcuts, one appearance each.
+	$: switchAction = isSwitchAction(instance.action.uuid);
+
 	function resetImage() {
-		const original = instance.action.states[state]?.image ?? instance.action.icon;
+		// Every shortcut of a switch shares the library's artwork.
+		const libraryFace = switchAction ? $actionIndex.get(instance.action.uuid)?.action.icon : undefined;
+		const original = libraryFace ?? instance.action.states[state]?.image ?? instance.action.icon;
 		// Launching keys go back to the app's own icon.
 		instance.states[state].image = launches && !isDefaultArtwork(original) ? "" : original;
 		instance.states[state].image_scale = 100;
@@ -200,10 +207,10 @@
 		<div class="flex min-w-0 flex-1 flex-col gap-3.5">
 			{#if instance.states.length > 1}
 				<div class="flex items-center gap-2">
-					<span class="label">{$t("instance_editor.state")}</span>
+					<span class="label">{switchAction ? "Shortcut" : $t("instance_editor.state")}</span>
 					<div class="segmented" role="tablist">
 						{#each instance.states as _, index}
-							<button role="tab" aria-selected={state === index} on:click={() => (state = index)}>{$t("instance_editor.state.n", { n: index + 1 })}</button>
+							<button role="tab" aria-selected={state === index} on:click={() => (state = index)}>{switchAction ? index + 1 : $t("instance_editor.state.n", { n: index + 1 })}</button>
 						{/each}
 					</div>
 				</div>

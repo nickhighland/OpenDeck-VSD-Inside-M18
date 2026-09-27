@@ -353,7 +353,7 @@
 			{:else if instance.action.uuid.startsWith("opendeck.m18.") || /^com\.(hotspot|mirabox)\.streamdock\.|^com\.streamdock\./.test(instance.action.uuid)}
 				<!-- Every built-in M18 and VSD Craft action is configured by the M18 inspector. -->
 				<div class="h-full w-full" class:hidden={$inspectedInstance != instance.context}>
-					<M18ActionInspector {instance} {device} />
+					<M18ActionInspector {instance} {device} on:edit={() => (edits += 1)} />
 				</div>
 			{:else if instance.action.property_inspector}
 				<iframe

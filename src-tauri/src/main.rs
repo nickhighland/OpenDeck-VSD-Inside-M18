@@ -94,6 +94,7 @@ async fn main() {
 			frontend::instances::remove_instance,
 			frontend::instances::set_state,
 			frontend::instances::set_instance_settings,
+			frontend::instances::remove_switch_shortcut,
 			frontend::instances::set_child_delay,
 			frontend::instances::set_m18_led_palette,
 			frontend::instances::update_image,

@@ -40,6 +40,14 @@ export function isBuiltIn(action: Pick<Action, "plugin">): boolean {
 
 export const FLOW_PARENT_UUIDS = ["opendeck.multiaction", "opendeck.toggleaction", "opendeck.carouselaction"];
 
+/**
+ * Actions that step through a list of shortcuts, one per press. Each shortcut
+ * has its own image and title. Mirrors `is_switch_action()` in the core.
+ */
+export function isSwitchAction(uuid: string): boolean {
+	return uuid === "opendeck.m18.hotkey-switch" || uuid === "opendeck.m18.super-hotkey-switch" || uuid.toLowerCase() === "com.hotspot.streamdock.system.hotkeyswitch";
+}
+
 export function isFlowParent(uuid: string): boolean {
 	return FLOW_PARENT_UUIDS.includes(uuid);
 }

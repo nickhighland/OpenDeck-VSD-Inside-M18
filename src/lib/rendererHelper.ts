@@ -122,10 +122,18 @@ export async function renderImage(
 
 	// Draw text
 	if (state.show) {
-		const size = state.size * 2 * scale;
+		const font = (size: number) => (state.style.includes("Bold") ? "bold " : "") + (state.style.includes("Italic") ? "italic " : "") + `${size}px "${state.family}", sans-serif`;
+		let size = state.size * 2 * scale;
 		context.textAlign = "center";
-		context.font =
-			(state.style.includes("Bold") ? "bold " : "") + (state.style.includes("Italic") ? "italic " : "") + `${size}px "${state.family}", sans-serif`;
+		context.font = font(size);
+		// A long title shrinks (to half its size at most) to fit the key
+		// instead of running off both edges.
+		const room = canvas.width - 2 * (state.stroke_size + 3) * scale;
+		const widest = Math.max(...state.text.split("\n").map((line) => context.measureText(line).width));
+		if (widest > room) {
+			size = Math.max(size / 2, (size * room) / widest);
+			context.font = font(size);
+		}
 		context.fillStyle = state.colour;
 		context.strokeStyle = state.stroke_colour;
 		context.lineWidth = state.stroke_size * scale;

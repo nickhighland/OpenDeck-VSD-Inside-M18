@@ -111,9 +111,30 @@ function seed() {
 	["opendeck.m18.play-pause", "opendeck.m18.previous-track", "opendeck.m18.next-track", "com.hotspot.streamdock.soundboard.playaudio", "opendeck.m18.page-previous"].forEach((uuid, position) => {
 		media.keys[position] = instance("Page 2", position, uuid);
 	});
-	profile("Page 3");
+	const editing = profile("Page 3");
+	const toggle = instance("Page 3", 0, "opendeck.m18.hotkey-switch", {
+		hotkeys: [
+			{ down: "[k(Meta,Press),k(Shift,Press),t(\"s\"),k(Shift,Release),k(Meta,Release)]", up: "", display: "⌘⇧S" },
+			{ down: "[k(Meta,Press),k(Shift,Press),t(\"e\"),k(Shift,Release),k(Meta,Release)]", up: "", display: "⌘⇧E" },
+		],
+		index: 0,
+	});
+	toggle.states[0].text = "START SCRIPT";
+	toggle.states[1].text = "END SCRIPT";
+	editing.keys[0] = toggle;
 }
 seed();
+
+const SWITCH_ACTIONS = ["opendeck.m18.hotkey-switch", "opendeck.m18.super-hotkey-switch"];
+
+// Mirrors `match_switch_states()` in the core: one state per shortcut.
+function matchSwitchStates(target: ActionInstance) {
+	const count = Math.max(1, (target.settings as any)?.hotkeys?.length ?? 0);
+	const fresh = () => ({ ...structuredClone(findAction(target.action.uuid).states[0]), text: "", alignment: "bottom" as const });
+	target.states = target.states.slice(0, count);
+	while (target.states.length < count) target.states.push(fresh());
+	target.current_state = Math.min(Number((target.settings as any)?.index ?? 0), count - 1);
+}
 
 // Stand-ins for the icons that macOS provides for installed apps.
 function previewAppIcon(name: string): string | null {
@@ -277,9 +298,22 @@ async function handle(command: string, args: any): Promise<unknown> {
 			const target = findInstance(args.context);
 			if (target) {
 				target.settings = command === "set_m18_led_palette" ? { ledColors: args.colors } : args.settings;
+				if (SWITCH_ACTIONS.includes(target.action.uuid)) matchSwitchStates(target);
 				void emit("update_state", { context: args.context, contents: structuredClone(target) });
 			}
 			return null;
+		}
+		case "remove_switch_shortcut": {
+			const target = findInstance(args.context);
+			const hotkeys = (target?.settings as any)?.hotkeys as unknown[] | undefined;
+			if (!target || !hotkeys || hotkeys.length < 2) return null;
+			hotkeys.splice(args.index, 1);
+			target.states.splice(args.index, 1);
+			const next = Number((target.settings as any).index ?? 0);
+			(target.settings as any).index = args.index < next ? next - 1 : Math.min(next, hotkeys.length - 1);
+			matchSwitchStates(target);
+			void emit("update_state", { context: args.context, contents: structuredClone(target) });
+			return structuredClone(target);
 		}
 		case "set_child_delay": {
 			const target = findInstance(args.parentContext);

@@ -102,7 +102,7 @@ fn string_setting(settings: &Value, key: &str) -> Option<String> {
 	settings.get(key).and_then(Value::as_str).map(str::to_owned).filter(|value| !value.trim().is_empty())
 }
 
-fn image_data_url(image: &str) -> Option<String> {
+pub(crate) fn image_data_url(image: &str) -> Option<String> {
 	if image.starts_with("data:") {
 		return (!image.starts_with("data:image/svg+xml")).then(|| image.to_owned());
 	}
