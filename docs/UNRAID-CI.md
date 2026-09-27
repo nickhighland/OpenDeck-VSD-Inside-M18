@@ -23,4 +23,4 @@ The `RUNNER_TOKEN` is needed only to register a new runner. The persisted runner
 
 `.github/workflows/unraid-ci.yml` runs only for pushes to `main` and manual dispatches on `main`; it has no pull-request trigger. Do not add an untrusted `pull_request` event to a workflow that targets this persistent Unraid runner. Public pull-request code can execute arbitrary commands, and the runner container has access to the Unraid Docker socket. GitHub recommends avoiding self-hosted runners for public-repository pull requests. See [GitHub's secure-use guidance](https://docs.github.com/en/actions/reference/security/secure-use).
 
-The release workflow uses GitHub-hosted runners for macOS, Windows, and Linux packaging. The Unraid runner is Linux-only and does not replace those platform builders.
+The release workflow uses GitHub-hosted runners to package Apple silicon macOS and Windows x64 builds only. The Unraid runner is for verification, not release packaging.

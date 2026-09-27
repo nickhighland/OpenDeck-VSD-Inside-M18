@@ -57,7 +57,7 @@ The repository includes the built-in M18 HID driver and the VSD Craft importer. 
 
 ## GitHub Actions on Unraid
 
-The `Unraid verification` workflow uses a dedicated repository-level Unraid runner for trusted pushes to `main` and manual runs on `main`. It runs Rust formatting/tests and frontend checks/builds. It intentionally has no `pull_request` trigger: this is a public repository, and untrusted pull-request code must not run on a persistent runner with access to the Unraid host. The release workflow continues to use GitHub-hosted macOS, Windows, and Linux runners for native release builds. See [docs/UNRAID-CI.md](docs/UNRAID-CI.md) for runner safety and [docs/SETUP-RECOVERY.md](docs/SETUP-RECOVERY.md) for setup and recovery instructions.
+The `Unraid verification` workflow uses a dedicated repository-level Unraid runner for trusted pushes to `main` and manual runs on `main`. It runs Rust formatting/tests and frontend checks/builds. It intentionally has no `pull_request` trigger: this is a public repository, and untrusted pull-request code must not run on a persistent runner with access to the Unraid host. Release packages target Apple silicon Macs and Windows x64, using GitHub-hosted runners. See [docs/UNRAID-CI.md](docs/UNRAID-CI.md) for runner safety and [docs/SETUP-RECOVERY.md](docs/SETUP-RECOVERY.md) for setup and recovery instructions.
 
 ## License and upstream sources
 
