@@ -27,6 +27,16 @@ export function getImage(image: string | undefined, fallback: string | undefined
 	return image;
 }
 
+/**
+ * Built-in key artwork has a variant with the icon raised to make room for a
+ * title along the bottom; use it whenever such a title is shown.
+ */
+export function artworkForState(image: string, state: Pick<ActionState, "show" | "text" | "alignment">): string {
+	const face = /^opendeck\/keys\/([a-z0-9-]+)\.svg$/.exec(image);
+	if (face && state.show && state.text.trim() && state.alignment === "bottom") return `opendeck/keys/titled/${face[1]}.svg`;
+	return image;
+}
+
 export class CanvasLock {
 	currentLock = Promise.resolve();
 	async lock() {
@@ -76,7 +86,7 @@ export async function renderImage(
 		// Load image
 		const image = document.createElement("img");
 		image.crossOrigin = "anonymous";
-		image.src = processImage ? getImage(state.image, fallback) : state.image;
+		image.src = processImage ? getImage(artworkForState(state.image || fallback || "", state), fallback) : state.image;
 		if (image.src == undefined) return;
 		await new Promise((resolve, reject) => {
 			image.onload = resolve;
@@ -114,6 +124,8 @@ export async function renderImage(
 		context.fillStyle = state.colour;
 		context.strokeStyle = state.stroke_colour;
 		context.lineWidth = state.stroke_size * scale;
+		// Mitred corners spike out of letters with sharp angles such as M and V.
+		context.lineJoin = "round";
 		context.textBaseline = "top";
 		const x = canvas.width / 2;
 		let y = canvas.height / 2 - size * state.text.split("\n").length * 0.5;

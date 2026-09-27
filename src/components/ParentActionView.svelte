@@ -3,60 +3,60 @@
 	import type { ActionInstance } from "$lib/ActionInstance";
 	import type { Profile } from "$lib/Profile";
 
+	import ArrowLeft from "phosphor-svelte/lib/ArrowLeft";
+	import Clock from "phosphor-svelte/lib/Clock";
+	import DownloadSimple from "phosphor-svelte/lib/DownloadSimple";
 	import Trash from "phosphor-svelte/lib/Trash";
 	import Key from "./Key.svelte";
 
+	import { isBuiltIn } from "$lib/actionLibrary";
+	import { actionIndex } from "$lib/catalog";
 	import { t } from "$lib/i18n";
 	import { copiedItem, inspectedInstance, inspectedParentAction } from "$lib/propertyInspector";
+	import { attempt, toast } from "$lib/toast";
 
 	import { invoke } from "@tauri-apps/api/core";
-	import { onMount, tick } from "svelte";
 
 	export let profile: Profile;
 
-	let listEl: HTMLDivElement;
-	onMount(() => {
-		const first = listEl?.querySelector("[role='listitem']") as HTMLElement | null;
-		first?.focus();
-	});
-
-	let children: ActionInstance[];
-	$: children = profile.keys[$inspectedParentAction!.position]!.children!;
-	let parentUuid: string;
-	let isMultiAction: boolean;
-	let isCycleAction: boolean;
-	let isCarouselAction: boolean;
-	let parentTitle: string;
-	$: parentUuid = profile.keys[$inspectedParentAction!.position]!.action.uuid;
+	$: parent = profile.keys[$inspectedParentAction!.position]!;
+	$: children = parent?.children ?? [];
+	$: parentUuid = parent?.action.uuid ?? "";
 	$: isMultiAction = parentUuid == "opendeck.multiaction";
-	$: isCycleAction = parentUuid == "opendeck.toggleaction";
-	$: isCarouselAction = parentUuid == "opendeck.carouselaction";
-	$: parentTitle = isMultiAction ? "Multi Action" : isCycleAction ? "Action Cycle" : isCarouselAction ? "Action Carousel" : "Multi Action";
-	let parentContext: string;
-	$: parentContext = profile.keys[$inspectedParentAction!.position]!.context;
-	let parentSettings: any;
-	$: parentSettings = profile.keys[$inspectedParentAction!.position]!.settings;
+	$: parentTitle = isMultiAction ? "Multi Action" : parentUuid == "opendeck.toggleaction" ? "Action Cycle" : "Action Carousel";
+	$: parentHelp = isMultiAction
+		? "One press runs every step below, top to bottom, with the waits in between."
+		: "Each press runs one step and then moves to the next, looping back to the first. The highlighted step runs next.";
+	$: position = $inspectedParentAction!.position;
+	$: slotName = position >= 15 ? `Button ${position - 14}` : `Key ${position + 1}`;
 
-	function handleDragOver(event: DragEvent) {
-		event.preventDefault();
-		if (event.dataTransfer?.types.includes("action")) event.dataTransfer.dropEffect = "copy";
+	function stepName(instance: ActionInstance): string {
+		const entry = $actionIndex.get(instance.action.uuid);
+		return entry && isBuiltIn(instance.action) ? entry.action.name : instance.action.name;
 	}
 
-	async function addAction(action: Action) {
-		if (
-			((isMultiAction || isCycleAction || isCarouselAction) && !action.supported_in_multi_actions)
-		) {
+	let dropping = false;
+	function handleDragOver(event: DragEvent) {
+		event.preventDefault();
+		if (event.dataTransfer?.types.includes("action")) {
+			event.dataTransfer.dropEffect = "copy";
+			dropping = true;
+		}
+	}
+
+	export async function addAction(action: Action) {
+		if (!action.supported_in_multi_actions) {
+			toast("error", `${action.name} can't be a step`, "Flows and LED colors cannot be placed inside another flow.");
 			return;
 		}
-		let response: ActionInstance | null = await invoke("create_instance", { context: $inspectedParentAction, action });
-		if (response) profile.keys[$inspectedParentAction!.position] = response;
+		const response = await attempt("Could not add the step", () => invoke<ActionInstance | null>("create_instance", { context: $inspectedParentAction, action }));
+		if (response) profile.keys[position] = response;
 	}
 
 	async function handleDrop({ dataTransfer }: DragEvent) {
-		if (dataTransfer?.getData("action")) {
-			let action = JSON.parse(dataTransfer?.getData("action"));
-			await addAction(action);
-		}
+		dropping = false;
+		const data = dataTransfer?.getData("action");
+		if (data) await addAction(JSON.parse(data));
 	}
 
 	async function handlePaste() {
@@ -64,170 +64,128 @@
 		await addAction($copiedItem.action);
 	}
 
-	async function removeInstance(index: number, refocus = false) {
-		await invoke("remove_instance", { context: children[index].context });
-		children.splice(index, 1);
-		profile.keys[$inspectedParentAction!.position]!.children = children;
-
+	async function removeInstance(index: number) {
+		const removed = await attempt("Could not remove the step", () => invoke("remove_instance", { context: children[index].context }));
+		if (removed === undefined) return;
+		const next = [...children];
+		next.splice(index, 1);
+		parent.children = next;
 		if (index == 0) {
-			profile.keys[$inspectedParentAction!.position]!.settings.delays?.splice(0, 1);
+			parent.settings.delays?.splice(0, 1);
 		} else {
-			profile.keys[$inspectedParentAction!.position]!.settings.delays?.splice(index - 1, 1);
+			parent.settings.delays?.splice(index - 1, 1);
 		}
-
-		if (!refocus) return;
-
-		await tick();
-		const items = Array.from(listEl?.querySelectorAll("[role='listitem']") ?? []) as HTMLElement[];
-		if (items.length == 0) return;
-
-		const targetIndex = children.length == 0 ? 0 : Math.min(index, children.length - 1);
-		for (let i = 0; i < items.length; i++) {
-			items[i].tabIndex = i == targetIndex ? 0 : -1;
-		}
-		items[targetIndex]?.focus();
+		profile = profile;
+		if ($inspectedInstance === children[index]?.context) $inspectedInstance = null;
 	}
 
 	async function setDelay(index: number, event: Event) {
 		const target = event.currentTarget as HTMLInputElement;
-		const val = Math.max(0, parseInt(target.value) || 0);
-		const settings = await invoke<any>("set_child_delay", { parentContext, index, delayMs: val });
-		profile.keys[$inspectedParentAction!.position]!.settings = settings;
+		const value = Math.max(0, Math.min(300000, parseInt(target.value) || 0));
+		const settings = await attempt("Could not save the wait", () => invoke<any>("set_child_delay", { parentContext: parent.context, index, delayMs: value }));
+		if (settings) {
+			parent.settings = settings;
+			profile = profile;
+		}
 	}
 
-	function handleListKeydown(event: KeyboardEvent) {
-		if (!["ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) return;
-		const list = event.currentTarget as HTMLElement;
-		const items = Array.from(list.querySelectorAll("[role='listitem']"));
-		const currentIndex = items.indexOf(document.activeElement?.closest("[role='listitem']") as Element);
-		if (currentIndex == -1) return;
-
-		event.preventDefault();
-
-		let newIndex = currentIndex;
-		switch (event.key) {
-			case "ArrowDown":
-				newIndex = Math.min(currentIndex + 1, items.length - 1);
-				break;
-			case "ArrowUp":
-				newIndex = Math.max(currentIndex - 1, 0);
-				break;
-			case "Home":
-				newIndex = 0;
-				break;
-			case "End":
-				newIndex = items.length - 1;
-				break;
-		}
-
-		if (newIndex == currentIndex) return;
-		(items[currentIndex] as HTMLElement).tabIndex = -1;
-		(items[newIndex] as HTMLElement).tabIndex = 0;
-		(items[newIndex] as HTMLElement).focus();
+	function close() {
+		$inspectedParentAction = null;
+		$inspectedInstance = null;
 	}
 </script>
 
 <svelte:window
 	on:keydown={(event) => {
-		if (event.key == "Escape") $inspectedParentAction = null;
+		if (event.key == "Escape" && !(event.target instanceof HTMLInputElement)) close();
 	}}
 />
 
-<div class="px-6 pt-6 pb-4 text-neutral-300">
-	<button class="float-right text-xl" on:click={() => ($inspectedParentAction = null)} aria-label={$t("settings.close")}>✕</button>
-	<h1 class="font-semibold text-2xl">{parentTitle}</h1>
-</div>
-
-<!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
-<div
-	bind:this={listEl}
-	class="flex flex-col h-128 overflow-auto"
-	on:click={() => ($inspectedInstance = null)}
-	role="list"
-	aria-label="{parentTitle} {$t('parent_action_view.children')}"
-	on:keydown={handleListKeydown}
->
-	{#each children as instance, index}
-		<!-- svelte-ignore a11y-no-noninteractive-tabindex a11y-no-noninteractive-element-interactions -->
-		<div
-			class="flex flex-row items-center mx-4 my-1 bg-neutral-700 hover:bg-neutral-600 transition-colors border border-neutral-600 rounded-lg focus-within:outline-solid focus-within:outline-offset-2 focus-within:outline-blue-500"
-			class:my-2={!isMultiAction}
-			on:click|stopPropagation={() => ($inspectedInstance = instance.context)}
-			on:focus|stopPropagation={() => ($inspectedInstance = instance.context)}
-			on:keydown={(e) => {
-				if (e.key == "Delete") removeInstance(index, true);
-			}}
-			role="listitem"
-			tabindex={index == 0 ? 0 : -1}
-		>
-			<Key
-				inslot={instance}
-				context={null}
-				active={false}
-				scale={3 / 4}
-				role="presentation"
-				tabindex={-1}
-				label={parentTitle +
-					" " +
-					$t("parent_action_view.child") +
-					" " +
-					(index + 1)}
-			/>
-			<p class="ml-4 text-xl text-neutral-300">{instance.action.name}</p>
-			<button
-				class="ml-auto mr-10"
-				on:click|stopPropagation={() => removeInstance(index)}
-				tabindex={-1}
-				aria-label={$t("parent_action_view.remove", { name: instance.action.name })}
-			>
-				<Trash size="32" class="text-neutral-400" />
-			</button>
+<div class="flex min-h-0 flex-1 flex-col">
+	<div class="flex shrink-0 items-center gap-3 border-b border-line px-5 py-3">
+		<button class="btn btn-sm" on:click={close}><ArrowLeft size="13" weight="bold" /> Back to M18</button>
+		<div class="min-w-0 flex-1">
+			<h1 class="text-[15px] font-semibold text-ink">{parentTitle} <span class="font-normal text-ink-faint">on {slotName}</span></h1>
+			<p class="truncate text-xs text-ink-muted">{parentHelp}</p>
 		</div>
+		<span class="badge">{children.length} {children.length === 1 ? "step" : "steps"}</span>
+	</div>
 
-		{#if isMultiAction && index < children.length - 1}
-			<div class="flex flex-row items-center gap-2 mx-14 my-1 px-3 py-2 bg-neutral-800 border border-dashed border-neutral-600 rounded-lg">
-				<span class="text-xs text-neutral-400">{$t("parent_action_view.delay.label")}</span>
-				<input
-					type="number"
-					min="0"
-					max="300000"
-					step="100"
-					value={parentSettings?.delays?.[index] ?? 100}
-					on:input={(e) => setDelay(index, e)}
-					class="no-spinner w-20 px-1 py-0.5 text-center text-sm text-neutral-300 bg-neutral-900 border border-neutral-600 rounded"
-					aria-label={$t("parent_action_view.delay.aria", { name: children[index + 1].action.name })}
-				/>
-				<span class="text-xs text-neutral-500">ms</span>
+	<div class="min-h-0 flex-1 overflow-auto px-6 py-5" role="list" aria-label="{parentTitle} {$t('parent_action_view.children')}">
+		<div class="mx-auto flex max-w-xl flex-col">
+			{#each children as instance, index (instance.context)}
+				{@const isNext = !isMultiAction && index === Math.min(parent.current_state, children.length - 1)}
+				<!-- svelte-ignore a11y-no-noninteractive-tabindex a11y-no-noninteractive-element-interactions a11y-click-events-have-key-events -->
+				<div
+					class="card group flex items-center gap-3 p-2.5 pr-3 transition-colors hover:border-line-strong"
+					class:ring-2={$inspectedInstance === instance.context}
+					class:ring-accent={$inspectedInstance === instance.context}
+					class:border-accent={isNext}
+					on:click|stopPropagation={() => ($inspectedInstance = instance.context)}
+					on:keydown={(event) => {
+						if (event.key == "Enter") $inspectedInstance = instance.context;
+						else if (event.key == "Delete" || event.key == "Backspace") removeInstance(index);
+					}}
+					role="listitem"
+					tabindex="0"
+				>
+					<span class="flex size-6 shrink-0 items-center justify-center rounded-md bg-press text-[11px] font-bold text-ink-muted tabular-nums">{index + 1}</span>
+					<div class="pointer-events-none shrink-0">
+						<Key inslot={instance} context={null} active={false} displaySize={46} role="presentation" tabindex={-1} label={`${parentTitle} step ${index + 1}`} />
+					</div>
+					<div class="min-w-0 flex-1">
+						<p class="truncate text-[13px] font-medium text-ink">{stepName(instance)}</p>
+						<p class="truncate text-[11.5px] text-ink-faint">{isNext ? "Runs on the next press" : $actionIndex.get(instance.action.uuid)?.action.tooltip ?? instance.action.tooltip}</p>
+					</div>
+					<button class="btn btn-ghost btn-icon btn-sm opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100" on:click|stopPropagation={() => removeInstance(index)} aria-label={$t("parent_action_view.remove", { name: stepName(instance) })}>
+						<Trash size="14" />
+					</button>
+				</div>
+
+				{#if isMultiAction && index < children.length - 1}
+					<div class="flex items-center gap-2 py-1.5 pl-5">
+						<span class="h-5 w-px bg-line-strong"></span>
+						<label class="flex items-center gap-1.5 rounded-full border border-line bg-raised py-0.5 pr-2 pl-2 text-[11px] text-ink-muted">
+							<Clock size="12" />
+							wait
+							<input
+								type="number"
+								min="0"
+								max="300000"
+								step="50"
+								value={parent.settings?.delays?.[index] ?? 100}
+								on:change={(event) => setDelay(index, event)}
+								class="w-14 bg-transparent text-center text-[11px] text-ink tabular-nums outline-none"
+								aria-label={$t("parent_action_view.delay.aria", { name: stepName(children[index + 1]) })}
+							/>
+							ms
+						</label>
+					</div>
+				{:else if index < children.length - 1}
+					<div class="py-1 pl-8"><span class="block h-3 w-px bg-line"></span></div>
+				{/if}
+			{/each}
+
+			<!-- svelte-ignore a11y-no-noninteractive-tabindex a11y-no-noninteractive-element-interactions -->
+			<div
+				class="mt-4 flex flex-col items-center gap-2 rounded-xl border-2 border-dashed px-6 py-7 text-center transition-colors"
+				class:border-accent={dropping}
+				class:bg-accent-soft={dropping}
+				class:border-line-strong={!dropping}
+				on:dragover={handleDragOver}
+				on:dragleave={() => (dropping = false)}
+				on:drop={handleDrop}
+				on:keydown={(e) => {
+					if ((e.ctrlKey || e.metaKey) && e.key == "v") handlePaste();
+				}}
+				role="listitem"
+				tabindex="0"
+				aria-label={$t("parent_action_view.drag_copy")}
+			>
+				<DownloadSimple size="22" class="text-ink-faint" />
+				<p class="text-[13px] font-medium text-ink-muted">{children.length ? "Add another step" : "Add the first step"}</p>
+				<p class="hint">Drag an action here, or double-click one in the library.</p>
 			</div>
-		{/if}
-	{/each}
-	<!-- svelte-ignore a11y-no-noninteractive-tabindex a11y-no-noninteractive-element-interactions -->
-	<div
-		class="flex flex-row items-center mx-4 mt-2 mb-4 p-3 bg-neutral-700 hover:bg-neutral-600 transition-colors border border-dashed border-neutral-600 rounded-lg focus-within:outline-solid focus-within:outline-offset-2 focus-within:outline-blue-500"
-		on:dragover={handleDragOver}
-		on:drop={handleDrop}
-		on:click={() => ($inspectedInstance = null)}
-		on:focus={() => ($inspectedInstance = null)}
-		on:keydown={(e) => {
-			if ((e.ctrlKey || e.metaKey) && e.key == "v") handlePaste();
-		}}
-		role="listitem"
-		tabindex={children.length == 0 ? 0 : -1}
-		aria-label={$t("parent_action_view.drag_copy")}
-	>
-		<img src="/cube.png" class="m-2 w-24 rounded-xl" alt="" />
-		<p class="ml-4 text-xl text-neutral-400">{$t("parent_action_view.drag_paste")}</p>
+		</div>
 	</div>
 </div>
-
-<style>
-	:global(.no-spinner::-webkit-outer-spin-button),
-	:global(.no-spinner::-webkit-inner-spin-button) {
-		-webkit-appearance: none;
-		margin: 0;
-	}
-	:global(.no-spinner[type="number"]) {
-		-moz-appearance: textfield;
-		appearance: textfield;
-	}
-</style>

@@ -59,73 +59,60 @@
 	onMount(async () => {
 		const repo = details.repository.split("/")[3] + "/" + details.repository.split("/")[4];
 
-		readme = await getReadme(repo);
+		try {
+			readme = await getReadme(repo);
+		} catch {
+			readme = await marked.parse($t("plugin_details.readme.not_found", { repo }));
+		}
 
-		const releasesResponse = await fetch("https://api.github.com/repos/" + repo + "/releases");
-		const releases = await releasesResponse.json();
-		for (const release of releases) {
-			for (const asset of release.assets) {
-				downloadCount += asset.download_count;
+		try {
+			const releasesResponse = await fetch("https://api.github.com/repos/" + repo + "/releases");
+			const releases = await releasesResponse.json();
+			// GitHub answers with an error object when rate limited.
+			if (!Array.isArray(releases)) return;
+			for (const release of releases) {
+				for (const asset of release.assets ?? []) {
+					downloadCount += asset.download_count ?? 0;
+				}
 			}
+		} catch {
+			// The download count is optional.
 		}
 	});
 </script>
 
-<Popup show label={$t("plugin_details.title", { name: details.name })}>
-	<button class="mr-2 my-1 float-right text-xl text-neutral-300" on:click={close} aria-label={$t("settings.close")}>✕</button>
-	<div class="flex flex-row items-start">
-		<img src={"https://openactionapi.github.io/plugins/icons/" + id + ".png"} alt={details.name} class="size-48 rounded-2xl" />
-		<div class="flex flex-col justify-center h-48 ml-8">
-			<div class="text-3xl text-neutral-200">{details.name}</div>
-			<div class="flex items-center mt-2 text-lg text-neutral-400">
-				<span class="mr-2">{$t("plugin_details.by")}</span>
-				<img src={"https://avatars.githubusercontent.com/" + details.repository.split("/")[3]} alt="Author avatar" class="size-7 mr-1.5 rounded-full" />
-				<a
-					target="_blank"
-					href={"https://github.com/" + details.repository.split("/")[3]}
-					on:click={() => window.open("https://github.com/" + details.repository.split("/")[3])}
-					class="underline"
-				>
+<Popup show title={details.name} subtitle={`${$t("plugin_details.by")} ${details.author}`} size="lg" on:close={close}>
+	<div class="flex items-start gap-6">
+		<img src={"https://openactionapi.github.io/plugins/icons/" + id + ".png"} alt="" class="size-28 shrink-0 rounded-2xl shadow-[0_10px_30px_-12px_black]" />
+		<div class="flex min-w-0 flex-col gap-3 pt-1">
+			<div class="flex items-center gap-2 text-[13px] text-ink-muted">
+				<img src={"https://avatars.githubusercontent.com/" + details.repository.split("/")[3]} alt="" class="size-6 rounded-full" />
+				<button class="underline decoration-line-strong underline-offset-2 hover:text-ink" on:click={() => window.open("https://github.com/" + details.repository.split("/")[3])}>
 					{details.author}
 					{#if details.repository.split("/")[3] != details.author}
 						({details.repository.split("/")[3]})
 					{/if}
-				</a>
-			</div>
-
-			<div class="flex flex-row items-center mt-6">
-				<button
-					on:click={install}
-					class="px-8 py-3 active:translate-y-0.5 text-lg text-neutral-100 bg-indigo-600 hover:bg-indigo-500 transition-colors border border-indigo-500 rounded-l-lg"
-				>
-					{$t("plugin_details.install")}
 				</button>
-
+				{#if downloadCount}
+					<span class="flex items-center gap-1 text-ink-faint"><DownloadSimple size="14" /> {downloadCount.toLocaleString()}</span>
+				{/if}
+			</div>
+			<div class="flex items-center gap-2">
+				<button on:click={install} class="btn btn-primary h-9 px-5">{$t("plugin_details.install")}</button>
 				<button
 					on:click={() => invoke("open_url", { url: details.download_url ?? details.repository + "/releases/latest" })}
-					class="ml-1 p-3.5 active:translate-y-0.5 text-lg text-neutral-100 bg-indigo-600 hover:bg-indigo-500 transition-colors border border-indigo-500 rounded-r-lg"
+					class="btn h-9"
 					aria-label={$t("plugin_details.download_latest")}
+					title={$t("plugin_details.download_latest")}
 				>
-					<ArrowSquareOut size={24} />
+					<ArrowSquareOut size="15" /> Releases
 				</button>
-
-				{#if downloadCount}
-					<div class="flex flex-row ml-6 text-neutral-300">
-						<span class="mr-1 text-lg">{downloadCount}</span>
-						<DownloadSimple size={28} />
-					</div>
-				{/if}
 			</div>
 		</div>
 	</div>
 
 	<!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
-	<div
-		class="mt-4 p-6 plugin-readme text-neutral-300 border-4 border-neutral-600 rounded-xl"
-		on:click={handleReadmeClick}
-		on:keyup={handleReadmeClick}
-		role="region"
-	>
+	<div class="plugin-readme mt-5 rounded-xl border border-line bg-black/20 p-5" on:click={handleReadmeClick} on:keyup={handleReadmeClick} role="region">
 		{@html readme}
 	</div>
 </Popup>

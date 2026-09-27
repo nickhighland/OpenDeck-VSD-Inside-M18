@@ -162,11 +162,12 @@ function gradientStops(colors: Gradient): string {
 	return colors.map((color, index) => `<stop offset="${(index / (colors.length - 1)).toFixed(2)}" stop-color="${color}"/>`).join("");
 }
 
-function face(paths: string, colors: Gradient, layout?: "badge"): string {
-	// Icon size in key pixels, and its top-left corner.
-	const size = layout === "badge" ? 40 : 78;
+function face(paths: string, colors: Gradient, layout?: "badge" | "titled"): string {
+	// Icon size in key pixels, and its top-left corner. "titled" raises and
+	// shrinks the icon to leave room for a title along the bottom.
+	const size = layout === "badge" ? 40 : layout === "titled" ? 62 : 78;
 	const x = (144 - size) / 2;
-	const y = layout === "badge" ? 12 : (144 - size) / 2;
+	const y = layout === "badge" ? 12 : layout === "titled" ? 16 : (144 - size) / 2;
 	const scale = (size / 256).toFixed(5);
 	return `<svg xmlns="http://www.w3.org/2000/svg" width="144" height="144" viewBox="0 0 144 144">
 <!-- Icon: Phosphor Icons (https://phosphoricons.com), MIT License -->
@@ -182,8 +183,11 @@ function face(paths: string, colors: Gradient, layout?: "badge"): string {
 `;
 }
 
-await Deno.mkdir("static/keys", { recursive: true });
+await Deno.mkdir("static/keys/titled", { recursive: true });
 for (const [slug, { group, icon, layout }] of Object.entries(FACES)) {
-	await Deno.writeTextFile(`static/keys/${slug}.svg`, face(await iconPaths(icon), GROUPS[group], layout));
+	const paths = await iconPaths(icon);
+	await Deno.writeTextFile(`static/keys/${slug}.svg`, face(paths, GROUPS[group], layout));
+	// Used by the editor when the key shows a title along the bottom.
+	await Deno.writeTextFile(`static/keys/titled/${slug}.svg`, face(paths, GROUPS[group], layout ?? "titled"));
 }
-console.log(`Wrote ${Object.keys(FACES).length} key faces to static/keys/`);
+console.log(`Wrote ${Object.keys(FACES).length} key faces (and titled variants) to static/keys/`);

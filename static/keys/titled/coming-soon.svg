@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="144" height="144" viewBox="0 0 144 144">
+<!-- Icon: Phosphor Icons (https://phosphoricons.com), MIT License -->
+<defs>
+<linearGradient id="background" x1="0" y1="0" x2="1" y2="1"><stop offset="0.00" stop-color="#94A3B8"/><stop offset="1.00" stop-color="#475569"/></linearGradient>
+<radialGradient id="highlight" cx="0.28" cy="0.1" r="0.95"><stop offset="0" stop-color="#FFFFFF" stop-opacity="0.32"/><stop offset="0.6" stop-color="#FFFFFF" stop-opacity="0"/></radialGradient>
+</defs>
+<rect width="144" height="144" fill="url(#background)"/>
+<rect width="144" height="144" fill="url(#highlight)"/>
+<g transform="translate(41 19) scale(0.24219)" fill="#000000" fill-opacity="0.22"><path d="M200,75.64V40a16,16,0,0,0-16-16H72A16,16,0,0,0,56,40V76a16.08,16.08,0,0,0,6.41,12.8L114.67,128,62.4,167.2A16.07,16.07,0,0,0,56,180v36a16,16,0,0,0,16,16H184a16,16,0,0,0,16-16V180.36a16,16,0,0,0-6.36-12.77L141.26,128l52.38-39.59A16.05,16.05,0,0,0,200,75.64Z"/></g>
+<g transform="translate(41 16) scale(0.24219)" fill="#FFFFFF"><path d="M200,75.64V40a16,16,0,0,0-16-16H72A16,16,0,0,0,56,40V76a16.08,16.08,0,0,0,6.41,12.8L114.67,128,62.4,167.2A16.07,16.07,0,0,0,56,180v36a16,16,0,0,0,16,16H184a16,16,0,0,0,16-16V180.36a16,16,0,0,0-6.36-12.77L141.26,128l52.38-39.59A16.05,16.05,0,0,0,200,75.64Z"/></g>
+</svg>

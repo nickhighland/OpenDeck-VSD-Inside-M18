@@ -10,21 +10,25 @@
 	export let secondaryActionLabel: string = "";
 </script>
 
-<div class="flex flex-row items-center m-2 p-2 bg-neutral-700 hover:bg-neutral-600 transition-colors border border-neutral-600 rounded-lg" class:hidden>
-	<img src={icon} class="w-24 h-24 rounded-lg" class:opacity-75={disconnected} alt={name} loading="lazy" />
-	<div class="ml-4 mr-2 text-neutral-300 wrap-anywhere" class:opacity-75={disconnected}>
-		<p class="font-semibold">{name}</p>
-		<slot name="subtitle">{subtitle}</slot>
+<div class="card flex items-center gap-3 p-3 transition-colors hover:border-line-strong" class:hidden>
+	<img src={icon} class="size-12 shrink-0 rounded-xl bg-black/30 object-cover" class:opacity-60={disconnected} alt="" loading="lazy" />
+	<div class="min-w-0 flex-1" class:opacity-70={disconnected}>
+		<p class="truncate text-[13px] font-semibold text-ink" title={name}>{name}</p>
+		<div class="flex min-w-0 flex-wrap items-center text-xs text-ink-muted">
+			<slot name="subtitle">{subtitle}</slot>
+		</div>
 	</div>
 
-	<div class="flex flex-col ml-auto mr-4">
+	<div class="flex shrink-0 items-center gap-0.5">
 		{#if secondaryAction}
-			<button on:click={secondaryAction} aria-label={secondaryActionLabel}>
+			<button class="btn btn-ghost btn-icon btn-sm" on:click={secondaryAction} aria-label={secondaryActionLabel} title={secondaryActionLabel}>
 				<slot name="secondary" />
 			</button>
 		{/if}
-		<button on:click={action} aria-label={actionLabel}>
-			<slot />
-		</button>
+		{#if $$slots.default}
+			<button class="btn btn-ghost btn-icon btn-sm" on:click={action} aria-label={actionLabel} title={actionLabel}>
+				<slot />
+			</button>
+		{/if}
 	</div>
 </div>

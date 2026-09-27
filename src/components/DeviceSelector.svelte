@@ -3,27 +3,41 @@
 	import type { Profile } from "$lib/Profile";
 
 	import { t } from "$lib/i18n";
+	import { loadPageSet, redrawEpoch, setPageSet, type M18PageSet } from "$lib/pages";
 	import { profileManager } from "$lib/singletons";
 
 	import { invoke } from "@tauri-apps/api/core";
-	import { listen } from "@tauri-apps/api/event";
-	import { getCurrentWindow, LogicalSize } from "@tauri-apps/api/window";
+	import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+	import { onMount } from "svelte";
 
 	export let devices: { [id: string]: DeviceInfo } = {};
 	export let value: string;
 	export let selectedProfiles: { [id: string]: Profile } = {};
 
 	let registered: string[] = [];
+
+	async function refreshProfile(device: string) {
+		try {
+			selectedProfiles[device] = await invoke<Profile>("get_selected_profile", { device });
+		} catch {
+			// The device disconnected; the device list update removes it.
+		}
+	}
+
 	$: {
 		if (!value || !devices[value]) value = Object.keys(devices).sort()[0];
-		for (const [id, device] of Object.entries(devices)) {
+		// A device that disconnected must be registered again when it returns,
+		// so its current profile is fetched instead of showing a stale copy.
+		registered = registered.filter((id) => devices[id]);
+		for (const id of Object.keys(devices)) {
 			if (!registered.includes(id)) {
+				registered.push(id);
 				(async () => {
-					let profile: Profile = await invoke("get_selected_profile", { device: device.id });
+					const profile: Profile = await invoke("get_selected_profile", { device: id });
 					selectedProfiles[id] = profile;
 					await invoke("set_selected_profile", { device: id, id: profile.id });
-				})();
-				registered.push(id);
+					if (id.startsWith("18-")) await loadPageSet(id);
+				})().catch((error) => console.warn(`Failed to load device ${id}`, error));
 			}
 		}
 	}
@@ -32,54 +46,60 @@
 		registered = [];
 	}
 
-	listen("switch_profile", async ({ payload }: { payload: { device: string; profile: string } }) => {
-		if (payload.device == value) {
-			$profileManager?.setProfile(payload.profile);
-		} else {
-			await invoke("set_selected_profile", { device: payload.device, id: payload.profile });
-			selectedProfiles[payload.device] = await invoke("get_selected_profile", { device: payload.device });
-		}
+	onMount(() => {
+		let disposed = false;
+		const unlisteners: UnlistenFn[] = [];
+		(async () => {
+			const subscriptions = await Promise.all([
+				listen<{ [id: string]: DeviceInfo }>("devices", ({ payload }) => (devices = payload)),
+				// Page switches from M18 keys, app-based switching, and plugins are
+				// performed by the core; follow them here for every device.
+				listen<{ device: string; pageSet: M18PageSet }>("m18_pages_changed", ({ payload }) => {
+					setPageSet(payload.device, payload.pageSet);
+					void refreshProfile(payload.device);
+				}),
+				listen("rerender_images", async () => {
+					await Promise.all(Object.keys(devices).map(refreshProfile));
+					redrawEpoch.update((epoch) => epoch + 1);
+				}),
+				// Only non-M18 devices still switch profiles through the editor.
+				listen<{ device: string; profile: string }>("switch_profile", async ({ payload }) => {
+					if (payload.device == value && $profileManager) {
+						$profileManager.setProfile(payload.profile);
+					} else {
+						await invoke("set_selected_profile", { device: payload.device, id: payload.profile });
+						await refreshProfile(payload.device);
+					}
+				}),
+			]);
+			if (disposed) subscriptions.forEach((unlisten) => unlisten());
+			else unlisteners.push(...subscriptions);
+			devices = await invoke("get_devices");
+		})();
+		return () => {
+			disposed = true;
+			unlisteners.forEach((unlisten) => unlisten());
+		};
 	});
 
-	(async () => (devices = await invoke("get_devices")))();
-	listen("devices", ({ payload }: { payload: { [id: string]: DeviceInfo } }) => (devices = payload));
-
-	let buildInfo: string;
-	(async () => (buildInfo = await invoke("get_build_info")))();
-	const window = getCurrentWindow();
-
-	$: {
-		if (devices[value]) {
-			const effectiveCols = Math.min(Math.max(devices[value].columns, devices[value].encoders, devices[value].touchpoints), 8);
-			const effectiveRows = Math.min(devices[value].rows + Math.min(devices[value].encoders, 1) + Math.min(devices[value].touchpoints, 1), 4);
-			const idealWidth = effectiveCols * 132 + 416;
-			const idealHeight = effectiveRows * 132 + 384 + (buildInfo?.split("</summary>")[0]?.includes("darwin") ? 28 : 0);
-			(async () => {
-				const width = Math.min(idealWidth, screen.availWidth);
-				const height = Math.min(idealHeight, screen.availHeight);
-				await window.setMinSize(new LogicalSize(width, height));
-				await window.setSize(new LogicalSize(width, height));
-			})();
-		}
-	}
-
-	let measure: HTMLSpanElement;
-	let selectWidth = 0;
-	$: if (value && measure && devices[value]) {
-		measure.textContent = devices[value].name;
-		selectWidth = measure.offsetWidth + 20;
-	}
+	$: deviceCount = Object.keys(devices).length;
 </script>
 
-{#if Object.keys(devices).length > 0}
-	<div class="select-device-wrapper">
-		<span bind:this={measure} class="invisible fixed whitespace-pre pointer-events-none text-xl font-semibold" aria-hidden="true"></span>
-		<select bind:value style:width="{selectWidth}px" aria-label={$t("device_selector.device")}>
-			<option value="" disabled selected>{$t("device_selector.choose_device")}</option>
-
-			{#each Object.entries(devices).sort() as [id, device]}
-				<option value={id}>{device.name}</option>
-			{/each}
-		</select>
+{#if deviceCount > 0}
+	<div class="flex h-8 items-center gap-2 rounded-full border border-line bg-raised pr-3 pl-2.5">
+		<span class="relative flex size-2">
+			<span class="absolute inline-flex size-full animate-ping rounded-full bg-success opacity-40"></span>
+			<span class="relative inline-flex size-2 rounded-full bg-success"></span>
+		</span>
+		{#if deviceCount > 1}
+			<select bind:value class="bg-transparent pr-1 text-[12.5px] font-medium text-ink outline-none" aria-label={$t("device_selector.device")}>
+				{#each Object.entries(devices).sort() as [id, device]}
+					<option value={id}>{device.name}</option>
+				{/each}
+			</select>
+		{:else}
+			<span class="text-[12.5px] font-medium text-ink">{devices[value]?.name ?? ""}</span>
+		{/if}
+		<span class="text-[11.5px] text-ink-faint">Connected</span>
 	</div>
 {/if}

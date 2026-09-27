@@ -1,0 +1,4674 @@
+{
+  "M18 Device": {
+    "icon": null,
+    "actions": [
+      {
+        "name": "LED Colors",
+        "uuid": "opendeck.m18.led-colors",
+        "plugin": "opendeck",
+        "tooltip": "Set the colors of the M18's 24 LEDs",
+        "icon": "opendeck/keys/led-colors.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": true,
+        "supported_in_multi_actions": false,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/led-colors.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "LED Colors",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "M18 Brightness",
+        "uuid": "com.hotspot.streamdock.device.brightness",
+        "plugin": "",
+        "tooltip": "Make the M18 screen brighter or dimmer",
+        "icon": "opendeck/keys/m18-brightness.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": true,
+        "supported_in_multi_actions": false,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/m18-brightness.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "M18 Brightness",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Screensaver 1 (VSD Craft)",
+        "uuid": "com.mirabox.streamdock.screensaver.action1",
+        "plugin": "",
+        "tooltip": "Not supported: the M18 uses display sleep instead",
+        "icon": "opendeck/keys/coming-soon.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": false,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/coming-soon.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Screensaver 1 (VSD Craft)",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Screensaver 2 (VSD Craft)",
+        "uuid": "com.mirabox.streamdock.screensaver.action2",
+        "plugin": "",
+        "tooltip": "Not supported: the M18 uses display sleep instead",
+        "icon": "opendeck/keys/coming-soon.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": false,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/coming-soon.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Screensaver 2 (VSD Craft)",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      }
+    ]
+  },
+  "Coming Soon": {
+    "icon": null,
+    "actions": [
+      {
+        "name": "Timer",
+        "uuid": "com.mirabox.streamdock.time.action2",
+        "plugin": "",
+        "tooltip": "Count up from zero; press to start or pause",
+        "icon": "opendeck/keys/timer.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": true,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/timer.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Timer",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Countdown",
+        "uuid": "com.mirabox.streamdock.time.action3",
+        "plugin": "",
+        "tooltip": "Count down to zero; press to start or pause",
+        "icon": "opendeck/keys/countdown.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": true,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/countdown.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Countdown",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "World Clock",
+        "uuid": "com.mirabox.streamdock.time.action1",
+        "plugin": "",
+        "tooltip": "Show the time in another time zone",
+        "icon": "opendeck/keys/world-clock.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": true,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/world-clock.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "World Clock",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Date & Time",
+        "uuid": "com.mirabox.streamdock.dateTime.action1",
+        "plugin": "",
+        "tooltip": "Show the current date and time",
+        "icon": "opendeck/keys/date-time.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": true,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/date-time.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Date & Time",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Calendar",
+        "uuid": "com.mirabox.streamdock.calendar.action1",
+        "plugin": "",
+        "tooltip": "Show today's date",
+        "icon": "opendeck/keys/calendar.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": true,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/calendar.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Calendar",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Weather",
+        "uuid": "com.hotspot.streamdock.weather.action1",
+        "plugin": "",
+        "tooltip": "Show the weather for a city",
+        "icon": "opendeck/keys/weather.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": true,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/weather.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Weather",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Notes",
+        "uuid": "com.hotspot.streamdock.memo.action1",
+        "plugin": "",
+        "tooltip": "Keep short notes on a key",
+        "icon": "opendeck/keys/notes.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": true,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/notes.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Notes",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "To-Do List",
+        "uuid": "com.hotspot.streamdock.memo.action2",
+        "plugin": "",
+        "tooltip": "Keep a to-do list on a key",
+        "icon": "opendeck/keys/todo.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": true,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/todo.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "To-Do List",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "YouTube Chat Message",
+        "uuid": "com.hotspot.streamdock.youtube.chatmessage",
+        "plugin": "",
+        "tooltip": "Post a saved message to a YouTube live chat",
+        "icon": "opendeck/keys/youtube-chat.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": true,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/youtube-chat.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "YouTube Chat Message",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "YouTube Viewers",
+        "uuid": "com.hotspot.streamdock.youtube.viewers",
+        "plugin": "",
+        "tooltip": "Show a YouTube live stream's viewer count",
+        "icon": "opendeck/keys/youtube-viewers.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": true,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/youtube-viewers.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "YouTube Viewers",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "vMix Shortcut",
+        "uuid": "com.hotspot.streamdock.vmix.shortcut",
+        "plugin": "",
+        "tooltip": "Trigger a vMix shortcut",
+        "icon": "opendeck/keys/vmix.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": true,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/vmix.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "vMix Shortcut 1",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          },
+          {
+            "image": "opendeck/keys/vmix.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "vMix Shortcut 2",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          },
+          {
+            "image": "opendeck/keys/vmix.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "vMix Shortcut 3",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          },
+          {
+            "image": "opendeck/keys/vmix.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "vMix Shortcut 4",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          },
+          {
+            "image": "opendeck/keys/vmix.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "vMix Shortcut 5",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          },
+          {
+            "image": "opendeck/keys/vmix.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "vMix Shortcut 6",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          },
+          {
+            "image": "opendeck/keys/vmix.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "vMix Shortcut 7",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          },
+          {
+            "image": "opendeck/keys/vmix.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "vMix Shortcut 8",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          },
+          {
+            "image": "opendeck/keys/vmix.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "vMix Shortcut 9",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          },
+          {
+            "image": "opendeck/keys/vmix.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "vMix Shortcut 10",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          },
+          {
+            "image": "opendeck/keys/vmix.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "vMix Shortcut 11",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          },
+          {
+            "image": "opendeck/keys/vmix.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "vMix Shortcut 12",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          },
+          {
+            "image": "opendeck/keys/vmix.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "vMix Shortcut 13",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Focus Search",
+        "uuid": "com.hotspot.streamdock.touchbar.focusonsearch",
+        "plugin": "",
+        "tooltip": "Move focus to the search field",
+        "icon": "opendeck/keys/focus-search.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": true,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/focus-search.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Focus Search",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Emoticon Stickers",
+        "uuid": "com.mirabox.streamdock.emoticons.select",
+        "plugin": "",
+        "tooltip": "Send an animated emoticon",
+        "icon": "opendeck/keys/stickers.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": true,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/stickers.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Emoticon Stickers",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "One-Button Paint",
+        "uuid": "com.mirabox.streamdock.pigmenteffects.action1",
+        "plugin": "",
+        "tooltip": "Animated paint effect on a key",
+        "icon": "opendeck/keys/paint.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": true,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/paint.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "One-Button Paint",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Full-Screen Paint",
+        "uuid": "com.mirabox.streamdock.pigmenteffects.action2",
+        "plugin": "",
+        "tooltip": "Animated paint effect across the M18",
+        "icon": "opendeck/keys/paint-full.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": true,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/paint-full.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Full-Screen Paint",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Musical Rhythm",
+        "uuid": "com.streamdock.musicalrhythma.action1",
+        "plugin": "",
+        "tooltip": "Animated audio visualiser",
+        "icon": "opendeck/keys/rhythm.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": true,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/rhythm.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Musical Rhythm",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Eat Gold Coins",
+        "uuid": "com.mirabox.streamdock.eatgoldcoins.action1",
+        "plugin": "",
+        "tooltip": "A small key game",
+        "icon": "opendeck/keys/game.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": true,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/game.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Eat Gold Coins",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Water Tank",
+        "uuid": "com.mirabox.streamdock.watertank.action1",
+        "plugin": "",
+        "tooltip": "An animated water-tank effect",
+        "icon": "opendeck/keys/water.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": true,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/water.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Water Tank",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Emoticon Stickers 2",
+        "uuid": "com.mirabox.streamdock.emoticons.select2",
+        "plugin": "",
+        "tooltip": "Send an animated emoticon",
+        "icon": "opendeck/keys/stickers.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": false,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/stickers.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Emoticon Stickers 2",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      }
+    ]
+  },
+  "Action Flows": {
+    "icon": null,
+    "actions": [
+      {
+        "name": "Multi Action",
+        "uuid": "opendeck.multiaction",
+        "plugin": "opendeck",
+        "tooltip": "Run several actions in order with one press",
+        "icon": "opendeck/keys/multi-action.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": true,
+        "supported_in_multi_actions": false,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/multi-action.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Multi Action",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Action Cycle",
+        "uuid": "opendeck.toggleaction",
+        "plugin": "opendeck",
+        "tooltip": "Each press runs the next action in the list",
+        "icon": "opendeck/keys/action-cycle.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": true,
+        "supported_in_multi_actions": false,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/action-cycle.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Action Cycle",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Action Carousel",
+        "uuid": "opendeck.carouselaction",
+        "plugin": "",
+        "tooltip": "Each press runs one action, then rotates to the next",
+        "icon": "opendeck/keys/action-carousel.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": true,
+        "supported_in_multi_actions": false,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/action-carousel.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Action Carousel",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Delay",
+        "uuid": "com.hotspot.streamdock.multiactions.delay",
+        "plugin": "",
+        "tooltip": "Wait between the steps of a Multi Action",
+        "icon": "opendeck/keys/delay.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": true,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/delay.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Delay",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      }
+    ]
+  },
+  "System": {
+    "icon": null,
+    "actions": [
+      {
+        "name": "Mission Control",
+        "uuid": "opendeck.m18.dispatch-center",
+        "plugin": "",
+        "tooltip": "Show all open windows",
+        "icon": "opendeck/keys/mission-control.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": true,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/mission-control.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Mission Control",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Launchpad",
+        "uuid": "opendeck.m18.launchpad",
+        "plugin": "",
+        "tooltip": "Open Launchpad",
+        "icon": "opendeck/keys/launchpad.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": true,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/launchpad.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Launchpad",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Spotlight",
+        "uuid": "com.hotspot.streamdock.hotkey.quicktool.searchbar",
+        "plugin": "",
+        "tooltip": "Open Spotlight search",
+        "icon": "opendeck/keys/spotlight.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": true,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/spotlight.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Spotlight",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Siri",
+        "uuid": "opendeck.m18.siri",
+        "plugin": "",
+        "tooltip": "Open Siri",
+        "icon": "opendeck/keys/siri.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": true,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/siri.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Siri",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Screenshot",
+        "uuid": "opendeck.m18.screenshot",
+        "plugin": "",
+        "tooltip": "Capture a selected area to the clipboard",
+        "icon": "opendeck/keys/screenshot.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": true,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/screenshot.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Screenshot",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Show Desktop",
+        "uuid": "com.hotspot.streamdock.touchbar.showdesktop",
+        "plugin": "",
+        "tooltip": "Move windows aside to show the desktop",
+        "icon": "opendeck/keys/show-desktop.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": true,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/show-desktop.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Show Desktop",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Dictation",
+        "uuid": "com.hotspot.streamdock.touchbar.dictation",
+        "plugin": "",
+        "tooltip": "Start dictation",
+        "icon": "opendeck/keys/dictation.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": true,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/dictation.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Dictation",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Switch Input Source",
+        "uuid": "com.hotspot.streamdock.touchbar.inputmethod",
+        "plugin": "",
+        "tooltip": "Switch to the next keyboard input source",
+        "icon": "opendeck/keys/input-source.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": true,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/input-source.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Switch Input Source",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Emoji & Symbols",
+        "uuid": "com.hotspot.streamdock.hotkey.quicktool.emoticons",
+        "plugin": "",
+        "tooltip": "Open the Emoji & Symbols viewer",
+        "icon": "opendeck/keys/emoji-viewer.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": true,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/emoji-viewer.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Emoji & Symbols",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Focus Settings",
+        "uuid": "com.hotspot.streamdock.touchbar.dndmode",
+        "plugin": "",
+        "tooltip": "Open Focus (Do Not Disturb) settings",
+        "icon": "opendeck/keys/focus.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": true,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/focus.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Focus Settings",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Notification Settings",
+        "uuid": "com.hotspot.streamdock.touchbar.notificationcenter",
+        "plugin": "",
+        "tooltip": "Open Notification settings",
+        "icon": "opendeck/keys/notifications.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": true,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/notifications.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Notification Settings",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Siri (VSD Craft)",
+        "uuid": "com.hotspot.streamdock.touchbar.siri",
+        "plugin": "",
+        "tooltip": "Open Siri",
+        "icon": "opendeck/keys/siri.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": false,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/siri.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Siri (VSD Craft)",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Mission Control (VSD Craft)",
+        "uuid": "com.hotspot.streamdock.touchbar.dispatchcenter",
+        "plugin": "",
+        "tooltip": "Show all open windows",
+        "icon": "opendeck/keys/mission-control.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": false,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/mission-control.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Mission Control (VSD Craft)",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Launchpad (VSD Craft)",
+        "uuid": "com.hotspot.streamdock.touchbar.launchpad",
+        "plugin": "",
+        "tooltip": "Open Launchpad",
+        "icon": "opendeck/keys/launchpad.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": false,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/launchpad.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Launchpad (VSD Craft)",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Screenshot (VSD Craft)",
+        "uuid": "com.hotspot.streamdock.touchbar.screenshot",
+        "plugin": "",
+        "tooltip": "Capture a selected area to the clipboard",
+        "icon": "opendeck/keys/screenshot.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": false,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/screenshot.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Screenshot (VSD Craft)",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Display Desktop (VSD Craft)",
+        "uuid": "com.hotspot.streamdock.hotkey.quickcontrol.displaydesktop",
+        "plugin": "",
+        "tooltip": "Show the desktop",
+        "icon": "opendeck/keys/show-desktop.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": false,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/show-desktop.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Display Desktop (VSD Craft)",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Speech Recognition (VSD Craft)",
+        "uuid": "com.hotspot.streamdock.hotkey.quickcontrol.speechrecognition",
+        "plugin": "",
+        "tooltip": "Start dictation",
+        "icon": "opendeck/keys/dictation.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": false,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/dictation.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Speech Recognition (VSD Craft)",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Notification (VSD Craft)",
+        "uuid": "com.hotspot.streamdock.hotkey.quicktool.notification",
+        "plugin": "",
+        "tooltip": "Open Notification settings",
+        "icon": "opendeck/keys/notifications.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": false,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/notifications.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Notification (VSD Craft)",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Switch Screen (VSD Craft)",
+        "uuid": "com.hotspot.streamdock.hotkey.quickcontrol.switchscreen",
+        "plugin": "",
+        "tooltip": "Send Control-F1",
+        "icon": "opendeck/keys/show-desktop.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": false,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/show-desktop.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Switch Screen (VSD Craft)",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Emoticons Library (VSD Craft)",
+        "uuid": "com.mirabox.streamdock.emoticons.lib",
+        "plugin": "",
+        "tooltip": "Open the Emoji & Symbols viewer",
+        "icon": "opendeck/keys/emoji-viewer.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": false,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/emoji-viewer.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Emoticons Library (VSD Craft)",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      }
+    ]
+  },
+  "Pages & Folders": {
+    "icon": null,
+    "actions": [
+      {
+        "name": "Next Page",
+        "uuid": "opendeck.m18.page-next",
+        "plugin": "",
+        "tooltip": "Show the next M18 page",
+        "icon": "opendeck/keys/page-next.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": true,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/page-next.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Next Page",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Previous Page",
+        "uuid": "opendeck.m18.page-previous",
+        "plugin": "",
+        "tooltip": "Show the previous M18 page",
+        "icon": "opendeck/keys/page-previous.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": true,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/page-previous.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Previous Page",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Go to Page",
+        "uuid": "opendeck.m18.page-goto",
+        "plugin": "",
+        "tooltip": "Jump straight to a chosen page",
+        "icon": "opendeck/keys/page-goto.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": true,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/page-goto.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Go to Page",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Page Number",
+        "uuid": "opendeck.m18.page-indicator",
+        "plugin": "",
+        "tooltip": "Show the number of the current page",
+        "icon": "opendeck/keys/page-indicator.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": true,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/page-indicator.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Page Number",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Open Folder",
+        "uuid": "com.hotspot.streamdock.profile.openchild",
+        "plugin": "",
+        "tooltip": "Open a page as a folder; Go Back returns",
+        "icon": "opendeck/keys/open-folder.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": true,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/open-folder.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Open Folder",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Go Back",
+        "uuid": "com.hotspot.streamdock.profile.backtoparent",
+        "plugin": "",
+        "tooltip": "Return to the page that opened this folder",
+        "icon": "opendeck/keys/go-back.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": true,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/go-back.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Go Back",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Scene Shift",
+        "uuid": "com.hotspot.streamdock.profile.rotate",
+        "plugin": "",
+        "tooltip": "Switch to a chosen page, or the next one",
+        "icon": "opendeck/keys/scene-shift.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": true,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/scene-shift.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Scene Shift",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Next Page (VSD Craft)",
+        "uuid": "com.hotspot.streamdock.page.next",
+        "plugin": "",
+        "tooltip": "Show the next M18 page",
+        "icon": "opendeck/keys/page-next.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": false,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/page-next.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Next Page (VSD Craft)",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Previous Page (VSD Craft)",
+        "uuid": "com.hotspot.streamdock.page.previous",
+        "plugin": "",
+        "tooltip": "Show the previous M18 page",
+        "icon": "opendeck/keys/page-previous.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": false,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/page-previous.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Previous Page (VSD Craft)",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Go to Page (VSD Craft)",
+        "uuid": "com.hotspot.streamdock.page.goto",
+        "plugin": "",
+        "tooltip": "Jump straight to a chosen page",
+        "icon": "opendeck/keys/page-goto.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": false,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/page-goto.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Go to Page (VSD Craft)",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Page Indicator (VSD Craft)",
+        "uuid": "com.hotspot.streamdock.page.indicator",
+        "plugin": "",
+        "tooltip": "Show the number of the current page",
+        "icon": "opendeck/keys/page-indicator.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": false,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/page-indicator.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Page Indicator (VSD Craft)",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      }
+    ]
+  },
+  "Display & Power": {
+    "icon": null,
+    "actions": [
+      {
+        "name": "Brightness Up",
+        "uuid": "opendeck.m18.screen-brightness-up",
+        "plugin": "",
+        "tooltip": "Brighten the Mac display",
+        "icon": "opendeck/keys/brightness-up.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": true,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/brightness-up.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Brightness Up",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Brightness Down",
+        "uuid": "opendeck.m18.screen-brightness-down",
+        "plugin": "",
+        "tooltip": "Dim the Mac display",
+        "icon": "opendeck/keys/brightness-down.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": true,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/brightness-down.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Brightness Down",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Sleep Displays",
+        "uuid": "opendeck.m18.sleep",
+        "plugin": "",
+        "tooltip": "Turn off the Mac's displays",
+        "icon": "opendeck/keys/display-sleep.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": true,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/display-sleep.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Sleep Displays",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Screen Saver",
+        "uuid": "opendeck.m18.desktop-saver",
+        "plugin": "",
+        "tooltip": "Start the macOS screen saver",
+        "icon": "opendeck/keys/screen-saver.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": true,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/screen-saver.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Screen Saver",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Lock Screen",
+        "uuid": "com.hotspot.streamdock.touchbar.screenlock",
+        "plugin": "",
+        "tooltip": "Lock the Mac",
+        "icon": "opendeck/keys/lock-screen.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": true,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/lock-screen.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Lock Screen",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Increase Screen Brightness (VSD Craft)",
+        "uuid": "com.hotspot.streamdock.touchbar.increasescreenbrightness",
+        "plugin": "",
+        "tooltip": "Brighten the Mac display",
+        "icon": "opendeck/keys/brightness-up.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": false,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/brightness-up.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Increase Screen Brightness (VSD Craft)",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Decrease Screen Brightness (VSD Craft)",
+        "uuid": "com.hotspot.streamdock.touchbar.decreasescreenbrightness",
+        "plugin": "",
+        "tooltip": "Dim the Mac display",
+        "icon": "opendeck/keys/brightness-down.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": false,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/brightness-down.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Decrease Screen Brightness (VSD Craft)",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Desktop Saver (VSD Craft)",
+        "uuid": "com.hotspot.streamdock.touchbar.desktopsaver",
+        "plugin": "",
+        "tooltip": "Start the macOS screen saver",
+        "icon": "opendeck/keys/screen-saver.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": false,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/screen-saver.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Desktop Saver (VSD Craft)",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Sleep (VSD Craft Touch Bar)",
+        "uuid": "com.hotspot.streamdock.touchbar.sleep",
+        "plugin": "",
+        "tooltip": "Turn off the Mac's displays",
+        "icon": "opendeck/keys/display-sleep.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": false,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/display-sleep.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Sleep (VSD Craft Touch Bar)",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Sleep (VSD Craft Quick Control)",
+        "uuid": "com.hotspot.streamdock.quickcontrol.sleep",
+        "plugin": "",
+        "tooltip": "Turn off the Mac's displays",
+        "icon": "opendeck/keys/display-sleep.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": false,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/display-sleep.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Sleep (VSD Craft Quick Control)",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Device Sleep (VSD Craft)",
+        "uuid": "com.hotspot.streamdock.device.devsleep",
+        "plugin": "",
+        "tooltip": "Turn off the Mac's displays",
+        "icon": "opendeck/keys/display-sleep.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": false,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/display-sleep.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Device Sleep (VSD Craft)",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      }
+    ]
+  },
+  "Media & Audio": {
+    "icon": null,
+    "actions": [
+      {
+        "name": "Play / Pause",
+        "uuid": "opendeck.m18.play-pause",
+        "plugin": "",
+        "tooltip": "Play or pause whatever is playing",
+        "icon": "opendeck/keys/play-pause.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": true,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/play-pause.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Play / Pause",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Previous Track",
+        "uuid": "opendeck.m18.previous-track",
+        "plugin": "",
+        "tooltip": "Skip to the previous track",
+        "icon": "opendeck/keys/previous-track.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": true,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/previous-track.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Previous Track",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Next Track",
+        "uuid": "opendeck.m18.next-track",
+        "plugin": "",
+        "tooltip": "Skip to the next track",
+        "icon": "opendeck/keys/next-track.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": true,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/next-track.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Next Track",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Fast Forward",
+        "uuid": "com.hotspot.streamdock.touchbar.fastforward",
+        "plugin": "",
+        "tooltip": "Skip ahead in the current track or video",
+        "icon": "opendeck/keys/fast-forward.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": true,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/fast-forward.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Fast Forward",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Rewind",
+        "uuid": "com.hotspot.streamdock.touchbar.fastrewind",
+        "plugin": "",
+        "tooltip": "Skip back in the current track or video",
+        "icon": "opendeck/keys/rewind.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": true,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/rewind.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Rewind",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Volume Up",
+        "uuid": "opendeck.m18.volume-up",
+        "plugin": "",
+        "tooltip": "Raise the output volume",
+        "icon": "opendeck/keys/volume-up.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": true,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/volume-up.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Volume Up",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Volume Down",
+        "uuid": "opendeck.m18.volume-down",
+        "plugin": "",
+        "tooltip": "Lower the output volume",
+        "icon": "opendeck/keys/volume-down.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": true,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/volume-down.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Volume Down",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Mute",
+        "uuid": "opendeck.m18.mute",
+        "plugin": "",
+        "tooltip": "Mute or unmute the output volume",
+        "icon": "opendeck/keys/mute.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": true,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/mute.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Mute",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Microphone Mute",
+        "uuid": "com.hotspot.streamdock.quickcontrol.microphone",
+        "plugin": "",
+        "tooltip": "Mute or unmute the default microphone",
+        "icon": "opendeck/keys/microphone.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": true,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/microphone.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Microphone Mute",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Media Key",
+        "uuid": "com.hotspot.streamdock.system.multimedia",
+        "plugin": "",
+        "tooltip": "Send any media key: play, pause, stop, skip, or volume",
+        "icon": "opendeck/keys/media-key.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": true,
+        "supported_in_multi_actions": false,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/media-key.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Media Key",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Play Sound",
+        "uuid": "com.hotspot.streamdock.soundboard.playaudio",
+        "plugin": "",
+        "tooltip": "Play an audio file, with volume, looping, and fades",
+        "icon": "opendeck/keys/play-sound.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": true,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/play-sound.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Play Sound 1",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          },
+          {
+            "image": "opendeck/keys/play-sound.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Play Sound 2",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Stop All Sounds",
+        "uuid": "com.hotspot.streamdock.soundboard.stopaudioplay",
+        "plugin": "",
+        "tooltip": "Stop every sound started by Play Sound",
+        "icon": "opendeck/keys/stop-sounds.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": true,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/stop-sounds.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Stop All Sounds",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Play / Pause (VSD Craft)",
+        "uuid": "com.hotspot.streamdock.touchbar.playpause",
+        "plugin": "",
+        "tooltip": "Play or pause whatever is playing",
+        "icon": "opendeck/keys/play-pause.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": false,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/play-pause.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Play / Pause (VSD Craft)",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Next Track (VSD Craft)",
+        "uuid": "com.hotspot.streamdock.touchbar.nexttrack",
+        "plugin": "",
+        "tooltip": "Skip to the next track",
+        "icon": "opendeck/keys/next-track.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": false,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/next-track.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Next Track (VSD Craft)",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Previous Track (VSD Craft)",
+        "uuid": "com.hotspot.streamdock.touchbar.previoustrack",
+        "plugin": "",
+        "tooltip": "Skip to the previous track",
+        "icon": "opendeck/keys/previous-track.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": false,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/previous-track.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Previous Track (VSD Craft)",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Volume Up (VSD Craft)",
+        "uuid": "com.hotspot.streamdock.touchbar.volumeup",
+        "plugin": "",
+        "tooltip": "Raise the output volume",
+        "icon": "opendeck/keys/volume-up.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": false,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/volume-up.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Volume Up (VSD Craft)",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Increase the Volume (VSD Craft)",
+        "uuid": "com.hotspot.streamdock.hotkey.quickcontrol.volumeup",
+        "plugin": "",
+        "tooltip": "Raise the output volume",
+        "icon": "opendeck/keys/volume-up.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": false,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/volume-up.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Increase the Volume (VSD Craft)",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Volume Down (VSD Craft)",
+        "uuid": "com.hotspot.streamdock.touchbar.volumedown",
+        "plugin": "",
+        "tooltip": "Lower the output volume",
+        "icon": "opendeck/keys/volume-down.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": false,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/volume-down.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Volume Down (VSD Craft)",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Lower the Volume (VSD Craft)",
+        "uuid": "com.hotspot.streamdock.hotkey.quickcontrol.volumedown",
+        "plugin": "",
+        "tooltip": "Lower the output volume",
+        "icon": "opendeck/keys/volume-down.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": false,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/volume-down.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Lower the Volume (VSD Craft)",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Mute (VSD Craft)",
+        "uuid": "com.hotspot.streamdock.touchbar.mute",
+        "plugin": "",
+        "tooltip": "Mute or unmute the output volume",
+        "icon": "opendeck/keys/mute.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": false,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/mute.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Mute (VSD Craft)",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Mute (VSD Craft Quick Control)",
+        "uuid": "com.hotspot.streamdock.hotkey.quickcontrol.mute",
+        "plugin": "",
+        "tooltip": "Mute or unmute the output volume",
+        "icon": "opendeck/keys/mute.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": false,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/mute.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Mute (VSD Craft Quick Control)",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      }
+    ]
+  },
+  "Network": {
+    "icon": null,
+    "actions": [
+      {
+        "name": "UDP Message",
+        "uuid": "com.hotspot.streamdock.network.udp",
+        "plugin": "",
+        "tooltip": "Send a text message to a UDP address",
+        "icon": "opendeck/keys/udp.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": true,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/udp.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "UDP Message",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      }
+    ]
+  },
+  "Apps & Websites": {
+    "icon": null,
+    "actions": [
+      {
+        "name": "Open App",
+        "uuid": "opendeck.m18.open-apps",
+        "plugin": "",
+        "tooltip": "Launch or switch to an app; the key shows the app's icon",
+        "icon": "opendeck/keys/open-app.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": true,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/open-app.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Open App",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Open File or Folder",
+        "uuid": "com.hotspot.streamdock.system.open",
+        "plugin": "",
+        "tooltip": "Open a file, folder, or app with its default handler",
+        "icon": "opendeck/keys/open-file.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": true,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/open-file.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Open File or Folder",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Open Website",
+        "uuid": "com.hotspot.streamdock.system.website",
+        "plugin": "",
+        "tooltip": "Open a web address in the default browser",
+        "icon": "opendeck/keys/open-website.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": true,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/open-website.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Open Website",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Quit App",
+        "uuid": "com.hotspot.streamdock.system.close",
+        "plugin": "",
+        "tooltip": "Quit an app by name",
+        "icon": "opendeck/keys/quit-app.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": true,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/quit-app.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Quit App",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Calculator",
+        "uuid": "com.hotspot.streamdock.quicktool.calculator",
+        "plugin": "",
+        "tooltip": "Open Calculator",
+        "icon": "opendeck/keys/calculator.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": true,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/calculator.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Calculator",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Mail",
+        "uuid": "com.hotspot.streamdock.quicktool.mail",
+        "plugin": "",
+        "tooltip": "Open Mail",
+        "icon": "opendeck/keys/mail.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": true,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/mail.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Mail",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Music",
+        "uuid": "com.hotspot.streamdock.quicktool.music",
+        "plugin": "",
+        "tooltip": "Open Music",
+        "icon": "opendeck/keys/music-app.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": true,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/music-app.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Music",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Activity Monitor",
+        "uuid": "com.hotspot.streamdock.hotkey.quicktool.taskmanager",
+        "plugin": "",
+        "tooltip": "Open Activity Monitor",
+        "icon": "opendeck/keys/activity-monitor.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": true,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/activity-monitor.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Activity Monitor",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "System Settings",
+        "uuid": "com.hotspot.streamdock.quicktool.controlpanel",
+        "plugin": "",
+        "tooltip": "Open System Settings",
+        "icon": "opendeck/keys/system-settings.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": true,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/system-settings.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "System Settings",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Safari",
+        "uuid": "com.hotspot.streamdock.quicktool.homepage",
+        "plugin": "",
+        "tooltip": "Open Safari",
+        "icon": "opendeck/keys/safari.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": true,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/safari.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Safari",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Open App (VSD Craft)",
+        "uuid": "com.hotspot.streamdock.system.openApps",
+        "plugin": "",
+        "tooltip": "Open an app",
+        "icon": "opendeck/keys/open-app.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": false,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/open-app.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Open App (VSD Craft)",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      }
+    ]
+  },
+  "Browser": {
+    "icon": null,
+    "actions": [
+      {
+        "name": "Back",
+        "uuid": "com.hotspot.streamdock.hotkey.browser.back",
+        "plugin": "",
+        "tooltip": "Go back a page (⌘[)",
+        "icon": "opendeck/keys/browser-back.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": true,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/browser-back.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Back",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Forward",
+        "uuid": "com.hotspot.streamdock.hotkey.browser.forward",
+        "plugin": "",
+        "tooltip": "Go forward a page (⌘])",
+        "icon": "opendeck/keys/browser-forward.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": true,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/browser-forward.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Forward",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Reload",
+        "uuid": "com.hotspot.streamdock.hotkey.browser.refresh",
+        "plugin": "",
+        "tooltip": "Reload the page (⌘R)",
+        "icon": "opendeck/keys/browser-reload.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": true,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/browser-reload.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Reload",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Bookmark Page",
+        "uuid": "com.hotspot.streamdock.hotkey.browser.collect",
+        "plugin": "",
+        "tooltip": "Bookmark the current page (⌘D)",
+        "icon": "opendeck/keys/bookmark.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": true,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/bookmark.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Bookmark Page",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      }
+    ]
+  },
+  "Premiere Pro": {
+    "icon": null,
+    "actions": [
+      {
+        "name": "Play",
+        "uuid": "com.hotspot.streamdock.hotkey.pr.play",
+        "plugin": "",
+        "tooltip": "Play or stop the timeline (Space)",
+        "icon": "opendeck/keys/pr-play.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": true,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/pr-play.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Play",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Add Edit",
+        "uuid": "com.hotspot.streamdock.hotkey.pr.addEdit",
+        "plugin": "",
+        "tooltip": "Split clips at the playhead (⌘K)",
+        "icon": "opendeck/keys/pr-add-edit.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": true,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/pr-add-edit.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Add Edit",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Razor Tool",
+        "uuid": "com.hotspot.streamdock.hotkey.pr.razor",
+        "plugin": "",
+        "tooltip": "Select the Razor tool (C)",
+        "icon": "opendeck/keys/pr-razor.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": true,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/pr-razor.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Razor Tool",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Ripple Edit Tool",
+        "uuid": "com.hotspot.streamdock.hotkey.pr.rippleEditingTools",
+        "plugin": "",
+        "tooltip": "Select the Ripple Edit tool (B)",
+        "icon": "opendeck/keys/pr-ripple.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": true,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/pr-ripple.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Ripple Edit Tool",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Pen Tool",
+        "uuid": "com.hotspot.streamdock.hotkey.pr.penTool",
+        "plugin": "",
+        "tooltip": "Select the Pen tool (P)",
+        "icon": "opendeck/keys/pr-pen.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": true,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/pr-pen.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Pen Tool",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Rectangle Tool",
+        "uuid": "com.hotspot.streamdock.hotkey.pr.rectangleTool",
+        "plugin": "",
+        "tooltip": "Select the Rectangle tool (Q)",
+        "icon": "opendeck/keys/pr-rectangle.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": true,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/pr-rectangle.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Rectangle Tool",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Add Marker",
+        "uuid": "com.hotspot.streamdock.hotkey.pr.addMarker",
+        "plugin": "",
+        "tooltip": "Add a marker (M)",
+        "icon": "opendeck/keys/pr-marker.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": true,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/pr-marker.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Add Marker",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Effects Panel",
+        "uuid": "com.hotspot.streamdock.hotkey.pr.effectsPanel",
+        "plugin": "",
+        "tooltip": "Show the Effects panel (⇧7)",
+        "icon": "opendeck/keys/pr-effects.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": true,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/pr-effects.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Effects Panel",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Fit Timeline",
+        "uuid": "com.hotspot.streamdock.pr.action5",
+        "plugin": "",
+        "tooltip": "Zoom the timeline to fit the sequence (\\)",
+        "icon": "opendeck/keys/pr-fit.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": true,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/pr-fit.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Fit Timeline",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Toggle Full Screen",
+        "uuid": "com.hotspot.streamdock.hotkey.pr.toggleFullScreen",
+        "plugin": "",
+        "tooltip": "Toggle full-screen playback (⌃`)",
+        "icon": "opendeck/keys/pr-fullscreen.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": true,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/pr-fullscreen.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Toggle Full Screen",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Cut",
+        "uuid": "com.hotspot.streamdock.hotkey.pr.cut",
+        "plugin": "",
+        "tooltip": "Cut (⌘X)",
+        "icon": "opendeck/keys/pr-cut.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": true,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/pr-cut.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Cut",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Copy",
+        "uuid": "com.hotspot.streamdock.hotkey.pr.copy",
+        "plugin": "",
+        "tooltip": "Copy (⌘C)",
+        "icon": "opendeck/keys/pr-copy.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": true,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/pr-copy.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Copy",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Paste",
+        "uuid": "com.hotspot.streamdock.hotkey.pr.paste",
+        "plugin": "",
+        "tooltip": "Paste (⌘V)",
+        "icon": "opendeck/keys/pr-paste.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": true,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/pr-paste.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Paste",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Delete",
+        "uuid": "com.hotspot.streamdock.hotkey.pr.delete",
+        "plugin": "",
+        "tooltip": "Delete the selection (⌦)",
+        "icon": "opendeck/keys/pr-delete.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": true,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/pr-delete.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Delete",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Undo",
+        "uuid": "com.hotspot.streamdock.hotkey.pr.undo",
+        "plugin": "",
+        "tooltip": "Undo (⌘Z)",
+        "icon": "opendeck/keys/pr-undo.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": true,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/pr-undo.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Undo",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      }
+    ]
+  },
+  "Keyboard & Text": {
+    "icon": null,
+    "actions": [
+      {
+        "name": "Hotkey",
+        "uuid": "com.hotspot.streamdock.system.hotkey",
+        "plugin": "",
+        "tooltip": "Press a keyboard shortcut",
+        "icon": "opendeck/keys/hotkey.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": true,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/hotkey.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Hotkey",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Hotkey Switch",
+        "uuid": "opendeck.m18.hotkey-switch",
+        "plugin": "",
+        "tooltip": "Alternate between shortcuts on each press",
+        "icon": "opendeck/keys/hotkey-switch.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": true,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/hotkey-switch.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Hotkey Switch 1",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          },
+          {
+            "image": "opendeck/keys/hotkey-switch.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Hotkey Switch 2",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Super Hotkey",
+        "uuid": "opendeck.m18.super-hotkeys",
+        "plugin": "",
+        "tooltip": "Run one key sequence on press and another on release",
+        "icon": "opendeck/keys/super-hotkey.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": true,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/super-hotkey.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Super Hotkey",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Super Hotkey Switch",
+        "uuid": "opendeck.m18.super-hotkey-switch",
+        "plugin": "",
+        "tooltip": "Alternate between press/release sequences on each press",
+        "icon": "opendeck/keys/super-hotkey-switch.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": true,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/super-hotkey-switch.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Super Hotkey Switch 1",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          },
+          {
+            "image": "opendeck/keys/super-hotkey-switch.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Super Hotkey Switch 2",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Type Text",
+        "uuid": "com.hotspot.streamdock.system.text",
+        "plugin": "",
+        "tooltip": "Type a saved piece of text",
+        "icon": "opendeck/keys/type-text.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": true,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/type-text.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Type Text",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Type Password",
+        "uuid": "com.hotspot.streamdock.system.password",
+        "plugin": "",
+        "tooltip": "Type a saved password",
+        "icon": "opendeck/keys/password.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": true,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/password.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Type Password",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Emoji",
+        "uuid": "com.mirabox.streamdock.emoji.emoji",
+        "plugin": "",
+        "tooltip": "Type a saved emoji, or open the emoji picker",
+        "icon": "opendeck/keys/emoji.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": true,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/emoji.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Emoji",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Mouse Action",
+        "uuid": "com.hotspot.streamdock.mouse.event",
+        "plugin": "",
+        "tooltip": "Click, move, scroll, or drag the pointer",
+        "icon": "opendeck/keys/mouse.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": true,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/mouse.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Mouse Action",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Send Emoji",
+        "uuid": "com.mirabox.streamdock.emoji.emoji_send",
+        "plugin": "",
+        "tooltip": "Type a saved emoji",
+        "icon": "opendeck/keys/emoji.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": false,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/emoji.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Send Emoji",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Hotkey Switch (VSD Craft)",
+        "uuid": "com.hotspot.streamdock.system.hotkeySwitch",
+        "plugin": "",
+        "tooltip": "Alternate between shortcuts on each press",
+        "icon": "opendeck/keys/hotkey-switch.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": false,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/hotkey-switch.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Hotkey Switch (VSD Craft) 1",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          },
+          {
+            "image": "opendeck/keys/hotkey-switch.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Hotkey Switch (VSD Craft) 2",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      },
+      {
+        "name": "Super Hotkey (VSD Craft)",
+        "uuid": "com.hotspot.streamdock.system.super.hotkey",
+        "plugin": "",
+        "tooltip": "Run one key sequence on press and another on release",
+        "icon": "opendeck/keys/super-hotkey.svg",
+        "disable_automatic_states": false,
+        "visible_in_action_list": false,
+        "supported_in_multi_actions": true,
+        "property_inspector": "",
+        "controllers": [
+          "Keypad"
+        ],
+        "encoder": null,
+        "states": [
+          {
+            "image": "opendeck/keys/super-hotkey.svg",
+            "image_scale": 100,
+            "background_colour": "#000000",
+            "name": "Super Hotkey (VSD Craft)",
+            "text": "",
+            "show": true,
+            "colour": "#FFFFFF",
+            "stroke_colour": "#000000",
+            "alignment": "bottom",
+            "family": "Liberation Sans",
+            "style": "Regular",
+            "size": 16,
+            "stroke_size": 3,
+            "underline": false
+          }
+        ]
+      }
+    ]
+  }
+}

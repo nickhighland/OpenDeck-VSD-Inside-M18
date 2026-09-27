@@ -1,15 +1,17 @@
-<script>
-	import Question from "phosphor-svelte/lib/Question";
+<script lang="ts">
+	import Info from "phosphor-svelte/lib/Info";
 
 	let show = false;
 </script>
 
 <!-- svelte-ignore a11y-no-static-element-interactions -->
-<div class="inline-block cursor-help" on:mouseenter={() => (show = true)} on:mouseleave={() => (show = false)}>
-	<Question size="24" class="text-neutral-500" />
+<span class="relative inline-flex align-middle" on:mouseenter={() => (show = true)} on:mouseleave={() => (show = false)}>
+	<button type="button" class="inline-flex text-ink-faint transition-colors hover:text-ink-muted" aria-label="More information" on:focus={() => (show = true)} on:blur={() => (show = false)}>
+		<Info size="15" />
+	</button>
 	{#if show}
-		<div class="absolute mt-2 p-2 w-96 text-xs text-neutral-300 bg-neutral-700 border border-neutral-600 rounded-lg">
+		<span class="absolute bottom-full left-1/2 z-50 mb-2 w-72 -translate-x-1/2 animate-fade-in rounded-lg border border-line-strong bg-overlay px-3 py-2 text-xs leading-relaxed font-normal text-ink-muted shadow-[var(--shadow-pop)]" role="tooltip">
 			<slot />
-		</div>
+		</span>
 	{/if}
-</div>
+</span>

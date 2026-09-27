@@ -9,6 +9,7 @@
 
 	import { t } from "$lib/i18n";
 	import { inspectedInstance, inspectedParentAction } from "$lib/propertyInspector";
+	import { attempt } from "$lib/toast";
 
 	import { invoke } from "@tauri-apps/api/core";
 
@@ -25,11 +26,18 @@
 	const M18_BOTTOM_KEYS = 3;
 	$: isM18 = device.id.startsWith("18-");
 
+	/** Key size adapts to the space available, within comfortable limits. */
+	let areaWidth = 900;
+	let areaHeight = 600;
+	$: keySize = Math.round(Math.max(64, Math.min(104, (areaWidth - 150) / 5.9, (areaHeight - 170) / 4.35)));
+	$: keyGap = Math.round(keySize * 0.17);
+
 	function handleDragStart({ dataTransfer }: DragEvent, controller: string, position: number) {
 		if (!dataTransfer) return;
 		dataTransfer.effectAllowed = "move";
 		dataTransfer.setData("controller", controller);
 		dataTransfer.setData("position", position.toString());
+		dataTransfer.setData("profile", profile.id);
 	}
 
 	function handleDragOver(event: DragEvent) {
@@ -43,35 +51,39 @@
 		let context = { device: device.id, profile: profile.id, controller, position };
 		let array = controller == "Encoder" ? profile.sliders : controller == "Infobar" ? profile.infobars : profile.keys;
 		if (dataTransfer?.getData("action")) {
-			let action = JSON.parse(dataTransfer?.getData("action"));
+			let action = JSON.parse(dataTransfer.getData("action"));
 			if (array[position]) {
 				return;
 			}
-			array[position] = await invoke("create_instance", { context, action });
+			const created = await attempt("Could not add the action", () => invoke<ActionInstance | null>("create_instance", { context, action }));
+			if (created === undefined) return;
+			array[position] = created;
 			profile = profile;
+			if (created) $inspectedInstance = created.context;
 		} else if (dataTransfer?.getData("controller")) {
-			let oldController = dataTransfer?.getData("controller");
+			let oldController = dataTransfer.getData("controller");
 			let oldArray = oldController == "Encoder" ? profile.sliders : oldController == "Infobar" ? profile.infobars : profile.keys;
-			let oldPosition = parseInt(dataTransfer?.getData("position"));
-			if (oldController == controller && oldPosition == position) return;
+			let oldPosition = parseInt(dataTransfer.getData("position"));
+			// A key dragged in from another page (by hovering a page tab) keeps
+			// its original page as the source.
+			let oldProfile = dataTransfer.getData("profile") || profile.id;
+			if (oldController == controller && oldPosition == position && oldProfile == profile.id) return;
+			const source = { device: device.id, profile: oldProfile, controller: oldController, position: oldPosition };
 			if (isM18 && controller == "Keypad" && oldController == "Keypad" && array[position]) {
-				const swapped: { source: ActionInstance; destination: ActionInstance } = await invoke("swap_m18_instances", {
-					source: { device: device.id, profile: profile.id, controller: oldController, position: oldPosition },
-					destination: context,
-				});
+				if (oldProfile != profile.id) return;
+				const swapped = await attempt("Could not swap the keys", () =>
+					invoke<{ source: ActionInstance; destination: ActionInstance }>("swap_m18_instances", { source, destination: context }),
+				);
+				if (!swapped) return;
 				oldArray[oldPosition] = swapped.source;
 				array[position] = swapped.destination;
 				profile = profile;
 				return;
 			}
-			let response: ActionInstance = await invoke("move_instance", {
-				source: { device: device.id, profile: profile.id, controller: oldController, position: oldPosition },
-				destination: context,
-				retain: false,
-			});
-			if (response) {
-				array[position] = response;
-				oldArray[oldPosition] = null;
+			const moved = await attempt("Could not move the key", () => invoke<ActionInstance | null>("move_instance", { source, destination: context, retain: false }));
+			if (moved) {
+				array[position] = moved;
+				if (oldProfile == profile.id) oldArray[oldPosition] = null;
 				profile = profile;
 			}
 		}
@@ -82,20 +94,19 @@
 
 		if (item.type == "action") {
 			if (array[destination.position]) return;
-			array[destination.position] = await invoke("create_instance", { context: destination, action: item.action });
+			const created = await attempt("Could not paste the action", () => invoke<ActionInstance | null>("create_instance", { context: destination, action: item.action }));
+			if (created === undefined) return;
+			array[destination.position] = created;
 			profile = profile;
 			return;
 		}
 
-		let response: ActionInstance = await invoke("move_instance", { source: item.source, destination, retain: true });
-		if (response) {
-			array[destination.position] = response;
+		const copied = await attempt("Could not paste the key", () => invoke<ActionInstance | null>("move_instance", { source: item.source, destination, retain: true }));
+		if (copied) {
+			array[destination.position] = copied;
 			profile = profile;
 		}
 	}
-
-	$: overflowsX = Math.max(isM18 ? M18_LCD_COLUMNS : device.columns, device.encoders, device.touchpoints) > 8;
-	$: overflowsY = (isM18 ? 4 : device.rows) + Math.min(device.encoders, 1) + Math.min(device.touchpoints, 1) > 4;
 
 	// Grid navigation: track focused cell and compute row lengths for arrow key movement.
 	let focusedRow = 0;
@@ -110,7 +121,6 @@
 			];
 	$: encoderRowIndex = device.rows;
 	$: touchpointRowIndex = device.rows + (device.encoders > 0 ? 1 : 0);
-	$: keypadRowWidth = device.columns * 132;
 
 	function flatIndexFromRowCol(row: number, col: number): number {
 		let index = 0;
@@ -183,60 +193,64 @@
 {#key device}
 	<span id="grid-description" class="sr-only">{$t("device_view.grid_description")}</span>
 	<div
-		class="flex flex-col justify-center grow px-16 py-6 overflow-auto"
-		class:items-center={device.columns <= 9}
+		class="flex min-h-0 flex-1 items-center justify-center overflow-auto px-8 py-6"
 		class:hidden={$inspectedParentAction || selectedDevice != device.id}
-		class:device-fade-x={overflowsX && !overflowsY}
-		class:device-fade-y={overflowsY && !overflowsX}
-		class:device-fade-xy={overflowsX && overflowsY}
+		bind:clientWidth={areaWidth}
+		bind:clientHeight={areaHeight}
 		role="grid"
 		aria-label={device.name}
 		aria-describedby="grid-description"
 		tabindex="-1"
 		on:click={() => inspectedInstance.set(null)}
-		on:keyup={() => inspectedInstance.set(null)}
+		on:keyup={(event) => {
+			if (event.key === "Escape") inspectedInstance.set(null);
+		}}
 		on:keydown|capture={handleGridKeydown}
 		on:focusin={handleGridFocusin}
 	>
 		{#if isM18}
-			<div class="flex flex-col" role="rowgroup">
-				{#each { length: M18_LCD_ROWS } as _, r}
-					<div class="flex flex-row" role="row">
-						{#each { length: M18_LCD_COLUMNS } as _, c}
-							<Key
-								context={{ device: device.id, profile: profile.id, controller: "Keypad", position: r * M18_LCD_COLUMNS + c }}
-								bind:inslot={profile.keys[r * M18_LCD_COLUMNS + c]}
-								on:dragover={handleDragOver}
-								on:drop={(event) => handleDrop(event, "Keypad", r * M18_LCD_COLUMNS + c)}
-								on:dragstart={(event) => handleDragStart(event, "Keypad", r * M18_LCD_COLUMNS + c)}
-								{handlePaste}
-								label={`LCD ${r * M18_LCD_COLUMNS + c + 1}`}
-								tabindex={focusedRow === r && focusedCol === c ? 0 : -1}
-							/>
-						{/each}
-					</div>
-				{/each}
-			</div>
+			<div class="m18-body relative" style={`--key-size: ${keySize}px; --key-gap: ${keyGap}px;`}>
+				<div class="m18-lcd" role="rowgroup">
+					{#each { length: M18_LCD_ROWS } as _, r}
+						<div class="flex flex-row" style={`gap: ${keyGap}px;`} role="row">
+							{#each { length: M18_LCD_COLUMNS } as _, c}
+								<Key
+									context={{ device: device.id, profile: profile.id, controller: "Keypad", position: r * M18_LCD_COLUMNS + c }}
+									bind:inslot={profile.keys[r * M18_LCD_COLUMNS + c]}
+									on:dragover={handleDragOver}
+									on:drop={(event) => handleDrop(event, "Keypad", r * M18_LCD_COLUMNS + c)}
+									on:dragstart={(event) => handleDragStart(event, "Keypad", r * M18_LCD_COLUMNS + c)}
+									{handlePaste}
+									displaySize={keySize}
+									label={`Key ${r * M18_LCD_COLUMNS + c + 1}`}
+									tabindex={focusedRow === r && focusedCol === c ? 0 : -1}
+								/>
+							{/each}
+						</div>
+					{/each}
+				</div>
 
-			<div class="m18-bottom-row flex flex-row justify-center" role="row" aria-label="M18 bottom buttons">
-				{#each { length: M18_BOTTOM_KEYS } as _, i}
-					<Key
-						context={{ device: device.id, profile: profile.id, controller: "Keypad", position: M18_LCD_ROWS * M18_LCD_COLUMNS + i }}
-						bind:inslot={profile.keys[M18_LCD_ROWS * M18_LCD_COLUMNS + i]}
-						on:dragover={handleDragOver}
-						on:drop={(event) => handleDrop(event, "Keypad", M18_LCD_ROWS * M18_LCD_COLUMNS + i)}
-						on:dragstart={(event) => handleDragStart(event, "Keypad", M18_LCD_ROWS * M18_LCD_COLUMNS + i)}
-						{handlePaste}
-						m18Bottom
-						label={`Bottom ${i + 1}`}
-						tabindex={focusedRow === M18_LCD_ROWS && focusedCol === i ? 0 : -1}
-					/>
-				{/each}
+				<div class="m18-bottom-row flex flex-row justify-center" style={`gap: ${Math.round(keySize * 0.9)}px;`} role="row" aria-label="M18 bottom buttons">
+					{#each { length: M18_BOTTOM_KEYS } as _, i}
+						<Key
+							context={{ device: device.id, profile: profile.id, controller: "Keypad", position: M18_LCD_ROWS * M18_LCD_COLUMNS + i }}
+							bind:inslot={profile.keys[M18_LCD_ROWS * M18_LCD_COLUMNS + i]}
+							on:dragover={handleDragOver}
+							on:drop={(event) => handleDrop(event, "Keypad", M18_LCD_ROWS * M18_LCD_COLUMNS + i)}
+							on:dragstart={(event) => handleDragStart(event, "Keypad", M18_LCD_ROWS * M18_LCD_COLUMNS + i)}
+							{handlePaste}
+							m18Bottom
+							displaySize={keySize}
+							label={`Button ${i + 1}`}
+							tabindex={focusedRow === M18_LCD_ROWS && focusedCol === i ? 0 : -1}
+						/>
+					{/each}
+				</div>
 			</div>
 		{:else}
-			<div class="flex flex-col" role="rowgroup">
+			<div class="flex flex-col" style={`gap: ${keyGap}px;`} role="rowgroup">
 				{#each { length: device.rows } as _, r}
-					<div class="flex flex-row" role="row">
+					<div class="flex flex-row" style={`gap: ${keyGap}px;`} role="row">
 						{#each { length: device.columns } as _, c}
 							<Key
 								context={{ device: device.id, profile: profile.id, controller: "Keypad", position: r * device.columns + c }}
@@ -246,38 +260,35 @@
 								on:dragstart={(event) => handleDragStart(event, "Keypad", r * device.columns + c)}
 								{handlePaste}
 								size={device.id.startsWith("sd-") && device.rows == 4 && device.columns == 8 ? 192 : 144}
+								displaySize={keySize}
 								label="{$t('device_view.key')} {String.fromCharCode(65 + r)}{c + 1}"
 								tabindex={focusedRow === r && focusedCol === c ? 0 : -1}
 							/>
 						{/each}
 					</div>
 				{/each}
-			</div>
-		{/if}
 
-		{#if !isM18}
-			<div class="flex flex-row justify-between" role="row" style={`width: ${keypadRowWidth}px;`}>
-				{#each { length: device.encoders } as _, i}
-					<Key
-						context={{ device: device.id, profile: profile.id, controller: "Encoder", position: i }}
-						bind:inslot={profile.sliders[i]}
-						on:dragover={handleDragOver}
-						on:drop={(event) => handleDrop(event, "Encoder", i)}
-						on:dragstart={(event) => handleDragStart(event, "Encoder", i)}
-						{handlePaste}
-						size={device.id.startsWith("sd-") && device.rows == 4 && device.columns == 8 ? 192 : 144}
-						label="{$t('device_view.encoder')} {i + 1}"
-						tabindex={focusedRow === encoderRowIndex && focusedCol === i ? 0 : -1}
-					/>
-				{/each}
-			</div>
+				<div class="flex flex-row justify-between" role="row">
+					{#each { length: device.encoders } as _, i}
+						<Key
+							context={{ device: device.id, profile: profile.id, controller: "Encoder", position: i }}
+							bind:inslot={profile.sliders[i]}
+							on:dragover={handleDragOver}
+							on:drop={(event) => handleDrop(event, "Encoder", i)}
+							on:dragstart={(event) => handleDragStart(event, "Encoder", i)}
+							{handlePaste}
+							displaySize={keySize}
+							label="{$t('device_view.encoder')} {i + 1}"
+							tabindex={focusedRow === encoderRowIndex && focusedCol === i ? 0 : -1}
+						/>
+					{/each}
+				</div>
 
-			<div class="flex flex-row items-center" role="row">
-				{#each { length: device.touchpoints } as _, i}
-					<!-- On the Stream Deck Neo, the infobar display sits physically between the two touchpoints. -->
-					{#if device.infobars > 0 && i === 1}
-						{#each { length: device.infobars } as _, j}
-							<div class="px-3.5 py-[3.5px]">
+				<div class="flex flex-row items-center" style={`gap: ${keyGap}px;`} role="row">
+					{#each { length: device.touchpoints } as _, i}
+						<!-- On the Stream Deck Neo, the infobar display sits physically between the two touchpoints. -->
+						{#if device.infobars > 0 && i === 1}
+							{#each { length: device.infobars } as _, j}
 								<Key
 									context={{ device: device.id, profile: profile.id, controller: "Infobar", position: j }}
 									bind:inslot={profile.infobars[j]}
@@ -285,47 +296,60 @@
 									on:drop={(event) => handleDrop(event, "Infobar", j)}
 									on:dragstart={(event) => handleDragStart(event, "Infobar", j)}
 									{handlePaste}
-									size={device.id.startsWith("sd-") && device.rows == 4 && device.columns == 8 ? 192 : 144}
+									displaySize={keySize}
 									width={248}
 									height={58}
 								/>
-							</div>
-						{/each}
-					{/if}
-					<Key
-						context={{ device: device.id, profile: profile.id, controller: "Keypad", position: device.rows * device.columns + i }}
-						bind:inslot={profile.keys[device.rows * device.columns + i]}
-						on:dragover={handleDragOver}
-						on:drop={(event) => handleDrop(event, "Keypad", device.rows * device.columns + i)}
-						on:dragstart={(event) => handleDragStart(event, "Keypad", device.rows * device.columns + i)}
-						{handlePaste}
-						size={device.id.startsWith("sd-") && device.rows == 4 && device.columns == 8 ? 192 : 144}
-						isTouchPoint
-						label="{$t('device_view.touchpoint')} {i + 1}"
-						tabindex={focusedRow === touchpointRowIndex && focusedCol === i ? 0 : -1}
-					/>
-				{/each}
+							{/each}
+						{/if}
+						<Key
+							context={{ device: device.id, profile: profile.id, controller: "Keypad", position: device.rows * device.columns + i }}
+							bind:inslot={profile.keys[device.rows * device.columns + i]}
+							on:dragover={handleDragOver}
+							on:drop={(event) => handleDrop(event, "Keypad", device.rows * device.columns + i)}
+							on:dragstart={(event) => handleDragStart(event, "Keypad", device.rows * device.columns + i)}
+							{handlePaste}
+							displaySize={keySize}
+							isTouchPoint
+							label="{$t('device_view.touchpoint')} {i + 1}"
+							tabindex={focusedRow === touchpointRowIndex && focusedCol === i ? 0 : -1}
+						/>
+					{/each}
+				</div>
 			</div>
 		{/if}
 	</div>
 {/key}
 
 <style>
-	.device-fade-x {
-		mask-image: linear-gradient(to right, transparent, black 7.5rem, black calc(100% - 7.5rem), transparent);
+	/* The M18: a dark machined body with the LCD field set into it. */
+	.m18-body {
+		padding: calc(var(--key-gap) * 1.6) calc(var(--key-gap) * 1.8) calc(var(--key-gap) * 1.4);
+		border-radius: calc(var(--key-size) * 0.42);
+		background:
+			radial-gradient(120% 90% at 30% 0%, rgb(255 255 255 / 0.07), transparent 55%),
+			linear-gradient(180deg, #23262d 0%, #17191e 55%, #111317 100%);
+		box-shadow:
+			inset 0 1px 0 rgb(255 255 255 / 0.12),
+			inset 0 -1px 0 rgb(0 0 0 / 0.6),
+			0 0 0 1px rgb(0 0 0 / 0.6),
+			0 30px 60px -20px rgb(0 0 0 / 0.85),
+			0 12px 24px -12px rgb(0 0 0 / 0.7);
 	}
-	.device-fade-y {
-		mask-image: linear-gradient(to bottom, transparent, black 7.5rem, black calc(100% - 7.5rem), transparent);
-	}
-	.device-fade-xy {
-		mask-image:
-			linear-gradient(to right, transparent, black 7.5rem, black calc(100% - 7.5rem), transparent),
-			linear-gradient(to bottom, transparent, black 7.5rem, black calc(100% - 7.5rem), transparent);
-		mask-composite: intersect;
+	.m18-lcd {
+		display: flex;
+		flex-direction: column;
+		gap: var(--key-gap);
+		padding: calc(var(--key-gap) * 0.9);
+		border-radius: calc(var(--key-size) * 0.3);
+		background: linear-gradient(180deg, #07080a, #0b0c0f);
+		box-shadow:
+			inset 0 2px 6px rgb(0 0 0 / 0.9),
+			inset 0 0 0 1px rgb(0 0 0 / 0.8),
+			0 1px 0 rgb(255 255 255 / 0.06);
 	}
 	.m18-bottom-row {
-		margin-top: 1.25rem;
-		padding-top: 1rem;
-		border-top: 1px solid rgb(64 64 64);
+		margin-top: calc(var(--key-gap) * 1.3);
+		padding-top: calc(var(--key-gap) * 0.4);
 	}
 </style>

@@ -2,35 +2,55 @@
 	import type { ActionInstance } from "$lib/ActionInstance";
 	import type { DeviceInfo } from "$lib/DeviceInfo";
 
+	import Crosshair from "phosphor-svelte/lib/Crosshair";
+	import Eye from "phosphor-svelte/lib/Eye";
+	import EyeSlash from "phosphor-svelte/lib/EyeSlash";
+	import FolderOpen from "phosphor-svelte/lib/FolderOpen";
+	import Info from "phosphor-svelte/lib/Info";
+	import Plus from "phosphor-svelte/lib/Plus";
+	import Trash from "phosphor-svelte/lib/Trash";
+	import Warning from "phosphor-svelte/lib/Warning";
+	import ShortcutRecorder from "./ShortcutRecorder.svelte";
+
+	import { actionIndex } from "$lib/catalog";
+	import { COMING_SOON } from "$lib/actionLibrary";
+	import { pageLabel, pageSets } from "$lib/pages";
+	import { describeSequenceText } from "$lib/shortcuts";
+
 	import { invoke } from "@tauri-apps/api/core";
 	import { open } from "@tauri-apps/plugin-dialog";
-	import { onMount } from "svelte";
+	import { onDestroy, onMount } from "svelte";
 
 	export let instance: ActionInstance;
 	export let device: DeviceInfo;
 
 	let context = "";
 	let settings: any = {};
-	let pages: { id: string; name: string; profile: string }[] = [];
 	let audioOutputDevices: { id: string; name: string }[] = [];
-	let saving = false;
 	let mousePositionError = "";
+	let revealPassword = false;
 
 	$: if (instance && instance.context !== context) {
+		flushPending();
 		context = instance.context;
 		settings = structuredClone(instance.settings ?? {});
+		revealPassword = false;
 	}
+
+	$: pages = $pageSets[device?.id]?.pages ?? [];
 
 	$: uuid = instance?.action?.uuid ?? "";
 	$: isOpenApps = uuid == "opendeck.m18.open-apps";
 	$: isSuperHotkeys = uuid == "opendeck.m18.super-hotkeys";
-	$: isHotkeySwitch = uuid == "opendeck.m18.hotkey-switch";
+	$: isHotkeySwitch = uuid == "opendeck.m18.hotkey-switch" || uuid == "com.hotspot.streamdock.system.hotkeySwitch";
 	$: isSuperHotkeySwitch = uuid == "opendeck.m18.super-hotkey-switch";
 	$: isPageGoto = uuid == "opendeck.m18.page-goto";
 	$: isVsdHotkey = uuid == "com.hotspot.streamdock.system.hotkey";
 	$: isVsdSuperHotkey = uuid == "com.hotspot.streamdock.system.super.hotkey";
 	$: isFolderOpen = uuid == "com.hotspot.streamdock.profile.openchild";
 	$: isFolderBack = uuid == "com.hotspot.streamdock.profile.backtoparent";
+	$: isSceneShift = uuid == "com.hotspot.streamdock.profile.rotate";
+	$: isDelay = uuid == "com.hotspot.streamdock.multiactions.delay";
 	$: isUnsupportedVsd = uuid == "opendeck.m18.unsupported-vsd-action";
 	$: isVsdCoreAction = uuid.startsWith("com.hotspot.streamdock.") || uuid.startsWith("com.mirabox.streamdock.") || uuid.startsWith("com.streamdock.");
 	$: isTextAction = uuid == "com.hotspot.streamdock.system.text" || uuid == "com.hotspot.streamdock.plain.text";
@@ -40,396 +60,513 @@
 	$: isCloseAction = uuid == "com.hotspot.streamdock.system.close";
 	$: isUdpAction = uuid == "com.hotspot.streamdock.network.udp";
 	$: isSoundboardAction = uuid == "com.hotspot.streamdock.soundboard.playaudio";
-	$: isWorldTimeAction = uuid == "com.mirabox.streamdock.time.action1";
-	$: isTimerAction = uuid == "com.mirabox.streamdock.time.action2";
-	$: isCountdownAction = uuid == "com.mirabox.streamdock.time.action3";
-	$: isDateTimeAction = uuid == "com.mirabox.streamdock.dateTime.action1";
-	$: isWeatherAction = uuid == "com.hotspot.streamdock.weather.action1";
-	$: isMemoAction = uuid == "com.hotspot.streamdock.memo.action1" || uuid == "com.hotspot.streamdock.memo.action2";
-	$: isYoutubeAction = uuid == "com.hotspot.streamdock.youtube.chatmessage" || uuid == "com.hotspot.streamdock.youtube.viewers";
 	$: isBrightnessAction = uuid == "com.hotspot.streamdock.device.brightness";
 	$: isMultimediaAction = uuid == "com.hotspot.streamdock.system.multimedia";
 	$: isMouseEventAction = uuid == "com.hotspot.streamdock.mouse.event";
 	$: isMicrophoneAction = uuid == "com.hotspot.streamdock.quickcontrol.microphone";
+	$: isEmojiAction = uuid == "com.mirabox.streamdock.emoji.emoji" || uuid == "com.mirabox.streamdock.emoji.emoji_send";
+	$: libraryEntry = $actionIndex.get(uuid);
+	$: comingSoon = libraryEntry?.category === COMING_SOON || uuid.startsWith("com.mirabox.streamdock.screensaver.");
 
 	onMount(async () => {
 		try {
 			audioOutputDevices = await invoke<{ id: string; name: string }[]>("get_audio_output_devices");
 		} catch {}
-		if (device?.id) {
-			try {
-				const pageSet: { pages: { id: string; name: string; profile: string }[] } = await invoke("get_m18_pages", { device: device.id });
-				pages = pageSet.pages;
-			} catch {}
-		}
 	});
 
 	async function persist() {
 		if (!instance) return;
-		saving = true;
+		clearTimeout(pendingTimer);
+		pendingTimer = undefined;
+		const next = structuredClone(settings);
+		instance.settings = next;
 		try {
-			const next = structuredClone(settings);
-			instance.settings = next;
 			await invoke("set_instance_settings", { context: instance.context, settings: next });
-		} finally {
-			saving = false;
+		} catch (error) {
+			console.warn("Failed to save key settings", error);
 		}
 	}
 
-	function setText(key: string, event: Event) {
-		settings = { ...settings, [key]: (event.currentTarget as HTMLInputElement).value, ...(key === "down" ? { display: "" } : {}) };
-		void persist();
+	// Typing saves shortly after the last keystroke instead of on every one.
+	let pendingTimer: ReturnType<typeof setTimeout> | undefined;
+	function persistSoon() {
+		clearTimeout(pendingTimer);
+		pendingTimer = setTimeout(() => void persist(), 300);
+	}
+	function flushPending() {
+		if (pendingTimer !== undefined) void persist();
+	}
+	onDestroy(flushPending);
+
+	function update(patch: Record<string, unknown>, immediate = true) {
+		settings = { ...settings, ...patch };
+		if (immediate) void persist();
+		else persistSoon();
 	}
 
-	function textValue(keys: string[], fallback = ""): string {
+	// Takes the settings explicitly so templates re-render when they change.
+	function textValue(source: any, keys: string[], fallback = ""): string {
 		for (const key of keys) {
-			if (typeof settings?.[key] === "string") return settings[key];
+			if (typeof source?.[key] === "string") return source[key];
 		}
 		return fallback;
 	}
 
-	function setTextFor(keys: string[], fallbackKey: string, event: Event) {
+	/** Write to whichever of the accepted keys the imported settings already use. */
+	function setTextFor(keys: string[], fallbackKey: string, value: string) {
 		const key = keys.find((candidate) => Object.prototype.hasOwnProperty.call(settings ?? {}, candidate)) ?? fallbackKey;
-		setText(key, event);
+		update({ [key]: value }, false);
 	}
 
-	function setIndex(event: Event) {
-		settings = { ...settings, index: Number((event.currentTarget as HTMLSelectElement).value) };
-		void persist();
-	}
-
-	function setPage(event: Event) {
-		const page = pages[Number((event.currentTarget as HTMLSelectElement).value)];
-		settings = { ...settings, page: page?.profile ?? "", pageIndex: page ? pages.indexOf(page) : 0 };
-		void persist();
-	}
-
-	function setFolderTarget(event: Event) {
-		const page = pages[Number((event.currentTarget as HTMLSelectElement).value)];
-		settings = { ...settings, profile: page?.profile ?? "" };
-		void persist();
-	}
-
-	function setShowPageNumber(event: Event) {
-		settings = { ...settings, showPageNumber: (event.currentTarget as HTMLInputElement).checked };
-		void persist();
-	}
-
-	function setVsdSetting(key: string, event: Event, kind: "text" | "number" | "boolean") {
-		const field = event.currentTarget as HTMLInputElement;
-		const value = kind === "boolean" ? field.checked : kind === "number" ? Number(field.value) : field.value;
-		settings = { ...settings, [key]: value };
-		void persist();
-	}
-
-	function setVsdJsonSetting(key: string, event: Event) {
-		try {
-			const value = JSON.parse((event.currentTarget as HTMLTextAreaElement).value);
-			settings = { ...settings, [key]: value };
-			void persist();
-		} catch {
-			// Keep the last valid setting until the edited JSON parses.
-		}
-	}
-
-	async function choosePath(key: string, filters: { name: string; extensions: string[] }[] = []) {
-		const selected = await open({ multiple: false, directory: false, ...(filters.length ? { filters } : {}) });
-		if (typeof selected === "string") {
-			settings = { ...settings, [key]: selected };
-			await persist();
-		}
+	async function choosePath(key: string, filters: { name: string; extensions: string[] }[] = [], directory = false) {
+		const selected = await open({ multiple: false, directory, ...(filters.length ? { filters } : {}) });
+		if (typeof selected === "string") update({ [key]: selected });
 	}
 
 	function settingLabel(key: string): string {
 		return key.replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/^./, (letter) => letter.toUpperCase());
 	}
 
+	$: hotkeyList = (Array.isArray(settings.hotkeys) ? settings.hotkeys : []) as { down: string; up: string; display?: string }[];
 	function hotkeys(): { down: string; up: string; display?: string }[] {
-		return Array.isArray(settings.hotkeys) ? settings.hotkeys : [];
+		return hotkeyList;
 	}
 
-	function setHotkey(index: number, field: "down" | "up", event: Event) {
+	function setHotkey(index: number, patch: { down?: string; up?: string; display?: string }) {
 		const next = hotkeys().map((hotkey) => ({ ...hotkey }));
-		next[index] = { ...next[index], [field]: (event.currentTarget as HTMLInputElement).value, ...(field === "down" ? { display: "" } : {}) };
-		settings = { ...settings, hotkeys: next };
-		void persist();
+		next[index] = { ...next[index], ...patch };
+		update({ hotkeys: next });
 	}
 
-	function setMouseModifier(modifier: string, event: Event) {
-		const selected = new Set(Array.isArray(settings.modifiers) ? settings.modifiers : []);
-		const isChecked = (event.currentTarget as HTMLInputElement).checked;
-		isChecked ? selected.add(modifier.toLowerCase()) : selected.delete(modifier.toLowerCase());
-		settings = { ...settings, modifiers: [...selected] };
-		void persist();
+	function addHotkey() {
+		update({ hotkeys: [...hotkeys(), { down: "", up: "" }] });
+	}
+
+	function removeHotkey(index: number) {
+		const next = hotkeys().filter((_, hotkeyIndex) => hotkeyIndex !== index);
+		update({ hotkeys: next.length ? next : [{ down: "", up: "" }], index: Math.min(Number(settings.index ?? 0), Math.max(next.length - 1, 0)) });
+	}
+
+	function setMouseModifier(modifier: string, checked: boolean) {
+		const selected = new Set<string>(Array.isArray(settings.modifiers) ? settings.modifiers : []);
+		checked ? selected.add(modifier.toLowerCase()) : selected.delete(modifier.toLowerCase());
+		update({ modifiers: [...selected] });
 	}
 
 	async function captureMousePosition() {
 		mousePositionError = "";
 		try {
 			const [x, y] = await invoke<[number, number]>("get_mouse_position");
-			settings = { ...settings, x, y, coordinate: "absolute" };
-			await persist();
+			update({ x, y, coordinate: "absolute" });
 		} catch (error) {
 			mousePositionError = String(error);
 		}
 	}
 
-	function addHotkey() {
-		settings = { ...settings, hotkeys: [...hotkeys(), { down: "", up: "" }] };
-		void persist();
-	}
+	// Super Hotkey: "hold" keeps the shortcut pressed while the M18 key is held.
+	let superHoldMode: "tap" | "hold" = "tap";
+	$: superHoldMode = typeof settings.up === "string" && settings.up.trim() !== "" ? "hold" : "tap";
+	let superModeOverride: "tap" | "hold" | null = null;
+	$: if (context) superModeOverride = null;
+	let superMode: "tap" | "hold" = "tap";
+	$: superMode = superModeOverride ?? superHoldMode;
 
-	function removeHotkey(index: number) {
-		const next = hotkeys().filter((_, hotkeyIndex) => hotkeyIndex !== index);
-		settings = { ...settings, hotkeys: next.length ? next : [{ down: "", up: "" }], index: Math.min(Number(settings.index ?? 0), Math.max(next.length - 1, 0)) };
-		void persist();
-	}
+	const soundModes = ["Play/Stop", "Play/Overlap", "Play/Replay", "Loop/Stop"];
+	const soundModeHelp: Record<string, string> = {
+		"Play/Stop": "Press to play; press again to stop.",
+		"Play/Overlap": "Every press starts another copy, layered on top.",
+		"Play/Replay": "Every press restarts the sound from the beginning.",
+		"Loop/Stop": "Press to loop continuously; press again to stop.",
+	};
+	const mouseEvents = [
+		["click", "Click"],
+		["doubleClick", "Double-click"],
+		["move", "Move"],
+		["scroll", "Scroll"],
+		["drag", "Drag"],
+	];
 </script>
 
-<div class="h-full overflow-auto p-3 text-neutral-300">
+<div class="mx-auto flex max-w-2xl flex-col gap-4 px-5 py-4">
+	{#if comingSoon}
+		<div class="notice notice-warning">
+			<Warning size="16" class="mt-px shrink-0" />
+			<span>This action is not available yet. Its VSD Craft settings are kept so it can work once it is implemented; pressing the key shows an alert.</span>
+		</div>
+	{/if}
+
 	{#if isOpenApps}
-		<h2 class="font-semibold">OpenApps</h2>
-		<p class="mt-1 text-xs text-neutral-400">Open an application by path, bundle identifier, or name.</p>
-		<label class="mt-4 block text-xs text-neutral-400" for="m18-app-path">Application</label>
-		<input id="m18-app-path" class="mt-1 w-full rounded border border-neutral-600 bg-neutral-900 px-2 py-1 text-sm" value={settings.appPath ?? ""} on:input={(event) => setText("appPath", event)} placeholder="/Applications/Preview.app" disabled={saving} />
-	{:else if isSuperHotkeys}
-		<h2 class="font-semibold">Super Hotkeys</h2>
-		<p class="mt-1 text-xs text-neutral-400">The down action runs when pressed; the up action runs when released.</p>
-		<p class="mt-1 text-xs text-amber-300">VSD Craft distinguishes Super Hotkey from Hotkey by its physical-keyboard-like input path. This fork currently routes both through software key injection, so Super Hotkey is not yet at behavioral parity.</p>
-		{#if settings.display}<p class="mt-2 text-sm text-neutral-200">Imported shortcut: {settings.display}</p>{/if}
-		<label class="mt-4 block text-xs text-neutral-400" for="m18-super-down">Down</label>
-		<input id="m18-super-down" class="mt-1 w-full rounded border border-neutral-600 bg-neutral-900 px-2 py-1 text-sm font-mono" value={settings.down ?? ""} on:input={(event) => setText("down", event)} placeholder="[k(meta,uni('o'))]" disabled={saving} />
-		<label class="mt-3 block text-xs text-neutral-400" for="m18-super-up">Up</label>
-		<input id="m18-super-up" class="mt-1 w-full rounded border border-neutral-600 bg-neutral-900 px-2 py-1 text-sm font-mono" value={settings.up ?? ""} on:input={(event) => setText("up", event)} placeholder="optional" disabled={saving} />
-	{:else if isVsdHotkey || isVsdSuperHotkey}
-		<h2 class="font-semibold">{isVsdSuperHotkey ? "Super Hotkey" : "Hotkey"}</h2>
-		<p class="mt-1 text-xs text-neutral-400">{isVsdSuperHotkey ? "VSD Craft uses a physical-keyboard-like input path for Super Hotkey." : "Hotkey sends a software-level virtual key input."} The Press field runs on key-down; Release runs when the M18 key is released.</p>
-		{#if isVsdSuperHotkey}
-			<p class="mt-1 text-xs text-amber-300">This fork currently uses the same software injector for Hotkey and Super Hotkey; the distinct physical-HID behavior is not implemented yet.</p>
-		{/if}
-		{#if settings.display}<p class="mt-2 text-sm text-neutral-200">Imported shortcut: {settings.display}</p>{/if}
-		<label class="mt-4 block text-xs text-neutral-400" for="vsd-hotkey-down">Press</label>
-		<input id="vsd-hotkey-down" class="mt-1 w-full rounded border border-neutral-600 bg-neutral-900 px-2 py-1 text-sm font-mono" value={textValue(["down", "Down"])} on:input={(event) => setTextFor(["down", "Down"], "down", event)} placeholder="[k(meta,uni('o'))]" disabled={saving} />
-		<label class="mt-3 block text-xs text-neutral-400" for="vsd-hotkey-up">Release (optional)</label>
-		<input id="vsd-hotkey-up" class="mt-1 w-full rounded border border-neutral-600 bg-neutral-900 px-2 py-1 text-sm font-mono" value={textValue(["up", "Up"])} on:input={(event) => setTextFor(["up", "Up"], "up", event)} placeholder="optional" disabled={saving} />
+		<div class="field">
+			<label class="label" for="m18-app-path">Application</label>
+			<div class="flex gap-2">
+				<input id="m18-app-path" class="input" value={settings.appPath ?? ""} on:input={(event) => update({ appPath: event.currentTarget.value }, false)} placeholder="Safari, com.apple.Safari, or /Applications/Safari.app" />
+				<button class="btn shrink-0" on:click={() => choosePath("appPath", [{ name: "Applications", extensions: ["app", "exe"] }])}><FolderOpen size="14" /> Choose…</button>
+			</div>
+			<p class="hint">An app name, bundle identifier, or path. The key shows the app's icon automatically.</p>
+		</div>
+	{:else if isVsdHotkey}
+		<div class="field">
+			<span class="label">Shortcut</span>
+			<ShortcutRecorder
+				value={textValue(settings, ["down", "Down"])}
+				display={settings.display ?? ""}
+				label="Hotkey shortcut"
+				on:change={({ detail }) => update({ down: detail.down, display: detail.display, up: settings.up ?? "" })}
+			/>
+			<p class="hint">Sent when the key is released.</p>
+		</div>
+		<details class="group">
+			<summary class="label list-none select-none">▸ Advanced: extra sequence on release</summary>
+			<div class="mt-2">
+				<ShortcutRecorder value={textValue(settings, ["up", "Up"])} label="Release sequence" on:change={({ detail }) => update({ up: detail.down })} />
+			</div>
+		</details>
+	{:else if isSuperHotkeys || isVsdSuperHotkey}
+		<div class="flex items-center justify-between gap-3">
+			<span class="label">When the M18 key is pressed</span>
+			<div class="segmented">
+				<button aria-pressed={superMode === "tap"} on:click={() => (superModeOverride = "tap")}>Tap the shortcut</button>
+				<button aria-pressed={superMode === "hold"} on:click={() => (superModeOverride = "hold")}>Hold it down</button>
+			</div>
+		</div>
+		<div class="field">
+			<span class="label">Shortcut</span>
+			<ShortcutRecorder
+				value={textValue(settings, ["down", "Down"])}
+				display={settings.display ?? ""}
+				mode={superMode}
+				label="Super Hotkey shortcut"
+				on:change={({ detail }) => update({ down: detail.down, up: detail.up ?? "", display: detail.display })}
+			/>
+			<p class="hint">
+				{superMode === "hold" ? "The keys stay pressed while you hold the M18 key, like push-to-talk, and are released when you let go." : "The whole shortcut is sent the moment the key is pressed."}
+			</p>
+		</div>
+		<div class="notice notice-info">
+			<Info size="16" class="mt-px shrink-0" />
+			<span>VSD Craft sends Super Hotkeys as a hardware keyboard. This app sends them as software input, which works in almost every app.</span>
+		</div>
 	{:else if isHotkeySwitch || isSuperHotkeySwitch}
-		<h2 class="font-semibold">{isSuperHotkeySwitch ? "Super Hotkey Switch" : "HotkeySwitch"}</h2>
-		<p class="mt-1 text-xs text-neutral-400">Each press sends the active shortcut, then switches the icon and shortcut to the next state.</p>
-		{#if isSuperHotkeySwitch}
-			<p class="mt-1 text-xs text-amber-300">Super Hotkey uses the macOS software-input fallback for now. It does not yet reproduce VSD Craft’s physical-keyboard-like input path.</p>
-		{/if}
-		<label class="mt-4 block text-xs text-neutral-400" for="m18-hotkey-state">Active state</label>
-		<select id="m18-hotkey-state" class="mt-1 w-full rounded border border-neutral-600 bg-neutral-900 px-2 py-1 text-sm" value={settings.index ?? 0} on:change={setIndex} disabled={saving}>
-			{#each hotkeys() as _, index}
-				<option value={index}>State {index + 1}</option>
-			{/each}
-		</select>
-		<div class="mt-3 space-y-2">
-			{#each hotkeys() as hotkey, index}
-				<div class="rounded border border-neutral-700 p-2">
-					<div class="flex items-center justify-between text-xs text-neutral-400"><span>{isSuperHotkeySwitch ? "Super Hotkey" : "Hotkey"} {index + 1}</span><button class="rounded border border-neutral-600 px-2 hover:bg-neutral-700" on:click={() => removeHotkey(index)} disabled={saving || hotkeys().length < 2} aria-label={`Remove state ${index + 1}`}>−</button></div>
-					{#if hotkey.display}<p class="mt-2 text-sm text-neutral-200">Imported shortcut: {hotkey.display}</p>{/if}
-					<label class="mt-2 block text-xs text-neutral-400" for={`m18-switch-down-${index}`}>Press</label>
-					<input id={`m18-switch-down-${index}`} class="mt-1 w-full rounded border border-neutral-600 bg-neutral-900 px-2 py-1 text-sm font-mono" value={hotkey.down ?? ""} on:input={(event) => setHotkey(index, "down", event)} placeholder="[k(uni('a'))]" disabled={saving} />
-					<label class="mt-2 block text-xs text-neutral-400" for={`m18-switch-up-${index}`}>Release (optional)</label>
-					<input id={`m18-switch-up-${index}`} class="mt-1 w-full rounded border border-neutral-600 bg-neutral-900 px-2 py-1 text-sm font-mono" value={hotkey.up ?? ""} on:input={(event) => setHotkey(index, "up", event)} placeholder="optional" disabled={saving} />
+		<p class="hint">Each press sends the current shortcut, then moves on to the next one, and the key's image follows.</p>
+		<div class="flex flex-col gap-2">
+			{#each hotkeyList as hotkey, index}
+				<div class="card flex items-start gap-3 p-3">
+					<span class="mt-2.5 flex size-5 shrink-0 items-center justify-center rounded-md bg-press text-[11px] font-bold text-ink-muted tabular-nums">{index + 1}</span>
+					<div class="min-w-0 flex-1">
+						<ShortcutRecorder value={hotkey.down ?? ""} display={hotkey.display ?? ""} label={`Shortcut ${index + 1}`} on:change={({ detail }) => setHotkey(index, { down: detail.down, display: detail.display })} />
+					</div>
+					<button class="btn btn-ghost btn-icon mt-1" on:click={() => removeHotkey(index)} disabled={hotkeyList.length < 2} aria-label={`Remove shortcut ${index + 1}`}><Trash size="14" /></button>
 				</div>
 			{/each}
 		</div>
-		<button class="mt-3 rounded border border-neutral-600 px-2 py-1 text-xs hover:bg-neutral-700" on:click={addHotkey} disabled={saving}>Add state</button>
+		<div class="flex items-center justify-between gap-3">
+			<button class="btn btn-sm" on:click={addHotkey}><Plus size="13" weight="bold" /> Add shortcut</button>
+			<label class="flex items-center gap-2 text-xs text-ink-muted">
+				Next press sends
+				<select class="select h-7 min-h-0 w-auto py-0" value={settings.index ?? 0} on:change={(event) => update({ index: Number(event.currentTarget.value) })}>
+					{#each hotkeyList as hotkey, index}<option value={index}>{index + 1}{hotkey.down ? ` · ${describeSequenceText(hotkey.down) || "custom"}` : ""}</option>{/each}
+				</select>
+			</label>
+		</div>
 	{:else if isFolderOpen || isFolderBack}
-		<h2 class="font-semibold">{isFolderOpen ? "Create Folder" : "Go back"}</h2>
 		{#if isFolderOpen}
-			<p class="mt-1 text-xs text-neutral-400">Opens the selected M18 page as a nested folder. A Go back action in that page returns to the page that opened it.</p>
-			<label class="mt-4 block text-xs text-neutral-400" for="m18-folder-target">Folder contents</label>
-			<select id="m18-folder-target" class="mt-1 w-full rounded border border-neutral-600 bg-neutral-900 px-2 py-1 text-sm" value={pages.findIndex((page) => page.profile === settings.profile)} on:change={setFolderTarget} disabled={saving || pages.length === 0}>
-				<option value={-1}>Choose a page…</option>
-				{#each pages as page, index}<option value={index}>{page.name} — {page.profile}</option>{/each}
-			</select>
+			<div class="field">
+				<label class="label" for="m18-folder-target">Folder contents</label>
+				<select id="m18-folder-target" class="select" value={pages.findIndex((page) => page.profile === settings.profile)} on:change={(event) => update({ profile: pages[Number(event.currentTarget.value)]?.profile ?? "" })} disabled={pages.length === 0}>
+					<option value={-1}>Choose a page…</option>
+					{#each pages as page, index}<option value={index}>{pageLabel(page, index)}</option>{/each}
+				</select>
+				<p class="hint">Opens that page as a folder. Put a Go Back key on it to return here.</p>
+			</div>
 		{:else}
-			<p class="mt-1 text-xs text-neutral-400">Returns to the folder’s parent page. Folder navigation is handled by the M18 core, without an action plugin.</p>
+			<p class="hint">Returns to the page that opened the current folder. Nothing to set up.</p>
 		{/if}
+	{:else if isSceneShift}
+		<div class="field">
+			<label class="label" for="m18-scene-target">Switch to</label>
+			<select id="m18-scene-target" class="select" value={pages.findIndex((page) => page.profile === settings.profile)} on:change={(event) => update({ profile: pages[Number(event.currentTarget.value)]?.profile ?? "" })}>
+				<option value={-1}>The next page</option>
+				{#each pages as page, index}<option value={index}>{pageLabel(page, index)}</option>{/each}
+			</select>
+		</div>
 	{:else if isPageGoto}
-		<h2 class="font-semibold">Go to page</h2>
-		<p class="mt-1 text-xs text-neutral-400">Switches the native M18 page without invoking a plugin.</p>
-		<label class="mt-4 block text-xs text-neutral-400" for="m18-page-target">Page</label>
-		<select id="m18-page-target" class="mt-1 w-full rounded border border-neutral-600 bg-neutral-900 px-2 py-1 text-sm" value={settings.pageIndex ?? 0} on:change={setPage} disabled={saving}>
-			{#each pages as page, index}
-				<option value={index}>{page.name} — {page.profile}</option>
-			{/each}
-		</select>
-		<label class="mt-3 flex items-center gap-2 text-sm text-neutral-300" for="m18-show-page-number">
-			<input id="m18-show-page-number" type="checkbox" checked={settings.showPageNumber !== false} on:change={setShowPageNumber} disabled={saving} />
-			Show page number
+		<div class="field">
+			<label class="label" for="m18-page-target">Page</label>
+			<select id="m18-page-target" class="select" value={settings.pageIndex ?? 0} on:change={(event) => update({ page: pages[Number(event.currentTarget.value)]?.profile ?? "", pageIndex: Number(event.currentTarget.value) })}>
+				{#each pages as page, index}<option value={index}>{pageLabel(page, index)}</option>{/each}
+			</select>
+		</div>
+		<label class="flex items-center justify-between gap-3">
+			<span>
+				<span class="block text-[13px] text-ink">Show the page number on the key</span>
+				<span class="hint">Drawn over the key's image unless the key has a title.</span>
+			</span>
+			<input type="checkbox" class="switch" checked={settings.showPageNumber !== false} on:change={(event) => update({ showPageNumber: event.currentTarget.checked })} />
 		</label>
+	{:else if isDelay}
+		<div class="field max-w-60">
+			<label class="label" for="vsd-delay">Wait</label>
+			<div class="flex items-center gap-2">
+				<input id="vsd-delay" type="number" min="0" max="300000" step="100" class="input tabular-nums" value={Number(settings.delay ?? settings.Delay ?? settings.time ?? settings.Time ?? 0)} on:input={(event) => update({ delay: Number(event.currentTarget.value) }, false)} />
+				<span class="text-xs text-ink-muted">ms</span>
+			</div>
+			<p class="hint">Only meaningful inside a Multi Action, between two steps.</p>
+		</div>
 	{:else if isTextAction}
-		<h2 class="font-semibold">Text</h2>
-		<p class="mt-1 text-xs text-neutral-400">Types this text into the currently focused app when the M18 key is pressed.</p>
-		<label class="mt-4 block text-xs text-neutral-400" for="vsd-text-value">Text to type</label>
-		<textarea id="vsd-text-value" rows="6" class="mt-1 w-full resize-y rounded border border-neutral-600 bg-neutral-900 px-2 py-1 text-sm" value={textValue(["text", "Text", "value", "Value"])} on:input={(event) => setTextFor(["text", "Text", "value", "Value"], "text", event)} disabled={saving}></textarea>
+		<div class="field">
+			<label class="label" for="vsd-text-value">Text to type</label>
+			<textarea id="vsd-text-value" rows="5" class="textarea" value={textValue(settings, ["text", "Text", "value", "Value"])} on:input={(event) => setTextFor(["text", "Text", "value", "Value"], "text", event.currentTarget.value)} placeholder="Typed into the app in front when the key is pressed"></textarea>
+			<p class="hint">Typed into whichever app is in front. Line breaks are typed as Return.</p>
+		</div>
 	{:else if isPasswordAction}
-		<h2 class="font-semibold">Password</h2>
-		<p class="mt-1 text-xs text-neutral-400">Types the saved password into the currently focused app. The value is stored in this profile.</p>
-		<label class="mt-4 block text-xs text-neutral-400" for="vsd-password-value">Password</label>
-		<input id="vsd-password-value" type="password" autocomplete="new-password" class="mt-1 w-full rounded border border-neutral-600 bg-neutral-900 px-2 py-1 text-sm" value={textValue(["password", "Password", "text", "Text"])} on:input={(event) => setTextFor(["password", "Password", "text", "Text"], "password", event)} disabled={saving} />
+		<div class="field">
+			<label class="label" for="vsd-password-value">Password</label>
+			<div class="relative">
+				<input id="vsd-password-value" type={revealPassword ? "text" : "password"} autocomplete="new-password" spellcheck="false" class="input pr-9" value={textValue(settings, ["password", "Password", "text", "Text"])} on:input={(event) => setTextFor(["password", "Password", "text", "Text"], "password", event.currentTarget.value)} />
+				<button class="btn btn-ghost btn-sm btn-icon absolute top-1/2 right-1 -translate-y-1/2" on:click={() => (revealPassword = !revealPassword)} aria-label={revealPassword ? "Hide password" : "Show password"}>
+					{#if revealPassword}<EyeSlash size="14" />{:else}<Eye size="14" />{/if}
+				</button>
+			</div>
+		</div>
+		<div class="notice notice-warning">
+			<Warning size="16" class="mt-px shrink-0" />
+			<span>The password is saved unencrypted in this profile, and in configuration backups. Anyone with access to your Mac account can read it.</span>
+		</div>
 	{:else if isOpenAction || isWebsiteAction || isCloseAction}
-		<h2 class="font-semibold">{isCloseAction ? "Close application" : isWebsiteAction ? "Open website" : "Open item"}</h2>
-		<p class="mt-1 text-xs text-neutral-400">{isCloseAction ? "Quits the named application." : isWebsiteAction ? "Opens the URL in the default browser." : "Opens an application, file, or folder with its default macOS handler."}</p>
-		<label class="mt-4 block text-xs text-neutral-400" for="vsd-open-target">{isCloseAction ? "Application name or path" : isWebsiteAction ? "Website URL" : "Application, file, or folder"}</label>
-		<input id="vsd-open-target" type={isWebsiteAction ? "url" : "text"} class="mt-1 w-full rounded border border-neutral-600 bg-neutral-900 px-2 py-1 text-sm" value={isCloseAction ? textValue(["appPath", "path", "application", "app", "bundleId"]) : textValue(["path", "Path", "url", "URL", "website", "link", "file", "folder"])} on:input={(event) => setTextFor(isCloseAction ? ["appPath", "path", "application", "app", "bundleId"] : ["path", "Path", "url", "URL", "website", "link", "file", "folder"], isCloseAction ? "appPath" : "path", event)} placeholder={isWebsiteAction ? "https://example.com" : isCloseAction ? "Safari" : "/Applications/Preview.app"} disabled={saving} />
-		{#if isOpenAction}
-			<div class="mt-2 flex gap-2">
-				<button class="rounded border border-neutral-600 px-2 py-1 text-xs hover:bg-neutral-700" on:click={() => void choosePath("path")}>Choose file</button>
-				<button class="rounded border border-neutral-600 px-2 py-1 text-xs hover:bg-neutral-700" on:click={() => void choosePath("path", [{ name: "Applications", extensions: ["app"] }])}>Choose application</button>
+		<div class="field">
+			<label class="label" for="vsd-open-target">{isCloseAction ? "App to quit" : isWebsiteAction ? "Web address" : "File, folder, or app"}</label>
+			<div class="flex gap-2">
+				<input
+					id="vsd-open-target"
+					type={isWebsiteAction ? "url" : "text"}
+					class="input"
+					value={isCloseAction ? textValue(settings, ["appPath", "path", "application", "app", "bundleId"]) : textValue(settings, ["path", "Path", "url", "URL", "website", "link", "file", "folder"])}
+					on:input={(event) =>
+						setTextFor(isCloseAction ? ["appPath", "path", "application", "app", "bundleId"] : ["path", "Path", "url", "URL", "website", "link", "file", "folder"], isCloseAction ? "appPath" : "path", event.currentTarget.value)}
+					placeholder={isWebsiteAction ? "https://example.com" : isCloseAction ? "Safari" : "~/Documents/Report.pdf"}
+				/>
+				{#if isOpenAction}
+					<button class="btn shrink-0" on:click={() => choosePath("path")}>File…</button>
+					<button class="btn shrink-0" on:click={() => choosePath("path", [], true)}>Folder…</button>
+				{/if}
+			</div>
+			<p class="hint">{isCloseAction ? "The app is asked to quit, exactly as if you chose Quit from its menu." : isWebsiteAction ? "Opens in your default browser." : "Opens with its default app."}</p>
+		</div>
+	{:else if isUdpAction}
+		<div class="grid grid-cols-[1fr_7rem] gap-3">
+			<div class="field">
+				<label class="label" for="vsd-udp-host">Host or IP address</label>
+				<input id="vsd-udp-host" class="input" value={textValue(settings, ["host", "Host", "ip", "IP", "address", "Address"], "127.0.0.1")} on:input={(event) => setTextFor(["host", "Host", "ip", "IP", "address", "Address"], "host", event.currentTarget.value)} />
+			</div>
+			<div class="field">
+				<label class="label" for="vsd-udp-port">Port</label>
+				<input id="vsd-udp-port" type="number" min="1" max="65535" class="input tabular-nums" value={settings.port ?? settings.Port ?? 5000} on:input={(event) => update({ [Object.prototype.hasOwnProperty.call(settings ?? {}, "Port") ? "Port" : "port"]: Number(event.currentTarget.value) }, false)} />
+			</div>
+		</div>
+		<div class="field">
+			<label class="label" for="vsd-udp-message">Message</label>
+			<textarea id="vsd-udp-message" rows="3" class="textarea input-mono" value={textValue(settings, ["message", "Message", "data", "Data"])} on:input={(event) => setTextFor(["message", "Message", "data", "Data"], "message", event.currentTarget.value)}></textarea>
+			<p class="hint">Sent as one UTF-8 datagram each time the key is pressed.</p>
+		</div>
+	{:else if isBrightnessAction}
+		<div class="flex items-center justify-between gap-3">
+			<span class="label">Each press</span>
+			<div class="segmented">
+				<button aria-pressed={Number(settings.actionIdx ?? 0) === 0} on:click={() => update({ actionIdx: 0 })}>Brighter</button>
+				<button aria-pressed={Number(settings.actionIdx ?? 0) === 1} on:click={() => update({ actionIdx: 1 })}>Dimmer</button>
+			</div>
+		</div>
+		<p class="hint">Changes the M18's own screen, not the Mac's display.</p>
+	{:else if isMultimediaAction}
+		<div class="field">
+			<label class="label" for="vsd-multimedia-action">Media key</label>
+			<select id="vsd-multimedia-action" class="select" value={settings.actionIdx ?? 1} on:change={(event) => update({ actionIdx: Number(event.currentTarget.value) })}>
+				<option value="0">Previous track</option><option value="1">Play / Pause</option><option value="2">Next track</option><option value="3">Stop</option><option value="4">Mute</option><option value="5">Volume up</option><option value="6">Volume down</option>
+			</select>
+			{#if Number(settings.actionIdx ?? 1) === 3}
+				<p class="hint">macOS has no system-wide Stop key; Stop pauses the Music app if it is running.</p>
+			{/if}
+		</div>
+	{:else if isMouseEventAction}
+		<div class="field">
+			<span class="label">Action</span>
+			<div class="segmented self-start">
+				{#each mouseEvents as [value, text]}
+					<button aria-pressed={(settings.eventType ?? "click") === value} on:click={() => update({ eventType: value })}>{text}</button>
+				{/each}
+			</div>
+		</div>
+		{#if ["click", "doubleClick", "drag"].includes(settings.eventType ?? "click")}
+			<div class="field max-w-60">
+				<label class="label" for="vsd-mouse-button">Button</label>
+				<select id="vsd-mouse-button" class="select" value={settings.button ?? "left"} on:change={(event) => update({ button: event.currentTarget.value })}>
+					<option value="left">Left</option><option value="right">Right</option><option value="middle">Middle</option><option value="side1">Back (side 1)</option><option value="side2">Forward (side 2)</option>
+				</select>
 			</div>
 		{/if}
-	{:else if isUdpAction}
-		<h2 class="font-semibold">UDP</h2>
-		<p class="mt-1 text-xs text-neutral-400">Sends one UTF-8 UDP datagram to the configured address when pressed.</p>
-		<label class="mt-4 block text-xs text-neutral-400" for="vsd-udp-host">Host or IP address</label>
-		<input id="vsd-udp-host" class="mt-1 w-full rounded border border-neutral-600 bg-neutral-900 px-2 py-1 text-sm" value={textValue(["host", "Host", "ip", "IP", "address", "Address"], "127.0.0.1")} on:input={(event) => setTextFor(["host", "Host", "ip", "IP", "address", "Address"], "host", event)} disabled={saving} />
-		<label class="mt-3 block text-xs text-neutral-400" for="vsd-udp-port">Port</label>
-		<input id="vsd-udp-port" type="number" min="1" max="65535" class="mt-1 w-full rounded border border-neutral-600 bg-neutral-900 px-2 py-1 text-sm" value={settings.port ?? settings.Port ?? 5000} on:input={(event) => setVsdSetting(Object.prototype.hasOwnProperty.call(settings ?? {}, "Port") ? "Port" : "port", event, "number")} disabled={saving} />
-		<label class="mt-3 block text-xs text-neutral-400" for="vsd-udp-message">Message</label>
-		<textarea id="vsd-udp-message" rows="4" class="mt-1 w-full rounded border border-neutral-600 bg-neutral-900 px-2 py-1 text-sm" value={textValue(["message", "Message", "data", "Data"])} on:input={(event) => setTextFor(["message", "Message", "data", "Data"], "message", event)} disabled={saving}></textarea>
-	{:else if isBrightnessAction}
-		<h2 class="font-semibold">Device brightness</h2>
-		<p class="mt-1 text-xs text-neutral-400">Adjusts the M18 screen brightness without changing your macOS display brightness.</p>
-		<label class="mt-4 block text-xs text-neutral-400" for="vsd-device-brightness-mode">Action</label>
-		<select id="vsd-device-brightness-mode" class="mt-1 w-full rounded border border-neutral-600 bg-neutral-900 px-2 py-1 text-sm" value={settings.actionIdx ?? 0} on:change={(event) => setVsdSetting("actionIdx", event, "number")} disabled={saving}>
-			<option value="0">Increase brightness</option><option value="1">Decrease brightness</option>
-		</select>
-	{:else if isMultimediaAction}
-		<h2 class="font-semibold">Multimedia</h2>
-		<label class="mt-4 block text-xs text-neutral-400" for="vsd-multimedia-action">Operation</label>
-		<select id="vsd-multimedia-action" class="mt-1 w-full rounded border border-neutral-600 bg-neutral-900 px-2 py-1 text-sm" value={settings.actionIdx ?? 1} on:change={(event) => setVsdSetting("actionIdx", event, "number")} disabled={saving}>
-			<option value="0">Previous</option><option value="1">Play/Pause</option><option value="2">Next</option><option value="3">Stop</option><option value="4">Mute</option><option value="5">Increase volume</option><option value="6">Lower volume</option>
-		</select>
-		{#if Number(settings.actionIdx ?? 1) === 3}
-			<p class="mt-2 text-xs text-amber-300">macOS has no global media-stop key. Stop currently targets Music when it is already running; other platforms send the system media-stop key.</p>
-		{/if}
-	{:else if isMouseEventAction}
-		<h2 class="font-semibold">Mouse event</h2>
-		<p class="mt-1 text-xs text-neutral-400">Simulates clicks, movement, scrolling, or dragging. macOS may require Accessibility permission.</p>
-		<label class="mt-4 block text-xs text-neutral-400" for="vsd-mouse-type">Event</label>
-		<select id="vsd-mouse-type" class="mt-1 w-full rounded border border-neutral-600 bg-neutral-900 px-2 py-1 text-sm" value={settings.eventType ?? "click"} on:change={(event) => setText("eventType", event)} disabled={saving}>
-			<option value="click">Mouse click</option><option value="doubleClick">Mouse double click</option><option value="move">Mouse move</option><option value="scroll">Mouse wheel scroll</option><option value="drag">Drag and drop</option>
-		</select>
-		<label class="mt-3 block text-xs text-neutral-400" for="vsd-mouse-button">Mouse button</label>
-		<select id="vsd-mouse-button" class="mt-1 w-full rounded border border-neutral-600 bg-neutral-900 px-2 py-1 text-sm" value={settings.button ?? "left"} on:change={(event) => setText("button", event)} disabled={saving}>
-			<option value="left">Left</option><option value="right">Right</option><option value="middle">Middle</option><option value="side1">Side button 1</option><option value="side2">Side button 2</option>
-		</select>
-		<div class="mt-3 grid grid-cols-2 gap-2">
-			<label class="block text-xs text-neutral-400" for="vsd-mouse-x">X</label><label class="block text-xs text-neutral-400" for="vsd-mouse-y">Y</label>
-			<input id="vsd-mouse-x" type="number" class="rounded border border-neutral-600 bg-neutral-900 px-2 py-1 text-sm" value={settings.x ?? 0} on:input={(event) => setVsdSetting("x", event, "number")} disabled={saving} />
-			<input id="vsd-mouse-y" type="number" class="rounded border border-neutral-600 bg-neutral-900 px-2 py-1 text-sm" value={settings.y ?? 0} on:input={(event) => setVsdSetting("y", event, "number")} disabled={saving} />
-		</div>
 		{#if settings.eventType === "move" || settings.eventType === "drag"}
-			<label class="mt-3 block text-xs text-neutral-400" for="vsd-mouse-coordinate">Coordinate mode</label>
-			<select id="vsd-mouse-coordinate" class="mt-1 w-full rounded border border-neutral-600 bg-neutral-900 px-2 py-1 text-sm" value={settings.coordinate ?? "absolute"} on:change={(event) => setText("coordinate", event)} disabled={saving}>
-				<option value="absolute">Absolute screen position</option><option value="relative">Relative to the pointer</option>
-			</select>
-			<button class="mt-2 rounded border border-neutral-600 px-2 py-1 text-xs hover:bg-neutral-700" on:click={() => void captureMousePosition()} disabled={saving}>Capture current pointer position</button>
-			{#if mousePositionError}<p role="alert" class="mt-1 text-xs text-red-300">{mousePositionError}</p>{/if}
+			<div class="grid grid-cols-2 gap-3">
+				<div class="field">
+					<label class="label" for="vsd-mouse-x">X</label>
+					<input id="vsd-mouse-x" type="number" class="input tabular-nums" value={settings.x ?? 0} on:input={(event) => update({ x: Number(event.currentTarget.value) }, false)} />
+				</div>
+				<div class="field">
+					<label class="label" for="vsd-mouse-y">Y</label>
+					<input id="vsd-mouse-y" type="number" class="input tabular-nums" value={settings.y ?? 0} on:input={(event) => update({ y: Number(event.currentTarget.value) }, false)} />
+				</div>
+			</div>
+			<div class="flex flex-wrap items-center gap-3">
+				<div class="segmented">
+					<button aria-pressed={(settings.coordinate ?? "absolute") === "absolute"} on:click={() => update({ coordinate: "absolute" })}>Screen position</button>
+					<button aria-pressed={settings.coordinate === "relative"} on:click={() => update({ coordinate: "relative" })}>Relative to pointer</button>
+				</div>
+				<button class="btn btn-sm" on:click={captureMousePosition}><Crosshair size="14" /> Use current pointer position</button>
+			</div>
+			{#if mousePositionError}<p role="alert" class="text-xs text-danger">{mousePositionError}</p>{/if}
 		{/if}
 		{#if settings.eventType === "scroll"}
-			<label class="mt-3 block text-xs text-neutral-400" for="vsd-mouse-amount">Scroll amount</label><input id="vsd-mouse-amount" type="number" class="mt-1 w-full rounded border border-neutral-600 bg-neutral-900 px-2 py-1 text-sm" value={settings.amount ?? 3} on:input={(event) => setVsdSetting("amount", event, "number")} disabled={saving} />
-			<label class="mt-3 block text-xs text-neutral-400" for="vsd-mouse-axis">Scroll axis</label><select id="vsd-mouse-axis" class="mt-1 w-full rounded border border-neutral-600 bg-neutral-900 px-2 py-1 text-sm" value={settings.axis ?? "vertical"} on:change={(event) => setText("axis", event)} disabled={saving}><option value="vertical">Vertical</option><option value="horizontal">Horizontal</option></select>
+			<div class="grid grid-cols-2 gap-3">
+				<div class="field">
+					<label class="label" for="vsd-mouse-amount">Amount</label>
+					<input id="vsd-mouse-amount" type="number" class="input tabular-nums" value={settings.amount ?? 3} on:input={(event) => update({ amount: Number(event.currentTarget.value) }, false)} />
+				</div>
+				<div class="field">
+					<span class="label">Direction</span>
+					<div class="segmented self-start">
+						<button aria-pressed={(settings.axis ?? "vertical") === "vertical"} on:click={() => update({ axis: "vertical" })}>Vertical</button>
+						<button aria-pressed={settings.axis === "horizontal"} on:click={() => update({ axis: "horizontal" })}>Horizontal</button>
+					</div>
+				</div>
+			</div>
 		{/if}
-		<div class="mt-3 flex flex-wrap gap-3 text-sm">
-			{#each ["Shift", "Control", "Alt", "Command"] as modifier}
-				<label class="flex items-center gap-1" for={`vsd-mouse-mod-${modifier}`}><input id={`vsd-mouse-mod-${modifier}`} type="checkbox" checked={(Array.isArray(settings.modifiers) ? settings.modifiers : []).includes(modifier.toLowerCase())} on:change={(event) => setMouseModifier(modifier, event)} disabled={saving} />{modifier}</label>
-			{/each}
+		<div class="field">
+			<span class="label">Hold modifier keys</span>
+			<div class="flex flex-wrap gap-4 text-[13px]">
+				{#each ["Shift", "Control", "Alt", "Command"] as modifier}
+					<label class="flex items-center gap-2">
+						<input type="checkbox" class="switch" checked={(Array.isArray(settings.modifiers) ? settings.modifiers : []).includes(modifier.toLowerCase())} on:change={(event) => setMouseModifier(modifier, event.currentTarget.checked)} />
+						{modifier === "Alt" ? "Option" : modifier}
+					</label>
+				{/each}
+			</div>
 		</div>
+		<p class="hint">Simulating the mouse needs Accessibility access for OpenDeck VSD M18 in System Settings › Privacy & Security.</p>
 	{:else if isMicrophoneAction}
-		<h2 class="font-semibold">Microphone</h2>
-		<p class="mt-2 text-sm text-neutral-400">Toggles mute on the current default input device. macOS requires that device to expose a writable Core Audio mute control; if it does not, the action reports an error instead of only opening Sound settings.</p>
-	{:else if isSoundboardAction}
-		<h2 class="font-semibold">Play Audio</h2>
-		<p class="mt-1 text-xs text-neutral-400">Plays on the selected macOS output device with per-action volume and fade behavior.</p>
-		<label class="mt-4 block text-xs text-neutral-400" for="vsd-sound-path">Audio file</label>
-		<div class="mt-1 flex gap-2">
-			<input id="vsd-sound-path" class="min-w-0 flex-1 rounded border border-neutral-600 bg-neutral-900 px-2 py-1 text-sm" value={textValue(["path", "filePath", "audio", "musicUrl"])} on:input={(event) => setTextFor(["path", "filePath", "audio", "musicUrl"], "path", event)} disabled={saving} />
-			<button class="rounded border border-neutral-600 px-2 text-xs hover:bg-neutral-700" on:click={() => void choosePath("path", [{ name: "Audio", extensions: ["mp3", "wav", "mp4", "m4a", "m4b", "m4p", "mov", "aiff", "flac"] }])}>Browse</button>
+		<p class="text-[13px] text-ink-muted">Mutes or unmutes the Mac's current default microphone. If that microphone has no mute control, the key shows an alert instead.</p>
+	{:else if isEmojiAction}
+		<div class="field">
+			<label class="label" for="vsd-emoji">Emoji or text to type</label>
+			<input id="vsd-emoji" class="input text-lg" value={textValue(settings, ["emoji", "Emoji", "text", "Text", "value"])} on:input={(event) => setTextFor(["emoji", "Emoji", "text", "Text", "value"], "emoji", event.currentTarget.value)} placeholder="👍" />
+			<p class="hint">Leave empty to open the Emoji & Symbols picker instead.</p>
 		</div>
-		<label class="mt-3 block text-xs text-neutral-400" for="vsd-sound-mode">Playback mode</label>
-		<select id="vsd-sound-mode" class="mt-1 w-full rounded border border-neutral-600 bg-neutral-900 px-2 py-1 text-sm" value={settings.mode ?? "Play/Stop"} on:change={(event) => setText("mode", event)} disabled={saving}>
-			<option>Play/Stop</option><option>Play/Overlap</option><option>Play/Replay</option><option>Loop/Stop</option>
-		</select>
-		<label class="mt-3 block text-xs text-neutral-400" for="vsd-sound-volume">Volume: {settings.volume ?? 100}%</label>
-		<input id="vsd-sound-volume" type="range" min="0" max="100" class="mt-1 w-full" value={settings.volume ?? 100} on:input={(event) => setVsdSetting("volume", event, "number")} disabled={saving} />
-		<label class="mt-3 block text-xs text-neutral-400" for="vsd-sound-output">Output device</label>
-		<select id="vsd-sound-output" class="mt-1 w-full rounded border border-neutral-600 bg-neutral-900 px-2 py-1 text-sm" value={settings.outputDevice ?? settings.device?.description ?? settings.device?.name ?? settings.device?.id ?? "default"} on:change={(event) => setText("outputDevice", event)} disabled={saving}>
-			<option value="default">System default</option>
-			{#each audioOutputDevices as outputDevice}<option value={outputDevice.id}>{outputDevice.name}</option>{/each}
-		</select>
-		<label class="mt-3 block text-xs text-neutral-400" for="vsd-sound-fade">Fade</label>
-		<select id="vsd-sound-fade" class="mt-1 w-full rounded border border-neutral-600 bg-neutral-900 px-2 py-1 text-sm" value={settings.fadeType ?? "none"} on:change={(event) => setText("fadeType", event)} disabled={saving}>
-			<option value="none">None</option><option value="fadeIn">Fade in</option><option value="fadeOut">Fade out</option><option value="fadeInOut">Fade in and out</option>
-		</select>
-		{#if (settings.fadeType ?? "none") !== "none"}
-			<label class="mt-3 block text-xs text-neutral-400" for="vsd-sound-fade-duration">Fade duration: {settings.fadeDuration ?? 0} seconds</label>
-			<input id="vsd-sound-fade-duration" type="number" min="0" max="3600" class="mt-1 w-full rounded border border-neutral-600 bg-neutral-900 px-2 py-1 text-sm" value={settings.fadeDuration ?? 0} on:input={(event) => setVsdSetting("fadeDuration", event, "number")} disabled={saving} />
-		{/if}
-	{:else if isWorldTimeAction || isTimerAction || isCountdownAction || isDateTimeAction}
-		<h2 class="font-semibold">{isWorldTimeAction ? "World Time" : isTimerAction ? "Timer" : isCountdownAction ? "Countdown" : "DateTime"}</h2>
-		<p class="mt-1 text-xs text-amber-300">The VSD display behavior and timer lifecycle are not yet at parity; values here are preserved while that runtime is implemented.</p>
-		{#each Object.keys(settings ?? {}) as key}
-			{#if typeof settings[key] === "boolean"}
-				<label class="mt-3 flex items-center gap-2 text-sm text-neutral-300" for={`vsd-time-${key}`}><input id={`vsd-time-${key}`} type="checkbox" checked={settings[key]} on:change={(event) => setVsdSetting(key, event, "boolean")} disabled={saving} />{settingLabel(key)}</label>
-			{:else if typeof settings[key] === "number"}
-				<label class="mt-3 block text-xs text-neutral-400" for={`vsd-time-${key}`}>{settingLabel(key)}</label><input id={`vsd-time-${key}`} type="number" class="mt-1 w-full rounded border border-neutral-600 bg-neutral-900 px-2 py-1 text-sm" value={settings[key]} on:input={(event) => setVsdSetting(key, event, "number")} disabled={saving} />
-			{:else}
-				<label class="mt-3 block text-xs text-neutral-400" for={`vsd-time-${key}`}>{settingLabel(key)}</label><input id={`vsd-time-${key}`} class="mt-1 w-full rounded border border-neutral-600 bg-neutral-900 px-2 py-1 text-sm" value={settings[key] ?? ""} on:input={(event) => setText(key, event)} disabled={saving} />
+	{:else if isSoundboardAction}
+		<div class="field">
+			<label class="label" for="vsd-sound-path">Sound file</label>
+			<div class="flex gap-2">
+				<input id="vsd-sound-path" class="input" value={textValue(settings, ["path", "filePath", "audio", "musicUrl"])} on:input={(event) => setTextFor(["path", "filePath", "audio", "musicUrl"], "path", event.currentTarget.value)} placeholder="Choose an audio file" />
+				<button class="btn shrink-0" on:click={() => choosePath("path", [{ name: "Audio", extensions: ["mp3", "wav", "mp4", "m4a", "m4b", "m4p", "mov", "aiff", "aif", "flac", "ogg"] }])}><FolderOpen size="14" /> Choose…</button>
+			</div>
+		</div>
+		<div class="field">
+			<span class="label">Playback</span>
+			<div class="segmented self-start">
+				{#each soundModes as mode}<button aria-pressed={(settings.mode ?? "Play/Stop") === mode} on:click={() => update({ mode })}>{mode}</button>{/each}
+			</div>
+			<p class="hint">{soundModeHelp[settings.mode ?? "Play/Stop"] ?? ""}</p>
+		</div>
+		<div class="grid grid-cols-2 gap-4">
+			<div class="field">
+				<label class="label" for="vsd-sound-volume">Volume · {settings.volume ?? 100}%</label>
+				<input id="vsd-sound-volume" type="range" min="0" max="100" class="range" style={`--range-fill: ${settings.volume ?? 100}%`} value={settings.volume ?? 100} on:input={(event) => update({ volume: Number(event.currentTarget.value) }, false)} />
+			</div>
+			<div class="field">
+				<label class="label" for="vsd-sound-output">Output</label>
+				<select id="vsd-sound-output" class="select" value={settings.outputDevice ?? settings.device?.description ?? settings.device?.name ?? settings.device?.id ?? "default"} on:change={(event) => update({ outputDevice: event.currentTarget.value })}>
+					<option value="default">System default</option>
+					{#each audioOutputDevices as outputDevice}<option value={outputDevice.id}>{outputDevice.name}</option>{/each}
+				</select>
+			</div>
+		</div>
+		<div class="grid grid-cols-[1fr_8rem] gap-4">
+			<div class="field">
+				<label class="label" for="vsd-sound-fade">Fade</label>
+				<select id="vsd-sound-fade" class="select" value={settings.fadeType ?? "none"} on:change={(event) => update({ fadeType: event.currentTarget.value })}>
+					<option value="none">None</option><option value="fadeIn">Fade in</option><option value="fadeOut">Fade out</option><option value="fadeInOut">Fade in and out</option>
+				</select>
+			</div>
+			{#if (settings.fadeType ?? "none") !== "none"}
+				<div class="field">
+					<label class="label" for="vsd-sound-fade-duration">Seconds</label>
+					<input id="vsd-sound-fade-duration" type="number" min="0" max="3600" class="input tabular-nums" value={settings.fadeDuration ?? 0} on:input={(event) => update({ fadeDuration: Number(event.currentTarget.value) }, false)} />
+				</div>
 			{/if}
-		{/each}
-	{:else if isWeatherAction || isMemoAction || isYoutubeAction}
-		<h2 class="font-semibold">{isWeatherAction ? "Weather" : isMemoAction ? (uuid.endsWith("action2") ? "Record to-do" : "Remember things") : "YouTube"}</h2>
-		<p class="mt-1 text-xs text-amber-300">The service/action runtime is still being ported. This editor retains settings but does not claim parity yet.</p>
-		{#each Object.keys(settings ?? {}) as key}
-			{#if typeof settings[key] === "boolean"}
-				<label class="mt-3 flex items-center gap-2 text-sm text-neutral-300" for={`vsd-extra-${key}`}><input id={`vsd-extra-${key}`} type="checkbox" checked={settings[key]} on:change={(event) => setVsdSetting(key, event, "boolean")} disabled={saving} />{settingLabel(key)}</label>
-			{:else if typeof settings[key] === "number"}
-				<label class="mt-3 block text-xs text-neutral-400" for={`vsd-extra-${key}`}>{settingLabel(key)}</label><input id={`vsd-extra-${key}`} type="number" class="mt-1 w-full rounded border border-neutral-600 bg-neutral-900 px-2 py-1 text-sm" value={settings[key]} on:input={(event) => setVsdSetting(key, event, "number")} disabled={saving} />
-			{:else if typeof settings[key] === "string"}
-				<label class="mt-3 block text-xs text-neutral-400" for={`vsd-extra-${key}`}>{settingLabel(key)}</label><input id={`vsd-extra-${key}`} class="mt-1 w-full rounded border border-neutral-600 bg-neutral-900 px-2 py-1 text-sm" value={settings[key]} on:input={(event) => setText(key, event)} disabled={saving} />
-			{:else}
-				<label class="mt-3 block text-xs text-neutral-400" for={`vsd-extra-${key}`}>{settingLabel(key)} (JSON)</label><textarea id={`vsd-extra-${key}`} rows="4" class="mt-1 w-full rounded border border-neutral-600 bg-neutral-900 px-2 py-1 font-mono text-xs" value={JSON.stringify(settings[key], null, 2)} on:change={(event) => setVsdJsonSetting(key, event)} disabled={saving}></textarea>
-			{/if}
-		{/each}
+		</div>
 	{:else if isUnsupportedVsd}
-		<h2 class="font-semibold text-amber-300">Unsupported VSD Craft action</h2>
-		<p class="mt-2 text-sm text-neutral-300">This button, its artwork, and its original settings were preserved, but its behavior is not implemented yet. Pressing it will not run the VSD action.</p>
-		<p class="mt-3 text-xs text-neutral-400">Original action: {settings.sourceName ?? "Unknown"}</p>
-		<p class="mt-1 break-all font-mono text-xs text-neutral-400">{settings.sourceUuid ?? "Unknown UUID"}</p>
+		<div class="notice notice-warning">
+			<Warning size="16" class="mt-px shrink-0" />
+			<span>This key came from VSD Craft, but its action isn't supported yet. Its image, title, and settings are kept; pressing it shows an alert.</span>
+		</div>
+		<dl class="grid grid-cols-[7rem_1fr] gap-x-3 gap-y-1 text-xs">
+			<dt class="text-ink-faint">Original action</dt>
+			<dd class="text-ink">{settings.sourceName ?? "Unknown"}</dd>
+			<dt class="text-ink-faint">Identifier</dt>
+			<dd class="font-mono break-all text-ink-muted">{settings.sourceUuid ?? "Unknown"}</dd>
+		</dl>
 	{:else if isVsdCoreAction}
-		<h2 class="font-semibold">{instance?.action?.name ?? "VSD Craft action"}</h2>
-		<p class="mt-1 text-xs text-neutral-400">This M18 action runs in the app core, not as an action plugin. Imported VSD Craft settings are retained below.</p>
 		{#if Object.keys(settings ?? {}).length > 0}
-			<div class="mt-4 space-y-3">
+			<p class="hint">Settings imported from VSD Craft:</p>
+			<div class="flex flex-col gap-3">
 				{#each Object.keys(settings) as key}
 					{#if typeof settings[key] === "boolean"}
-						<label class="flex items-center gap-2 text-sm text-neutral-300" for={`vsd-setting-${key}`}>
-							<input id={`vsd-setting-${key}`} type="checkbox" checked={settings[key]} on:change={(event) => setVsdSetting(key, event, "boolean")} disabled={saving} />
+						<label class="flex items-center justify-between gap-3 text-[13px]" for={`vsd-setting-${key}`}>
 							{settingLabel(key)}
+							<input id={`vsd-setting-${key}`} type="checkbox" class="switch" checked={settings[key]} on:change={(event) => update({ [key]: event.currentTarget.checked })} />
 						</label>
 					{:else if typeof settings[key] === "number"}
-						<label class="block text-xs text-neutral-400" for={`vsd-setting-${key}`}>{settingLabel(key)}</label>
-						<input id={`vsd-setting-${key}`} type="number" class="mt-1 w-full rounded border border-neutral-600 bg-neutral-900 px-2 py-1 text-sm" value={settings[key]} on:input={(event) => setVsdSetting(key, event, "number")} disabled={saving} />
+						<div class="field">
+							<label class="label" for={`vsd-setting-${key}`}>{settingLabel(key)}</label>
+							<input id={`vsd-setting-${key}`} type="number" class="input tabular-nums" value={settings[key]} on:input={(event) => update({ [key]: Number(event.currentTarget.value) }, false)} />
+						</div>
 					{:else if typeof settings[key] === "string"}
-						<label class="block text-xs text-neutral-400" for={`vsd-setting-${key}`}>{settingLabel(key)}</label>
-						<input id={`vsd-setting-${key}`} class="mt-1 w-full rounded border border-neutral-600 bg-neutral-900 px-2 py-1 text-sm" value={settings[key]} on:input={(event) => setVsdSetting(key, event, "text")} disabled={saving} />
+						<div class="field">
+							<label class="label" for={`vsd-setting-${key}`}>{settingLabel(key)}</label>
+							<input id={`vsd-setting-${key}`} class="input" value={settings[key]} on:input={(event) => update({ [key]: event.currentTarget.value }, false)} />
+						</div>
 					{:else}
-					<label class="block text-xs text-neutral-400" for={`vsd-setting-${key}`}>{settingLabel(key)} (JSON)</label>
-					<textarea id={`vsd-setting-${key}`} rows="4" class="mt-1 w-full rounded border border-neutral-600 bg-neutral-900 px-2 py-1 font-mono text-xs" value={JSON.stringify(settings[key], null, 2)} on:change={(event) => setVsdJsonSetting(key, event)} disabled={saving}></textarea>
+						<div class="field">
+							<label class="label" for={`vsd-setting-${key}`}>{settingLabel(key)} (JSON)</label>
+							<textarea
+								id={`vsd-setting-${key}`}
+								rows="3"
+								class="textarea input-mono"
+								value={JSON.stringify(settings[key], null, 2)}
+								on:change={(event) => {
+									try {
+										update({ [key]: JSON.parse(event.currentTarget.value) });
+									} catch {
+										// Keep the last valid value until the JSON parses.
+									}
+								}}
+							></textarea>
+						</div>
 					{/if}
 				{/each}
 			</div>
 		{:else}
-			<p class="mt-3 text-xs text-neutral-400">No settings were serialized by VSD Craft for this action.</p>
+			<p class="hint">{libraryEntry?.action.tooltip ?? instance.action.tooltip ?? "This action"} — nothing to set up.</p>
 		{/if}
 	{:else}
-		<h2 class="font-semibold">{instance?.action?.name ?? "M18 action"}</h2>
-		<p class="mt-1 text-xs text-neutral-400">This action is built into the M18 core and has no plugin settings.</p>
+		<p class="hint">{libraryEntry?.action.tooltip ?? instance.action.tooltip ?? "This action"} — nothing to set up.</p>
 	{/if}
 </div>
+
+<style>
+	.field {
+		display: flex;
+		flex-direction: column;
+		gap: 0.4rem;
+	}
+	details[open] summary {
+		color: var(--color-ink);
+	}
+</style>

@@ -1,300 +1,260 @@
 <script lang="ts">
 	import type { ActionInstance } from "$lib/ActionInstance";
 
+	import ArrowCounterClockwise from "phosphor-svelte/lib/ArrowCounterClockwise";
+	import ImageSquare from "phosphor-svelte/lib/ImageSquare";
+	import Minus from "phosphor-svelte/lib/Minus";
+	import PaintBucket from "phosphor-svelte/lib/PaintBucket";
+	import Plus from "phosphor-svelte/lib/Plus";
+	import TextB from "phosphor-svelte/lib/TextB";
+	import TextItalic from "phosphor-svelte/lib/TextItalic";
+	import TextUnderline from "phosphor-svelte/lib/TextUnderline";
+
 	import { t } from "$lib/i18n";
 	import { renderImage, resizeImage } from "$lib/rendererHelper";
 
 	import { invoke } from "@tauri-apps/api/core";
-	import { onMount } from "svelte";
+	import { onDestroy, onMount } from "svelte";
 
 	export let instance: ActionInstance;
-	export let showEditor: boolean;
 
 	let state: number = 0;
-	let bold: boolean;
-	let italic: boolean;
+	$: if (state >= instance.states.length) state = 0;
 
 	let fonts: string[] = [];
 	onMount(async () => {
-		fonts = await invoke("get_fonts");
+		try {
+			fonts = await invoke("get_fonts");
+		} catch {
+			fonts = [];
+		}
 	});
 
 	let fileInput: HTMLInputElement;
 	let solidColourInput: HTMLInputElement;
-	let backgroundColourInput: HTMLInputElement;
+
+	$: current = instance.states[state];
+	$: bold = current?.style.includes("Bold") ?? false;
+	$: italic = current?.style.includes("Italic") ?? false;
+
+	function setStyle(nextBold: boolean, nextItalic: boolean) {
+		instance.states[state].style = nextBold && nextItalic ? "Bold Italic" : nextBold ? "Bold" : nextItalic ? "Italic" : "Regular";
+	}
 
 	function adjustImageScale(delta: number) {
 		const next = (instance.states[state].image_scale || 100) + delta;
 		instance.states[state].image_scale = Math.max(10, Math.min(200, next));
 	}
 
-	function handleDrop(event: DragEvent) {
-		event.preventDefault();
+	function resetImage() {
+		instance.states[state].image = instance.action.states[state]?.image ?? instance.action.icon;
+		instance.states[state].image_scale = 100;
+	}
 
-		const file = event.dataTransfer?.files?.[0];
+	async function useFile(file: File | undefined) {
 		if (!file || !file.type.startsWith("image/")) return;
 		const reader = new FileReader();
-
 		reader.onload = async () => {
-			let result = reader.result?.toString();
-			if (result) {
-				let resized = await resizeImage(result);
-				if (resized) instance.states[state].image = resized;
-				else instance.states[state].image = result;
-			}
+			const result = reader.result?.toString();
+			if (!result) return;
+			instance.states[state].image = (await resizeImage(result)) ?? result;
 		};
-
 		reader.readAsDataURL(file);
 	}
 
-	function update(instance: ActionInstance) {
-		bold = instance.states[state].style.includes("Bold");
-		italic = instance.states[state].style.includes("Italic");
+	function useSolidColour() {
+		const canvas = document.createElement("canvas");
+		canvas.width = 1;
+		canvas.height = 1;
+		const context = canvas.getContext("2d");
+		if (!context) return;
+		context.fillStyle = solidColourInput.value;
+		context.fillRect(0, 0, canvas.width, canvas.height);
+		instance.states[state].image = canvas.toDataURL("image/png");
 	}
-	$: update(instance);
-	$: invoke("set_state", { context: instance.context, index: state, state: instance.states[state] });
+
+	// Save shortly after the last change, not on every keystroke or colour-picker move.
+	let saveTimer: ReturnType<typeof setTimeout> | undefined;
+	let pending: { context: string; index: number; state: unknown } | undefined;
+	function flush() {
+		clearTimeout(saveTimer);
+		saveTimer = undefined;
+		if (!pending) return;
+		const request = pending;
+		pending = undefined;
+		invoke("set_state", request).catch((error) => console.warn("Failed to save the key appearance", error));
+	}
+	let editing = "";
+	$: {
+		const key = `${instance.context}#${state}`;
+		const snapshot = structuredClone(instance.states[state]);
+		if (key !== editing) {
+			// Another key or state was opened: save what is pending for the
+			// previous one, but do not re-save the one that was just opened.
+			flush();
+			editing = key;
+		} else if (snapshot) {
+			pending = { context: instance.context, index: state, state: snapshot };
+			clearTimeout(saveTimer);
+			saveTimer = setTimeout(flush, 150);
+		}
+	}
+	onDestroy(flush);
 
 	let canvas: HTMLCanvasElement;
-	$: renderImage(canvas, null, instance.states[state], instance.action.states[state]?.image ?? instance.action.icon, false, false, true, false, false, 0);
+	$: if (canvas && current) renderImage(canvas, null, current, instance.action.states[state]?.image ?? instance.action.icon, false, false, true, false, false, 0);
+
+	let dragging = false;
+	const alignments = ["top", "middle", "bottom"] as const;
 </script>
 
-<svelte:window
-	on:keydown={(event) => {
-		if (event.key == "Escape") showEditor = false;
-	}}
-/>
-
-<div class="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 p-2 text-neutral-300 bg-neutral-700 border border-neutral-600 rounded-lg z-10">
-	<div class="flex flex-row">
-		<div class="select-wrapper m-1 w-full">
-			<select class="w-full bg-neutral-600! border-neutral-500!" bind:value={state} aria-label={$t("instance_editor.state")}>
-				{#each instance.states as _, i}
-					<option value={i}>{$t("instance_editor.state.n", { n: i + 1 })}</option>
-				{/each}
-			</select>
+<div class="flex gap-5">
+	<div class="flex w-[8.5rem] shrink-0 flex-col items-center gap-2.5">
+		<button
+			class="group relative size-[8.5rem] overflow-hidden rounded-[22px] bg-black shadow-[inset_0_0_0_1px_rgb(255_255_255/0.08),0_10px_24px_-12px_black] transition-shadow"
+			class:ring-2={dragging}
+			class:ring-accent={dragging}
+			on:click={() => fileInput.click()}
+			on:dragover|preventDefault={(event) => {
+				dragging = true;
+				if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
+			}}
+			on:dragleave={() => (dragging = false)}
+			on:drop|preventDefault={(event) => {
+				dragging = false;
+				useFile(event.dataTransfer?.files?.[0]);
+			}}
+			title={$t("instance_editor.image.hint")}
+			aria-label={$t("instance_editor.image.hint")}
+		>
+			<canvas bind:this={canvas} class="size-full" width={144} height={144} aria-label={$t("instance_editor.image.n", { n: state + 1 })} />
+			<span class="absolute inset-0 flex flex-col items-center justify-center gap-1 bg-black/60 text-[11px] font-medium text-white opacity-0 transition-opacity group-hover:opacity-100">
+				<ImageSquare size="20" />
+				Choose image
+			</span>
+		</button>
+		<div class="flex items-center gap-1">
+			<button class="btn btn-sm btn-icon" on:click={() => adjustImageScale(-10)} aria-label={$t("instance_editor.image.scale.decrease")}><Minus size="12" weight="bold" /></button>
+			<span class="w-11 text-center text-[11px] text-ink-muted tabular-nums">{current?.image_scale || 100}%</span>
+			<button class="btn btn-sm btn-icon" on:click={() => adjustImageScale(10)} aria-label={$t("instance_editor.image.scale.increase")}><Plus size="12" weight="bold" /></button>
 		</div>
-		<button class="ml-2 mr-1 float-right text-xl text-neutral-300" on:click={() => (showEditor = false)} aria-label={$t("settings.close")}>✕</button>
-	</div>
-	<div class="flex flex-row mx-1">
-		<div class="flex flex-col justify-center items-center mt-2 mb-1">
-			<button
-				on:click={(event) => {
-					if (event.ctrlKey) return;
-					fileInput.click();
-				}}
-				on:dragover={(event) => {
-					event.preventDefault();
-					if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
-				}}
-				on:drop={handleDrop}
-				on:contextmenu={(event) => {
-					event.preventDefault();
-					instance.states[state].image = instance.action.states[state]?.image ?? instance.action.icon;
-				}}
-				title={$t("instance_editor.image.hint")}
-				aria-label={$t("instance_editor.image.hint")}
-			>
-				<canvas
-					bind:this={canvas}
-					class="bg-black border border-neutral-600 rounded-xl cursor-pointer"
-					width={144}
-					height={144}
-					style={`transform: scale(${128 / 144}); margin: ${(128 - 144) / 2}px;`}
-					aria-label={$t("instance_editor.image.n", { n: state + 1 })}
-				/>
-			</button>
-			<div class="flex flex-row items-center justify-center mt-1 space-x-1 text-neutral-300">
-				<button
-					on:click={() => adjustImageScale(-10)}
-					class="w-6 h-6 text-sm bg-neutral-600 hover:bg-neutral-500 transition-colors border border-neutral-500 rounded-md"
-					title={$t("instance_editor.image.scale.decrease")}
-					aria-label={$t("instance_editor.image.scale.decrease")}
-				>
-					-
-				</button>
-				<span class="min-w-12 text-center text-xs tabular-nums">
-					{instance.states[state].image_scale || 100}%
-				</span>
-				<button
-					on:click={() => adjustImageScale(10)}
-					class="w-6 h-6 text-sm bg-neutral-600 hover:bg-neutral-500 transition-colors border border-neutral-500 rounded-md"
-					title={$t("instance_editor.image.scale.increase")}
-					aria-label={$t("instance_editor.image.scale.increase")}
-				>
-					+
-				</button>
-			</div>
-			<button
-				on:click={() => backgroundColourInput.click()}
-				on:focus={() => {
-					if (navigator.userAgent.toLowerCase().includes("mac")) backgroundColourInput.className = "";
-				}}
-				on:mouseover={() => {
-					if (navigator.userAgent.toLowerCase().includes("mac")) backgroundColourInput.className = "";
-				}}
-				on:blur={() => {
-					if (navigator.userAgent.toLowerCase().includes("mac")) backgroundColourInput.className = "absolute invisible w-0 h-0";
-				}}
-				on:mouseleave={() => {
-					if (navigator.userAgent.toLowerCase().includes("mac")) backgroundColourInput.className = "absolute invisible w-0 h-0";
-				}}
-				class="mt-1 px-0.5 text-sm text-neutral-300 bg-neutral-600 hover:bg-neutral-500 transition-colors border border-neutral-500 rounded-lg"
-			>
-				{$t("instance_editor.background")}
-				<input bind:this={backgroundColourInput} type="color" bind:value={instance.states[state].background_colour} class="absolute invisible w-0 h-0" />
-			</button>
-			<button
-				on:click={() => solidColourInput.click()}
-				on:focus={() => {
-					if (navigator.userAgent.toLowerCase().includes("mac")) solidColourInput.className = "";
-				}}
-				on:mouseover={() => {
-					if (navigator.userAgent.toLowerCase().includes("mac")) solidColourInput.className = "";
-				}}
-				on:blur={() => {
-					if (navigator.userAgent.toLowerCase().includes("mac")) solidColourInput.className = "absolute invisible w-0 h-0";
-				}}
-				on:mouseleave={() => {
-					if (navigator.userAgent.toLowerCase().includes("mac")) solidColourInput.className = "absolute invisible w-0 h-0";
-				}}
-				class="mt-1 px-0.5 text-sm text-neutral-300 bg-neutral-600 hover:bg-neutral-500 transition-colors border border-neutral-500 rounded-lg"
-			>
+		<div class="flex w-full flex-col gap-1">
+			<button class="btn btn-sm w-full" on:click={() => solidColourInput.click()}>
+				<PaintBucket size="13" />
 				{$t("instance_editor.solid_colour")}
-				<input
-					bind:this={solidColourInput}
-					type="color"
-					class="absolute invisible w-0 h-0"
-					value="#FFFFFE"
-					on:change={() => {
-						const canvas = document.createElement("canvas");
-						canvas.width = 1;
-						canvas.height = 1;
-						const context = canvas.getContext("2d");
-						if (!context) return;
-						context.fillStyle = solidColourInput.value;
-						context.fillRect(0, 0, canvas.width, canvas.height);
-						instance.states[state].image = canvas.toDataURL("image/png");
-					}}
-				/>
 			</button>
+			<button class="btn btn-sm btn-ghost w-full" on:click={resetImage}><ArrowCounterClockwise size="13" /> Reset image</button>
 		</div>
+		<input bind:this={solidColourInput} type="color" class="invisible absolute size-0" value="#7160fb" on:change={useSolidColour} />
 		<input
 			bind:this={fileInput}
 			type="file"
 			class="hidden"
 			accept="image/*"
-			on:change={async () => {
-				if (!fileInput.files || fileInput.files.length == 0) return;
-				const reader = new FileReader();
-
-				reader.onload = async () => {
-					let result = reader.result?.toString();
-					if (result) {
-						let resized = await resizeImage(result);
-						if (resized) instance.states[state].image = resized;
-						else instance.states[state].image = result;
-					}
-				};
-
-				reader.readAsDataURL(fileInput.files[0]);
+			on:change={() => {
+				useFile(fileInput.files?.[0]);
+				fileInput.value = "";
 			}}
 		/>
+	</div>
 
-		<div class="flex flex-col justify-center pl-4 pr-2 pt-4 pb-2 space-y-2">
-			<div class="flex flex-row items-center space-x-2">
-				<label for="editor-text">{$t("instance_editor.text")}</label>
-				<textarea
-					bind:value={instance.states[state].text}
-					placeholder={instance.action.states[state]?.text || instance.action.name}
-					rows="1"
-					class="w-full px-1 text-neutral-300 bg-neutral-600 border border-neutral-500 rounded-lg resize-none"
-					id="editor-text"
-				/>
+	{#if current}
+		<div class="flex min-w-0 flex-1 flex-col gap-3.5">
+			{#if instance.states.length > 1}
+				<div class="flex items-center gap-2">
+					<span class="label">{$t("instance_editor.state")}</span>
+					<div class="segmented" role="tablist">
+						{#each instance.states as _, index}
+							<button role="tab" aria-selected={state === index} on:click={() => (state = index)}>{$t("instance_editor.state.n", { n: index + 1 })}</button>
+						{/each}
+					</div>
+				</div>
+			{/if}
+
+			<div class="grid grid-cols-[1fr_auto] items-end gap-3">
+				<label>
+					<span class="label mb-1.5">Title</span>
+					<textarea bind:value={instance.states[state].text} placeholder={instance.action.states[state]?.text || "No title"} rows="2" class="textarea"></textarea>
+				</label>
+				<label class="flex flex-col items-center gap-1.5 pb-2">
+					<span class="label">{$t("instance_editor.show")}</span>
+					<input type="checkbox" class="switch" bind:checked={instance.states[state].show} />
+				</label>
 			</div>
-			<div class="flex flex-row items-center">
-				<label for="editor-colour" class="mr-2">{$t("instance_editor.colour")}</label>
-				<input
-					type="color"
-					bind:value={instance.states[state].colour}
-					class="mr-2 px-0.5 bg-neutral-600 border border-neutral-500 rounded-lg"
-					id="editor-colour"
-				/>
-				<label for="editor-show" class="mr-2">{$t("instance_editor.show")}</label>
-				<input type="checkbox" bind:checked={instance.states[state].show} class="mr-4 mt-1 scale-125" id="editor-show" />
-				<select bind:value={instance.states[state].alignment} class="px-1! py-0.5!" aria-label={$t("instance_editor.alignment")}>
-					<option value="top">{$t("instance_editor.alignment.top")}</option>
-					<option value="middle">{$t("instance_editor.alignment.middle")}</option>
-					<option value="bottom">{$t("instance_editor.alignment.bottom")}</option>
-				</select>
+
+			<div class="flex flex-wrap items-center gap-x-5 gap-y-3" class:opacity-40={!current.show}>
+				<div class="flex items-center gap-2">
+					<span class="label">Position</span>
+					<div class="segmented">
+						{#each alignments as alignment}
+							<button aria-pressed={current.alignment === alignment} on:click={() => (instance.states[state].alignment = alignment)}>{$t(`instance_editor.alignment.${alignment}`)}</button>
+						{/each}
+					</div>
+				</div>
+				<div class="flex items-center gap-1">
+					<button class="btn btn-sm btn-icon" class:btn-primary={bold} aria-pressed={bold} on:click={() => setStyle(!bold, italic)} aria-label="Bold"><TextB size="14" weight="bold" /></button>
+					<button class="btn btn-sm btn-icon" class:btn-primary={italic} aria-pressed={italic} on:click={() => setStyle(bold, !italic)} aria-label="Italic"><TextItalic size="14" /></button>
+					<button class="btn btn-sm btn-icon" class:btn-primary={current.underline} aria-pressed={current.underline} on:click={() => (instance.states[state].underline = !current.underline)} aria-label="Underline"><TextUnderline size="14" /></button>
+				</div>
 			</div>
-			<div class="flex flex-row items-center">
-				<label for="editor-stroke" class="mr-2">{$t("instance_editor.stroke")}</label>
-				<input
-					type="color"
-					bind:value={instance.states[state].stroke_colour}
-					class="mr-2 px-0.5 bg-neutral-600 border border-neutral-500 rounded-lg"
-					id="editor-stroke"
-				/>
-				<label for="editor-outline" class="mr-2">{$t("instance_editor.outline")}</label>
-				<input
-					type="number"
-					bind:value={instance.states[state].stroke_size}
-					class="px-0.5 w-14 text-neutral-300 bg-neutral-600 border border-neutral-500 rounded-lg"
-					id="editor-outline"
-				/>
+
+			<div class="grid grid-cols-[minmax(0,1fr)_5rem] gap-3" class:opacity-40={!current.show}>
+				<label>
+					<span class="label mb-1.5">{$t("instance_editor.font")}</span>
+					<input list="font-families" bind:value={instance.states[state].family} placeholder={$t("instance_editor.font.placeholder")} class="input" />
+					<datalist id="font-families">
+						<option value="Liberation Sans">Liberation Sans</option>
+						<option value="Archivo Black">Archivo Black</option>
+						<option value="Comic Neue">Comic Neue</option>
+						<option value="Courier Prime">Courier Prime</option>
+						<option value="Tinos">Tinos</option>
+						<option value="Anton">Anton</option>
+						<option value="Liberation Serif">Liberation Serif</option>
+						<option value="Open Sans">Open Sans</option>
+						<option value="Fira Sans">Fira Sans</option>
+						{#each fonts as font}<option value={font}>{font}</option>{/each}
+					</datalist>
+				</label>
+				<label>
+					<span class="label mb-1.5">{$t("instance_editor.font.size")}</span>
+					<input type="number" min="4" max="72" bind:value={instance.states[state].size} class="input tabular-nums" />
+				</label>
 			</div>
-			<div class="flex flex-row items-center">
-				<label for="editor-font" class="mr-2">{$t("instance_editor.font")}</label>
-				<input
-					list="families"
-					bind:value={instance.states[state].family}
-					placeholder={$t("instance_editor.font.placeholder")}
-					class="w-full px-1 text-neutral-300 bg-neutral-600 border border-neutral-500 rounded-lg"
-					id="editor-font"
-				/>
-				<datalist id="families">
-					<option value="Liberation Sans">Liberation Sans</option>
-					<option value="Archivo Black">Archivo Black</option>
-					<option value="Comic Neue">Comic Neue</option>
-					<option value="Courier Prime">Courier Prime</option>
-					<option value="Tinos">Tinos</option>
-					<option value="Anton">Anton</option>
-					<option value="Liberation Serif">Liberation Serif</option>
-					<option value="Open Sans">Open Sans</option>
-					<option value="Fira Sans">Fira Sans</option>
-					<option disabled>──────────</option>
-					{#each fonts as font}
-						<option value={font}>{font}</option>
-					{/each}
-				</datalist>
-			</div>
-			<div class="flex flex-row items-center">
-				<label for="editor-bold" class="mr-3 font-bold">B</label>
-				<input
-					type="checkbox"
-					bind:checked={bold}
-					on:change={() => (instance.states[state].style = bold && italic ? "Bold Italic" : bold ? "Bold" : italic ? "Italic" : "Regular")}
-					class="mr-4 mt-1 scale-125"
-					id="editor-bold"
-				/>
-				<label for="editor-italic" class="mr-3 italic">I</label>
-				<input
-					type="checkbox"
-					bind:checked={italic}
-					on:change={() => (instance.states[state].style = bold && italic ? "Bold Italic" : bold ? "Bold" : italic ? "Italic" : "Regular")}
-					class="mr-4 mt-1 scale-125"
-					id="editor-italic"
-				/>
-				<label for="editor-underline" class="mr-3 underline">U</label>
-				<input type="checkbox" bind:checked={instance.states[state].underline} class="mr-4 mt-1 scale-125" id="editor-underline" />
-				<label for="editor-size" class="mr-2">{$t("instance_editor.font.size")}</label>
-				<input
-					type="number"
-					bind:value={instance.states[state].size}
-					class="px-0.5 w-14 text-neutral-300 bg-neutral-600 border border-neutral-500 rounded-lg"
-					id="editor-size"
-				/>
+
+			<div class="flex flex-wrap items-center gap-x-5 gap-y-2" class:opacity-40={!current.show}>
+				<label class="flex items-center gap-2">
+					<input type="color" bind:value={instance.states[state].colour} class="color-swatch" />
+					<span class="text-xs text-ink-muted">{$t("instance_editor.colour")}</span>
+				</label>
+				<label class="flex items-center gap-2">
+					<input type="color" bind:value={instance.states[state].stroke_colour} class="color-swatch" />
+					<span class="text-xs text-ink-muted">{$t("instance_editor.outline")}</span>
+					<input type="number" min="0" max="20" bind:value={instance.states[state].stroke_size} class="input h-7 min-h-0 w-14 py-0 tabular-nums" aria-label="Outline width" />
+				</label>
+				<label class="flex items-center gap-2">
+					<input type="color" bind:value={instance.states[state].background_colour} class="color-swatch" />
+					<span class="text-xs text-ink-muted">Background</span>
+				</label>
 			</div>
 		</div>
-	</div>
+	{/if}
 </div>
+
+<style>
+	.color-swatch {
+		width: 1.75rem;
+		height: 1.75rem;
+		padding: 0;
+		border: 1px solid var(--color-line-strong);
+		border-radius: 0.45rem;
+		background: none;
+		overflow: hidden;
+	}
+	.color-swatch::-webkit-color-swatch-wrapper {
+		padding: 0;
+	}
+	.color-swatch::-webkit-color-swatch {
+		border: none;
+		border-radius: 0.4rem;
+	}
+</style>
