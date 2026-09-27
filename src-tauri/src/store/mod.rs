@@ -124,7 +124,7 @@ where
 	}
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Settings {
 	pub version: String,
@@ -132,12 +132,6 @@ pub struct Settings {
 	pub brightness: u8,
 	pub sleep_timeout_minutes: u16,
 	pub sleep_when_computer_locked: bool,
-	pub screensaver_enabled: bool,
-	pub screensaver_timeout_minutes: u16,
-	pub screensaver_mode: String,
-	pub screensaver_video_path: String,
-	pub screensaver_photo_paths: Vec<String>,
-	pub screensaver_slide_seconds: u16,
 	pub rotation: u16,
 	pub background: bool,
 	pub autolaunch: bool,
@@ -155,12 +149,6 @@ impl Default for Settings {
 			brightness: 50,
 			sleep_timeout_minutes: 0,
 			sleep_when_computer_locked: false,
-			screensaver_enabled: false,
-			screensaver_timeout_minutes: 5,
-			screensaver_mode: "video".to_owned(),
-			screensaver_video_path: String::new(),
-			screensaver_photo_paths: Vec::new(),
-			screensaver_slide_seconds: 10,
 			rotation: 0,
 			background: !is_flatpak(),
 			autolaunch: true,
@@ -181,3 +169,23 @@ pub fn get_settings() -> Store<Settings> {
 
 pub static SETTINGS_MUT: std::sync::LazyLock<tokio::sync::Mutex<Store<Settings>>> =
 	std::sync::LazyLock::new(|| tokio::sync::Mutex::new(Store::new_concurrent("settings", &crate::shared::config_dir(), Settings::default())));
+
+static SETTINGS_SNAPSHOT: std::sync::RwLock<Option<std::sync::Arc<Settings>>> = std::sync::RwLock::new(None);
+
+/// The current settings without touching the disk. Polling loops (the
+/// screensaver checks once per second) and per-request paths use this.
+pub fn current_settings() -> std::sync::Arc<Settings> {
+	if let Some(settings) = SETTINGS_SNAPSHOT.read().ok().and_then(|snapshot| snapshot.clone()) {
+		return settings;
+	}
+	let settings = std::sync::Arc::new(get_settings().value);
+	remember_settings(&settings);
+	settings
+}
+
+/// Record the settings that were just saved, so `current_settings` stays accurate.
+pub fn remember_settings(settings: &Settings) {
+	if let Ok(mut snapshot) = SETTINGS_SNAPSHOT.write() {
+		*snapshot = Some(std::sync::Arc::new(settings.clone()));
+	}
+}

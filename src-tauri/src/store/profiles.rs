@@ -52,7 +52,11 @@ impl ProfileStores {
 			let plugins_dir = config_dir().join("plugins");
 			let registered = crate::events::registered_plugins().await;
 			let keep_instance = |instance: &ActionInstance| -> bool {
-				instance.action.plugin == "opendeck"
+				// Built-in actions (M18 core actions have no plugin ID) must never be
+				// pruned: previously they survived only because `plugins_dir.join("")`
+				// happens to exist, so a missing plugins folder erased every native key.
+				instance.action.plugin.is_empty()
+					|| instance.action.plugin == "opendeck"
 					|| (plugins_dir.join(&instance.action.plugin).exists() && (!registered.contains(&instance.action.plugin) || actions.iter().any(|v| v.uuid == instance.action.uuid)))
 			};
 			for slot in store.value.keys.iter_mut().chain(store.value.sliders.iter_mut()).chain(store.value.infobars.iter_mut()) {
@@ -275,6 +279,11 @@ pub fn get_device_profiles(device: &str) -> Result<Vec<String>, anyhow::Error> {
 		}
 	}
 
+	// `X.json`, `X.json.bak`, and `X.json.temp` can coexist briefly while a
+	// profile is being saved; they are one profile.
+	profiles.sort();
+	profiles.dedup();
+
 	if profiles.is_empty() {
 		profiles.push("Default".to_owned());
 	}
@@ -377,7 +386,23 @@ pub async fn mark_profile_stale(device_id: &str, locks: &mut LocksMut<'_>) -> Re
 	Ok(())
 }
 
+/// Set once a configuration backup has been restored on disk. The in-memory
+/// profiles belong to the replaced configuration and must not be written over
+/// the restored files during the restart that follows.
+static PROFILE_WRITES_FROZEN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+pub fn freeze_profile_writes() {
+	PROFILE_WRITES_FROZEN.store(true, std::sync::atomic::Ordering::SeqCst);
+}
+
+fn profile_writes_frozen() -> bool {
+	PROFILE_WRITES_FROZEN.load(std::sync::atomic::Ordering::SeqCst)
+}
+
 pub async fn save_profile_now(device_id: &str, locks: &mut LocksMut<'_>) -> Result<(), anyhow::Error> {
+	if profile_writes_frozen() {
+		return Ok(());
+	}
 	let selected_profile = locks.device_stores.get_selected_profile(device_id)?;
 	let device = DEVICES.get(device_id).ok_or_else(|| anyhow!("device not found"))?;
 	let store = locks.profile_stores.get_profile_store_mut(&device, &selected_profile).await?;
@@ -389,12 +414,21 @@ pub async fn save_profile_now(device_id: &str, locks: &mut LocksMut<'_>) -> Resu
 }
 
 pub async fn flush_stale_profiles() -> Result<(), anyhow::Error> {
+	if profile_writes_frozen() {
+		return Ok(());
+	}
 	let mut locks = acquire_locks_mut().await;
+	// Keep flushing the other profiles when one fails, and report the failure.
+	let mut first_error = None;
 	for store in locks.profile_stores.stores.values_mut() {
 		if store.value.stale {
-			store.save()?;
-			store.value.stale = false;
+			match store.save() {
+				Ok(()) => store.value.stale = false,
+				Err(error) => {
+					first_error.get_or_insert(error);
+				}
+			}
 		}
 	}
-	Ok(())
+	first_error.map_or(Ok(()), Err)
 }

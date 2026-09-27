@@ -17,7 +17,7 @@ The bottom buttons are real assignable controls, but they have no LCD. Their ass
 
 The VSD Inside M18 hardware driver is built into the application. It is not installed, listed, spawned, or managed as an OpenDeck plugin. The core driver talks directly to VSD Inside M18 (`5548:1000`) for key press/release events, brightness, reconnects, and sleep/wake handling. OpenDeck's remaining plugin system is reserved for actions and user extensions.
 
-The built-in screensaver can loop a selected video or rotate through selected photos across the 15 LCDs while leaving the LEDs on. The first button press wakes the device and is consumed without activating its assigned action.
+The M18 screen follows the computer's state: it stays on while the computer is in use, turns off after a configurable period without keyboard, mouse, or trackpad input (and, optionally, while the computer is locked), and turns back on as soon as the computer is used again. Pressing an M18 key while the screen is off only wakes it and does not run the key's action. There is no device screensaver: the M18's keys are windows onto a single LCD panel, which is not prone to OLED-style burn-in, so turning the backlight off is the effective way to protect it.
 
 The action list includes a built-in **M18 LED Colors** action for all 24 RGB LEDs; it does not depend on a hardware plugin process.
 

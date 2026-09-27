@@ -35,11 +35,16 @@ enum PluginInstance {
 
 static INSTANCES: LazyLock<Mutex<HashMap<String, PluginInstance>>> = LazyLock::new(|| Mutex::new(HashMap::new()));
 
+/// Plugins, property inspectors, and the editor all run on this machine, so
+/// the plugin servers listen on the loopback interface only. Binding to every
+/// interface exposed plugin control and profile files to the local network.
+pub const LOOPBACK: &str = "127.0.0.1";
+
 pub static PORT_BASE: LazyLock<u16> = LazyLock::new(|| {
 	let mut base = 57116;
 	loop {
-		let websocket_result = std::net::TcpListener::bind(format!("0.0.0.0:{}", base));
-		let webserver_result = std::net::TcpListener::bind(format!("0.0.0.0:{}", base + 2));
+		let websocket_result = std::net::TcpListener::bind((LOOPBACK, base));
+		let webserver_result = std::net::TcpListener::bind((LOOPBACK, base + 2));
 		if websocket_result.is_ok() && webserver_result.is_ok() {
 			log::debug!("Using ports {} and {}", base, base + 2);
 			break;
@@ -48,6 +53,28 @@ pub static PORT_BASE: LazyLock<u16> = LazyLock::new(|| {
 	}
 	base
 });
+
+/// Browsers attach an `Origin` header to every WebSocket handshake and
+/// cross-origin request. Plugin processes send none; the editor, property
+/// inspectors, and HTML plugins are served from local origins. Anything else
+/// is a web page the user happens to have open, which must never be able to
+/// impersonate a plugin or read profile files.
+pub fn is_trusted_origin(origin: &str) -> bool {
+	let origin = origin.trim().to_ascii_lowercase();
+	if origin.starts_with("tauri://") {
+		return true;
+	}
+	let Some(rest) = origin.strip_prefix("http://").or_else(|| origin.strip_prefix("https://")) else {
+		return false;
+	};
+	let host = rest.split('/').next().unwrap_or_default();
+	let host = if let Some(bracketed) = host.strip_prefix('[') {
+		bracketed.split(']').next().unwrap_or_default()
+	} else {
+		host.split(':').next().unwrap_or_default()
+	};
+	matches!(host, "localhost" | "127.0.0.1" | "::1" | "tauri.localhost")
+}
 
 /// Attach a kernel-enforced "die when parent dies" signal to a plugin child process.
 #[cfg(target_os = "linux")]
@@ -391,7 +418,7 @@ pub async fn deactivate_plugins() {
 /// Initialise plugins from the plugins directory.
 pub fn initialise_plugins() {
 	tokio::spawn(init_websocket_server());
-	tokio::spawn(webserver::init_webserver(config_dir()));
+	webserver::init_webserver(config_dir());
 
 	let plugin_dir = config_dir().join("plugins");
 	let _ = fs::create_dir_all(&plugin_dir);
@@ -505,7 +532,7 @@ pub fn initialise_plugins() {
 
 /// Start the WebSocket server that plugins communicate with.
 async fn init_websocket_server() {
-	let listener = match TcpListener::bind(format!("0.0.0.0:{}", *PORT_BASE)).await {
+	let listener = match TcpListener::bind((LOOPBACK, *PORT_BASE)).await {
 		Ok(listener) => listener,
 		Err(error) => {
 			error!("Failed to bind plugin WebSocket server to socket: {}", error);
@@ -521,28 +548,90 @@ async fn init_websocket_server() {
 		unsafe { SetHandleInformation(listener.as_raw_socket() as _, HANDLE_FLAG_INHERIT, 0) };
 	}
 
-	while let Ok((stream, _)) = listener.accept().await {
-		accept_connection(stream).await;
+	loop {
+		match listener.accept().await {
+			// Each connection is handled on its own task: a client that stalls
+			// during its handshake must not block every other plugin from connecting.
+			Ok((stream, _)) => {
+				tokio::spawn(accept_connection(stream));
+			}
+			Err(error) => {
+				// Transient failures (for example, running out of file descriptors)
+				// must not permanently stop the plugin server.
+				warn!("Failed to accept a plugin connection: {error}");
+				tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+			}
+		}
 	}
 }
 
+const WEBSOCKET_REGISTRATION_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(15);
+
 /// Handle incoming data from a WebSocket connection.
 async fn accept_connection(stream: TcpStream) {
-	let mut socket = match tokio_tungstenite::accept_async(stream).await {
-		Ok(socket) => socket,
-		Err(error) => {
+	use tokio_tungstenite::tungstenite::handshake::server::{ErrorResponse, Request, Response};
+
+	let check_origin = |request: &Request, response: Response| -> Result<Response, ErrorResponse> {
+		match request.headers().get("origin").map(|origin| origin.to_str().unwrap_or_default()) {
+			Some(origin) if !is_trusted_origin(origin) => {
+				warn!("Rejected a plugin WebSocket connection from untrusted origin {origin}");
+				let mut rejection = ErrorResponse::new(Some("untrusted origin".to_owned()));
+				*rejection.status_mut() = tokio_tungstenite::tungstenite::http::StatusCode::FORBIDDEN;
+				Err(rejection)
+			}
+			_ => Ok(response),
+		}
+	};
+
+	let mut socket = match tokio::time::timeout(WEBSOCKET_REGISTRATION_TIMEOUT, tokio_tungstenite::accept_hdr_async(stream, check_origin)).await {
+		Ok(Ok(socket)) => socket,
+		Ok(Err(error)) => {
 			warn!("Failed to complete WebSocket handshake: {}", error);
+			return;
+		}
+		Err(_) => {
+			warn!("A plugin connection did not complete its WebSocket handshake in time");
 			return;
 		}
 	};
 
-	let Ok(register_event) = socket.next().await.unwrap() else {
-		return;
+	let register_event = match tokio::time::timeout(WEBSOCKET_REGISTRATION_TIMEOUT, socket.next()).await {
+		Ok(Some(Ok(message))) => message,
+		// The client disconnected or failed before registering; nothing to do.
+		Ok(Some(Err(_)) | None) => return,
+		Err(_) => {
+			warn!("A plugin connection did not register in time");
+			return;
+		}
 	};
-	match serde_json::from_str(&register_event.clone().into_text().unwrap()) {
+	let Ok(text) = register_event.to_text() else { return };
+	match serde_json::from_str(text) {
 		Ok(event) => crate::events::register_plugin(event, socket).await,
 		Err(_) => {
 			let _ = crate::events::inbound::process_incoming_message(Ok(register_event), "", false).await;
+		}
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::is_trusted_origin;
+
+	#[test]
+	fn only_local_origins_may_talk_to_the_plugin_servers() {
+		for origin in [
+			"tauri://localhost",
+			"http://tauri.localhost",
+			"https://tauri.localhost",
+			"http://localhost:57118",
+			"http://127.0.0.1:57118",
+			"http://[::1]:57118",
+			"http://localhost:5173",
+		] {
+			assert!(is_trusted_origin(origin), "{origin} should be trusted");
+		}
+		for origin in ["https://example.com", "http://localhost.example.com", "http://127.0.0.1.evil.test", "null", "file://", ""] {
+			assert!(!is_trusted_origin(origin), "{origin} should be rejected");
 		}
 	}
 }

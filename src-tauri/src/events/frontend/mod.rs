@@ -2,7 +2,6 @@ pub mod instances;
 pub mod plugins;
 pub mod profiles;
 pub mod property_inspector;
-pub mod screensaver;
 pub mod settings;
 
 use crate::shared::{CATEGORIES, Category, DEVICES, DeviceInfo};
@@ -10,7 +9,7 @@ use crate::shared::{CATEGORIES, Category, DEVICES, DeviceInfo};
 use std::collections::HashMap;
 
 use font_loader::system_fonts;
-use tauri::{Emitter, Manager, command};
+use tauri::{Emitter, command};
 
 #[derive(Debug, serde_with::SerializeDisplay, serde::Deserialize)]
 pub struct Error {
@@ -61,7 +60,7 @@ pub async fn get_devices() -> dashmap::DashMap<String, DeviceInfo> {
 
 pub async fn update_devices() {
 	let app = crate::APP_HANDLE.get().unwrap();
-	let _ = app.get_webview_window("main").unwrap().emit("devices", DEVICES.clone());
+	let _ = app.emit("devices", DEVICES.clone());
 }
 
 #[command]

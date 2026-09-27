@@ -1,6 +1,6 @@
 use super::{GenericInstancePayload, send_to_plugin};
 
-use crate::events::frontend::instances::{key_moved, update_state};
+use crate::events::frontend::instances::{key_moved, show_alert, update_state};
 use crate::shared::{ActionContext, Context};
 use crate::store::profiles::{acquire_locks_mut, get_slot_mut, mark_profile_stale};
 
@@ -136,6 +136,8 @@ fn child_delay(child: &crate::shared::ActionInstance, field: &str) -> u64 {
 	milliseconds(child.settings.get("_vsdMultiActionDelays").and_then(|delays| delays.get(field)))
 }
 
+/// Runs one step of a Multi Action. A failing step is reported on its key and
+/// logged, but never aborts the remaining steps of the sequence.
 async fn run_composite_child(child: &mut crate::shared::ActionInstance) -> Result<(), anyhow::Error> {
 	tokio::time::sleep(Duration::from_millis(child_delay(child, "Delay1"))).await;
 	if child.action.uuid.eq_ignore_ascii_case("com.hotspot.streamdock.multiactions.delay") {
@@ -149,14 +151,27 @@ async fn run_composite_child(child: &mut crate::shared::ActionInstance) -> Resul
 		);
 		tokio::time::sleep(Duration::from_millis(delay)).await;
 	} else {
-		action_down(child).await?;
+		if let Err(error) = action_down(child).await {
+			report_action_failure(child, "press", &error);
+		}
 		tokio::time::sleep(Duration::from_millis(100)).await;
-		if action_up(child).await? && child.states.len() > 1 && !child.action.disable_automatic_states {
-			child.current_state = (child.current_state + 1) % child.states.len() as u16;
+		match action_up(child).await {
+			Ok(true) if child.states.len() > 1 && !child.action.disable_automatic_states => {
+				child.current_state = (child.current_state + 1) % child.states.len() as u16;
+			}
+			Ok(_) => {}
+			Err(error) => report_action_failure(child, "release", &error),
 		}
 	}
 	tokio::time::sleep(Duration::from_millis(child_delay(child, "Delay2"))).await;
 	Ok(())
+}
+
+/// Log a failed action and flash the alert badge on its key, both in the
+/// editor and on the M18 LCD, so failures are visible instead of silent.
+fn report_action_failure(instance: &crate::shared::ActionInstance, phase: &str, error: &anyhow::Error) {
+	log::warn!("{} ({}) {phase} failed: {error:#}", instance.action.name, instance.action.uuid);
+	show_alert(&instance.context);
 }
 
 pub async fn key_down(device: &str, key: u8) -> Result<(), anyhow::Error> {
@@ -174,14 +189,18 @@ pub async fn key_down(device: &str, key: u8) -> Result<(), anyhow::Error> {
 
 	let Some(instance) = get_slot_mut(&context, &mut locks).await? else { return Ok(()) };
 	if crate::m18::is_led_action(&instance.action.uuid) {
-		crate::m18::apply_led_action(instance).await?;
+		let led_instance = instance.clone();
+		drop(locks);
+		if let Err(error) = crate::m18::apply_led_action(&led_instance).await {
+			report_action_failure(&led_instance, "press", &error);
+		}
 		return Ok(());
 	}
 	if crate::m18_actions::is_native_action(&instance.action.uuid) {
 		let native_instance = instance.clone();
 		drop(locks);
 		if let Err(error) = crate::m18_actions::key_down(&native_instance).await {
-			log::warn!("native M18 key-down action failed: {error:#}");
+			report_action_failure(&native_instance, "press", &error);
 		}
 		return Ok(());
 	}
@@ -205,14 +224,15 @@ pub async fn key_down(device: &str, key: u8) -> Result<(), anyhow::Error> {
 
 		mark_profile_stale(device, &mut locks).await?;
 	} else if matches!(instance.action.uuid.as_str(), "opendeck.toggleaction" | "opendeck.carouselaction") {
-		let children = instance.children.as_ref().unwrap();
-		if children.is_empty() {
+		let Some(children) = instance.children.as_ref().filter(|children| !children.is_empty()) else {
 			return Ok(());
-		}
+		};
 		let mut child = children[(instance.current_state as usize).min(children.len() - 1)].clone();
 		let child_index = child.context.index;
 		drop(locks);
-		action_down(&mut child).await?;
+		if let Err(error) = action_down(&mut child).await {
+			report_action_failure(&child, "press", &error);
+		}
 		let mut locks = acquire_locks_mut().await;
 		let contexts = if let Some(parent) = get_slot_mut(&context, &mut locks).await?
 			&& let Some(children) = &mut parent.children
@@ -273,7 +293,16 @@ pub async fn key_up(device: &str, key: u8) -> Result<(), anyhow::Error> {
 		let native_instance = instance.clone();
 		let native_context: Context = (&native_instance.context).into();
 		drop(locks);
-		let advances_state = crate::m18_actions::key_up(&native_instance).await?;
+		// A failing native action (a missing app, a denied Apple Event, a
+		// cancelled screenshot) is reported on its key; it must never propagate
+		// into the device session.
+		let advances_state = match crate::m18_actions::key_up(&native_instance).await {
+			Ok(advances_state) => advances_state,
+			Err(error) => {
+				report_action_failure(&native_instance, "release", &error);
+				false
+			}
+		};
 		if advances_state {
 			let mut locks = acquire_locks_mut().await;
 			let updated_instance = if let Some(instance) = get_slot_mut(&native_context, &mut locks).await? {
@@ -298,15 +327,19 @@ pub async fn key_up(device: &str, key: u8) -> Result<(), anyhow::Error> {
 	}
 
 	if matches!(instance.action.uuid.as_str(), "opendeck.toggleaction" | "opendeck.carouselaction") {
-		let children = instance.children.as_ref().unwrap();
-		if children.is_empty() {
+		let Some(children) = instance.children.as_ref().filter(|children| !children.is_empty()) else {
 			return Ok(());
-		}
+		};
 		let index = (instance.current_state as usize).min(children.len() - 1);
-		let child = &children[index];
-		let mut child = child.clone();
+		let mut child = children[index].clone();
 		drop(locks);
-		let advances_child_state = action_up(&mut child).await?;
+		let advances_child_state = match action_up(&mut child).await {
+			Ok(advances) => advances,
+			Err(error) => {
+				report_action_failure(&child, "release", &error);
+				false
+			}
+		};
 		if advances_child_state && child.states.len() > 1 && !child.action.disable_automatic_states {
 			child.current_state = (child.current_state + 1) % child.states.len() as u16;
 		}

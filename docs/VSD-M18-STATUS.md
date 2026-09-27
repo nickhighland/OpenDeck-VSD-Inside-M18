@@ -31,14 +31,14 @@ Translated VSD actions include:
 - native previous, next, and goto page actions using the M18 page set, plus change page actions;
 - Scene Shift, Open Folder, and parent-profile navigation;
 - device brightness and device sleep;
-- volume, mute, media transport, Siri, Launchpad, Dispatch Center, screenshots, sleep, and screen-saver actions;
+- volume, mute, media transport, Siri, Launchpad, Mission Control (VSD Craft's “Dispatch Center”), screenshots, sleep, and the macOS screen-saver action;
 - imported button titles, state images, and current state selection.
 
 Unknown action UUIDs are reported in the import summary and retained in place with their title and image. This makes migration recoverable instead of silently losing buttons.
 
 ## Feature-parity boundary
 
-OpenDeck's existing features remain the foundation and are not replaced by the importer. The M18 protocol, the built-in video/photo screensaver, and common M18 actions are implemented. Full one-for-one parity with every VSD Craft plugin is a larger porting project: VSD Craft also ships dynamic plugins for weather, calendars, world time, timers, countdowns, memo storage, emoticons, paint effects, and animated visualizers. Those require native OpenDeck action implementations rather than a simple profile translation.
+OpenDeck's existing features remain the foundation and are not replaced by the importer. The M18 protocol, computer-state display sleep, and common M18 actions are implemented. Full one-for-one parity with every VSD Craft plugin is a larger porting project: VSD Craft also ships dynamic plugins for weather, calendars, world time, timers, countdowns, memo storage, emoticons, paint effects, and animated visualizers. Those require native OpenDeck action implementations rather than a simple profile translation.
 
 The detailed read-only audit of VSD Craft's 123 action UUIDs and the fork's feature parity is in [docs/VSD-CRAFT-PARITY.md](VSD-CRAFT-PARITY.md). It contains no exported personal profiles.
 

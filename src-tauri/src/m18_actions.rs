@@ -8,7 +8,7 @@ use crate::shared::ActionInstance;
 
 use base64::Engine;
 use enigo::{
-	Enigo, Mouse, Settings,
+	Enigo, Keyboard, Mouse, Settings,
 	agent::{Agent, Token},
 };
 use image::{Rgb, RgbImage};
@@ -387,41 +387,82 @@ mod tests {
 	}
 }
 
+/// The current state's own artwork, when the core can draw it. Bundled
+/// artwork ("opendeck/…", including SVG key faces) is drawn by the editor,
+/// which also adds the title and background colour.
+fn state_image(instance: &ActionInstance) -> Option<String> {
+	let image = &instance.states.get(instance.current_state as usize)?.image;
+	if image.starts_with("opendeck/") {
+		return None;
+	}
+	image_data_url(image)
+}
+
 pub async fn render(instance: &ActionInstance) -> Result<(), anyhow::Error> {
 	let image = if instance.action.uuid == OPEN_APPS_UUID {
-		app_icon_data_url(&instance.settings).or_else(|| instance.states.get(instance.current_state as usize).and_then(|state| image_data_url(&state.image)))
+		let settings = instance.settings.clone();
+		tokio::task::spawn_blocking(move || app_icon_data_url(&settings)).await.ok().flatten().or_else(|| state_image(instance))
 	} else if instance.action.uuid == PAGE_INDICATOR_UUID {
-		current_page_number(instance)
-			.and_then(page_number_image)
-			.or_else(|| instance.states.get(instance.current_state as usize).and_then(|state| image_data_url(&state.image)))
+		current_page_number(instance).and_then(page_number_image).or_else(|| state_image(instance))
 	} else if instance.action.uuid == PAGE_GOTO_UUID
 		&& instance.settings.get("showPageNumber").and_then(Value::as_bool).unwrap_or(true)
 		&& instance.states.get(instance.current_state as usize).is_some_and(|state| state.text.trim().is_empty())
 	{
 		let page_number = instance.settings.get("pageIndex").and_then(Value::as_u64).unwrap_or(0).saturating_add(1) as usize;
 		let state = instance.states.get(instance.current_state as usize);
-		page_number_over_image(page_number, state.map(|state| state.image.as_str())).or_else(|| state.and_then(|state| image_data_url(&state.image)))
+		page_number_over_image(page_number, state.map(|state| state.image.as_str())).or_else(|| state_image(instance))
 	} else {
-		instance.states.get(instance.current_state as usize).and_then(|state| image_data_url(&state.image))
+		state_image(instance)
 	};
-	crate::events::outbound::devices::update_image((&instance.context).into(), image).await
+	// Nothing the core can draw: the editor renders this key, so leave the LCD
+	// untouched instead of blanking it.
+	let Some(image) = image else { return Ok(()) };
+	crate::events::outbound::devices::update_image((&instance.context).into(), Some(image)).await
+}
+
+/// Lock the shared input engine. If an earlier action panicked while holding
+/// the lock, the engine is recreated instead of failing every future hotkey.
+fn input_engine() -> std::sync::MutexGuard<'static, Option<Enigo>> {
+	let store = ENIGO.get_or_init(|| Mutex::new(None));
+	store.lock().unwrap_or_else(|poisoned| {
+		log::warn!("Recovering the M18 input engine after a panic in an earlier action");
+		let mut guard = poisoned.into_inner();
+		*guard = None;
+		guard
+	})
+}
+
+/// Release every key or raw key code that was pressed after `before` was
+/// captured. Called when an input sequence fails midway, so a modifier such
+/// as ⌘ or ⇧ can never stay stuck for all later keyboard input.
+fn release_keys_pressed_since(enigo: &mut Enigo, before: &(Vec<enigo::Key>, Vec<u16>)) {
+	let (keys, raw_codes) = enigo.held();
+	for key in keys.into_iter().rev().filter(|key| !before.0.contains(key)) {
+		let _ = enigo.key(key, enigo::Direction::Release);
+	}
+	for code in raw_codes.into_iter().rev().filter(|code| !before.1.contains(code)) {
+		let _ = enigo.raw(code, enigo::Direction::Release);
+	}
 }
 
 pub(crate) async fn execute_input(input: Option<String>) -> Result<(), anyhow::Error> {
 	let Some(input) = input.filter(|value| !value.trim().is_empty()) else {
 		return Ok(());
 	};
+	let tokens: Vec<Token> = ron::from_str(&input).map_err(|error| anyhow::anyhow!("The saved key sequence is not valid ({error}). Record the shortcut again."))?;
 
 	tokio::task::spawn_blocking(move || -> Result<(), anyhow::Error> {
-		let store = ENIGO.get_or_init(|| Mutex::new(None));
-		let mut guard = store.lock().map_err(|_| anyhow::anyhow!("M18 input engine lock was poisoned"))?;
+		let mut guard = input_engine();
 		if guard.is_none() {
 			guard.replace(Enigo::new(&Settings::default())?);
 		}
 		let enigo = guard.as_mut().expect("input engine was initialised");
-		let tokens: Vec<Token> = ron::from_str(&input)?;
-		for token in tokens {
-			enigo.execute(&token)?;
+		let held_before = enigo.held();
+		for token in &tokens {
+			if let Err(error) = enigo.execute(token) {
+				release_keys_pressed_since(enigo, &held_before);
+				return Err(error.into());
+			}
 		}
 		Ok(())
 	})
@@ -432,8 +473,7 @@ pub(crate) async fn execute_input(input: Option<String>) -> Result<(), anyhow::E
 #[tauri::command]
 pub async fn get_mouse_position() -> Result<(i32, i32), String> {
 	tokio::task::spawn_blocking(|| -> Result<(i32, i32), String> {
-		let store = ENIGO.get_or_init(|| Mutex::new(None));
-		let mut guard = store.lock().map_err(|_| "M18 input engine lock was poisoned".to_owned())?;
+		let mut guard = input_engine();
 		if guard.is_none() {
 			guard.replace(Enigo::new(&Settings::default()).map_err(|error| error.to_string())?);
 		}
@@ -489,16 +529,20 @@ async fn system_command(uuid: &str) -> Result<(), anyhow::Error> {
 			.await
 		}
 		SIRI_UUID => run_process("/usr/bin/open", vec!["-a".to_owned(), "Siri".to_owned()]).await,
-		DISPATCH_CENTER_UUID => run_process("/usr/bin/open", vec!["-a".to_owned(), "ControlCenter".to_owned()]).await,
+		// VSD Craft's "Dispatch Center" is a translation of 调度中心, which is
+		// macOS's Chinese name for Mission Control, not Control Center.
+		DISPATCH_CENTER_UUID => run_process("/usr/bin/open", vec!["-a".to_owned(), "Mission Control".to_owned()]).await,
 		SCREENSHOT_UUID => run_process("/usr/sbin/screencapture", vec!["-i".to_owned(), "-c".to_owned()]).await,
 		LAUNCHPAD_UUID => run_process("/usr/bin/open", vec!["-a".to_owned(), "Launchpad".to_owned()]).await,
 		DESKTOP_SAVER_UUID => run_process("/usr/bin/open", vec!["-a".to_owned(), "ScreenSaverEngine".to_owned()]).await,
 		SLEEP_UUID => run_process("/usr/bin/pmset", vec!["displaysleepnow".to_owned()]).await,
 		SCREEN_BRIGHTNESS_UP_UUID => run_process("/usr/bin/osascript", vec!["-e".to_owned(), "tell application \"System Events\" to key code 144".to_owned()]).await,
 		SCREEN_BRIGHTNESS_DOWN_UUID => run_process("/usr/bin/osascript", vec!["-e".to_owned(), "tell application \"System Events\" to key code 145".to_owned()]).await,
-		PREVIOUS_TRACK_UUID => run_process("/usr/bin/osascript", vec!["-e".to_owned(), "tell application \"Music\" to previous track".to_owned()]).await,
-		PLAY_PAUSE_UUID => run_process("/usr/bin/osascript", vec!["-e".to_owned(), "tell application \"Music\" to playpause".to_owned()]).await,
-		NEXT_TRACK_UUID => run_process("/usr/bin/osascript", vec!["-e".to_owned(), "tell application \"Music\" to next track".to_owned()]).await,
+		// Real media keys, like the hardware keys: they control whichever player is
+		// active (Music, Spotify, a browser) and never launch Music unasked.
+		PREVIOUS_TRACK_UUID => execute_input(Some("[k(MediaPrevTrack)]".to_owned())).await,
+		PLAY_PAUSE_UUID => execute_input(Some("[k(MediaPlayPause)]".to_owned())).await,
+		NEXT_TRACK_UUID => execute_input(Some("[k(MediaNextTrack)]".to_owned())).await,
 		_ => Ok(()),
 	}
 }

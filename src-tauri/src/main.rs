@@ -12,7 +12,6 @@ mod m18_pages;
 mod macos_audio;
 mod plugins;
 mod power_events;
-mod screensaver;
 mod shared;
 mod soundboard;
 mod store;
@@ -39,6 +38,7 @@ use tauri_plugin_log::{Target, TargetKind};
 
 static APP_HANDLE: OnceLock<AppHandle> = OnceLock::new();
 const SAVE_PROBE: Duration = Duration::from_secs(30);
+const RELEASES_REPOSITORY: &str = "nickhighland/OpenDeck-VSD-Inside-M18";
 
 fn show_window(app: &AppHandle) -> Result<(), tauri::Error> {
 	#[cfg(target_os = "macos")]
@@ -122,11 +122,6 @@ async fn main() {
 			frontend::settings::get_build_info,
 			frontend::settings::backup_config_directory,
 			frontend::settings::restore_config_directory,
-			frontend::screensaver::get_active_screensavers,
-			frontend::screensaver::import_screensaver_photos,
-			frontend::screensaver::import_screensaver_video,
-			frontend::screensaver::set_screensaver_frame,
-			frontend::screensaver::stop_screensaver,
 			vsd_import::import_vsd_profile,
 		])
 		.setup(|app| {
@@ -223,7 +218,6 @@ If you have already donated, thank you so much for your support!"#,
 			m18::init();
 			application_watcher::init_application_watcher();
 			device_sleep::init_device_sleep();
-			screensaver::init_screensaver();
 			power_events::init_power_events();
 
 			let label = IconMenuItemBuilder::with_id("label", PRODUCT_NAME)
@@ -247,8 +241,8 @@ If you have already donated, thank you so much for your support!"#,
 						}
 
 						let app_handle = icon.app_handle();
-						let window = app_handle.get_webview_window("main").unwrap();
-						let _ = if window.is_visible().unwrap_or(false) { hide_window(app_handle) } else { show_window(app_handle) };
+						let visible = app_handle.get_webview_window("main").and_then(|window| window.is_visible().ok()).unwrap_or(false);
+						let _ = if visible { hide_window(app_handle) } else { show_window(app_handle) };
 					}
 				})
 				.on_menu_event(move |app, event| {
@@ -272,22 +266,29 @@ If you have already donated, thank you so much for your support!"#,
 			}
 
 			async fn update() -> Result<(), anyhow::Error> {
+				// Releases of this M18 fork, not upstream OpenDeck: upstream builds do
+				// not contain the built-in M18 driver.
 				let res = reqwest::Client::new()
-					.get("https://api.github.com/repos/nekename/OpenDeck/releases/latest")
+					.get(format!("https://api.github.com/repos/{RELEASES_REPOSITORY}/releases/latest"))
 					.header("Accept", "application/vnd.github+json")
-					.header("User-Agent", "OpenDeck")
+					.header("User-Agent", "OpenDeck-VSD-M18")
+					.timeout(Duration::from_secs(20))
 					.send()
 					.await?
+					.error_for_status()?
 					.json::<serde_json::Value>()
 					.await?;
-				let tag_name = res.get("tag_name").unwrap().as_str().unwrap();
-				if semver::Version::parse(built_info::PKG_VERSION)?.cmp(&semver::Version::parse(&tag_name[1..])?) == Ordering::Less {
-					let app = APP_HANDLE.get().unwrap();
+				let tag_name = res
+					.get("tag_name")
+					.and_then(serde_json::Value::as_str)
+					.ok_or_else(|| anyhow::anyhow!("the latest release has no tag"))?;
+				if semver::Version::parse(built_info::PKG_VERSION)? < semver::Version::parse(tag_name.trim_start_matches('v'))? {
+					let app = APP_HANDLE.get().ok_or_else(|| anyhow::anyhow!("the application is not initialised"))?;
 					app.dialog()
 						.message(format!(
 							"A new version of {PRODUCT_NAME}, {}, is available.\nUpdate description:\n\n{}",
 							tag_name,
-							res.get("body").map(|v| v.as_str().unwrap()).unwrap_or("No description").trim()
+							res.get("body").and_then(serde_json::Value::as_str).unwrap_or("No description").trim()
 						))
 						.title(format!("{PRODUCT_NAME} update available"))
 						.show(|_| ());
@@ -360,7 +361,7 @@ If you have already donated, thank you so much for your support!"#,
 						if args.len() > pos + 1 {
 							let device_id = args[pos + 1].clone();
 							std::thread::spawn(move || {
-								if let Err(error) = tauri::async_runtime::block_on(device_sleep::wake_device(&device_id)) {
+								if let Err(error) = tauri::async_runtime::block_on(device_sleep::wake_device_now(&device_id)) {
 									log::error!("Failed to wake device: {error}");
 								}
 							});
@@ -376,7 +377,9 @@ If you have already donated, thank you so much for your support!"#,
 						let _ = show_window(app);
 					}
 				})
-				.dbus_id("me.amankhanna.opendeck")
+				// Must differ from upstream OpenDeck's ID, or launching this fork while
+				// upstream OpenDeck runs would hand its arguments to the wrong app.
+				.dbus_id("com.nickhighland.opendeck_vsd_m18")
 				.build(),
 		)
 		.plugin(tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::LaunchAgent, Some(vec!["--hide"])))
@@ -387,7 +390,7 @@ If you have already donated, thank you so much for your support!"#,
 				return;
 			}
 			if let WindowEvent::CloseRequested { api, .. } = event {
-				if store::get_settings().value.background {
+				if store::current_settings().background {
 					let _ = hide_window(window.app_handle());
 					api.prevent_close();
 				} else {

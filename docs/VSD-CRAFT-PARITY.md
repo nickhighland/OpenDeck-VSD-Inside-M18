@@ -16,7 +16,7 @@ The audit found:
 - Catalog and import coverage are ahead of behavior parity: several vendor-specific actions still have incomplete or missing runtime behavior and action-specific inspectors. Native folder navigation is implemented, but real nested-profile target resolution still needs a live comparison. Composite imports normalize flat `MultiActionData` children to native M18/OpenDeck actions and dispatch them in core. Nested composite children remain explicit inactive placeholders because the existing editor/context addressing model is flat. Synthetic schema tests do not replace a sanitized M18 profile; `Delay1`/`Delay2` timing and Carousel/Cycle artwork/state still need validation.
 - The importer supports nested M18 pages and maps supported actions to native M18/OpenDeck actions. Private profile exports and selected-app lists are intentionally excluded from this public audit.
 
-The strongest parity area is the hardware layer: the fork drives the M18 directly from the application core, including its 15 LCD keys, three physical bottom buttons, LED output, reconnect handling, and sleep/wake. The computer-idle screensaver and wake-only first press are implemented but still need physical-device verification, including full-display coverage. The largest parity gap is the action catalog and its property inspectors.
+The strongest parity area is the hardware layer: the fork drives the M18 directly from the application core, including its 15 LCD keys, three physical bottom buttons, LED output, reconnect handling, and sleep/wake. Display sleep follows the computer's state (computer idle time and, optionally, the lock screen), with a wake-only first press; it still needs physical-device verification. The largest parity gap is the action catalog and its property inspectors.
 
 ## Verification snapshot — 2026-09-26
 
@@ -30,7 +30,7 @@ The audit used three independent sources:
 
 1. Live inspection of the installed VSD Craft window while an M18 was connected. This covered device selection, pages, scene controls, the settings window, action categories, search, and a representative action property inspector.
 2. Read-only inspection of VSD Craft's installed manifests, bundled plugin directories, profile manifests, images, videos, logs, preferences, and `DataCache.db`.
-3. Read-only inspection of the fork source, especially `src-tauri/src/m18.rs`, `src-tauri/src/vsd_import.rs`, the profile manager, the action catalog, and the screensaver components.
+3. Read-only inspection of the fork source, especially `src-tauri/src/m18.rs`, `src-tauri/src/vsd_import.rs`, the profile manager, and the action catalog.
 
 Actions were not executed when doing so would launch applications, send keystrokes, change system settings, or modify the user's profile. For those actions, the installed manifest and property-inspector definitions were used as the feature evidence.
 
@@ -57,7 +57,7 @@ The live screenshots reviewed inline are valid evidence for visible UI parity (c
 | Multi-action composition | VSD Craft includes Multi Action, Action Carousel, Action Cycle, Delay, and knob variants. | **Partial, code path implemented.** The fork has separate native Multi Action, Carousel, and Cycle parents; it imports and dispatches flat child sequences through application core and handles explicit Delay actions. Nested composite children are preserved as inactive placeholders pending hierarchical editor/context addressing. `Delay1`/`Delay2` order, exact Cycle-vs-Carousel behavior, and imported artwork/state remain unverified against a sanitized VSD profile and the live device. Knob variants do not apply to the M18. |
 | VSD Craft profile import | VSD profiles contain nested page profiles, per-position actions, state images/titles, and device metadata. | **Partial.** The importer follows M18 pages, preserves state artwork/titles and OpenApps icons, maps known system actions, and imports flat composite children into native core instances. Nested composite children remain inactive placeholders. Synthetic tests cover the inferred parent/child shape; a sanitized real profile is still needed to validate timing, custom child names/artwork, and Cycle/Carousel state. Private profile contents are not included here. |
 | Per-key GIF/video artwork | The installed VSD Craft profile library contains PNG, GIF, MBG, JPG, and MP4 assets. | **Partial.** GIFs can be decoded for the UI's image path, but the M18 receives a rendered JPEG frame rather than an animated stream. MP4/MBG is not a supported per-key image format. |
-| VSD Craft screensaver actions | The bundle includes `Screensaver 1` and `Screensaver 2` action plugins. | **Partial, not hardware-verified.** The fork has video/photo input, LED-preserving output, and first-press wake suppression. Automatic activation uses Mac-wide idle time only: M18 inactivity cannot trigger it or reset that clock. After an M18 press dismisses the saver, it remains off until Mac activity resumes. Full 480×272 background streaming is implemented, but coverage, alignment, playback cadence, and wake behavior still need connected-device observation. It is not a VSD-style key action. |
+| VSD Craft screensaver actions | The bundle includes `Screensaver 1` and `Screensaver 2` action plugins. | **Intentionally excluded.** The M18 is an LCD panel without burn-in risk, so the fork removed its device screensaver. Display sleep follows the computer's state instead: on while the computer is in use, off after the configured computer idle time or while locked. Imported screensaver keys are kept but do nothing. |
 | Persistent boot logo | VSD Craft Settings → Device offers `Replace the boot logo (Resolution 480*272)`. | **Intentionally excluded per user request.** Do not implement or send logo-upload commands. |
 | Startup/update/settings | VSD Craft Settings includes version, update check, language, power-on, minimize, reset-current-device, application-folder, reset-all-devices, and auto-detect options. | **Partial.** The fork has language, autolaunch, update checks, brightness, sleep, rotation, background, backup/restore, developer/statistics, config/log folders, and VSD import. Its reset/minimize/power-on controls are not one-for-one. |
 | Store/account/notifications | The main VSD Craft window has store, account, and notification controls, plus Community/Reddit/Discord/mail links. | **Missing/partial.** The fork retains OpenDeck plugin management but does not reproduce the VSD Craft store/account/community surface. |
@@ -67,7 +67,7 @@ The live screenshots reviewed inline are valid evidence for visible UI parity (c
 
 The importer follows nested M18 pages and maps supported VSD action UUIDs to native actions or generic OpenDeck equivalents. The public repository intentionally omits private profile exports, selected-app lists, local profile paths, and device serial numbers. Validate migrations with sanitized fixtures and a backup of the user's own profile; do not commit personal exports.
 
-Boot-logo replacement is explicitly out of scope. Do not reverse-engineer or send boot-logo commands; parity work covers the M18's runtime controls and screensaver, not its persistent startup image.
+Boot-logo replacement is explicitly out of scope. Do not reverse-engineer or send boot-logo commands; parity work covers the M18's runtime controls, not its persistent startup image.
 
 ### Super Hotkey feasibility finding
 
@@ -212,12 +212,12 @@ MiraBox's [Operation Flow guide](https://mirabox.net/blogs/tutorial/how-to-use-o
 
 - Scene Shift — `com.hotspot.streamdock.profile.rotate` — native core action cycles the M18's page/profile set; imported VSD scene linkage and nested folder navigation still need validation.
 
-### Screensaver — requested behavior matched, action parity missing
+### Screensaver — intentionally excluded
 
 - Screensaver 1 — `com.mirabox.streamdock.screensaver.action1`
 - Screensaver 2 — `com.mirabox.streamdock.screensaver.action2`
 
-The fork's global M18 screensaver is designed for the requested behavior: it accepts a video or photo list, loops/slides it, leaves LEDs running, and consumes the first button press as wake-only input. It is configured in Settings rather than placed on an M18 key. These details are implemented in code but still require on-device verification.
+The M18's keys are windows onto one LCD panel, which is not prone to burn-in, so the fork has no device screensaver. Its display sleep follows the computer's state (computer idle time and, optionally, the lock screen) and turns the backlight off, which is what actually protects the panel. Imported screensaver keys are preserved but do nothing.
 
 ### Soundboard — partial
 
@@ -363,6 +363,6 @@ Work order:
 3. Complete local actions first: ordinary vs Super Hotkey, text/password, app/file/website open and close, system controls, media, soundboard, UDP, emoji, timer/countdown/date/time/calendar, and memo actions.
 4. Complete service/integration actions: weather, YouTube, vMix, Premiere presets, paint/pigment, rhythm, water-tank, and game-like actions where the installed VSD Craft M18 package exposes them.
 5. Match M18 scene/page, settings, state-artwork, title/icon/app-selection, and import/export workflows that are part of the M18 experience.
-6. Verify code-level behavior with unit/integration fixtures, then keep hardware-only checks explicit: buttons 1–18, input transport distinction, dynamic display refresh, screen saver/wake, LEDs, reconnect, and visual alignment.
+6. Verify code-level behavior with unit/integration fixtures, then keep hardware-only checks explicit: buttons 1–18, input transport distinction, dynamic display refresh, display sleep/wake, LEDs, reconnect, and visual alignment.
 
 The existing direct M18 hardware architecture remains the target. Each item must be reported as implemented, code-tested, hardware-verified, or blocked by an external dependency; boot-logo work must not appear in the remaining-work list.

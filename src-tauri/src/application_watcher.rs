@@ -5,7 +5,7 @@ use std::sync::LazyLock;
 
 use active_win_pos_rs::get_active_window;
 use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, RefreshKind, System};
-use tauri::{Emitter, Manager};
+use tauri::Emitter;
 use tokio::sync::RwLock;
 
 pub type ApplicationProfiles = HashMap<String, HashMap<String, String>>;
@@ -32,7 +32,7 @@ pub fn init_application_watcher() {
 				let mut applications = APPLICATIONS.write().await;
 				if !applications.contains(&win.app_name) && !win.app_name.to_lowercase().starts_with(&crate::shared::PRODUCT_NAME.to_lowercase()) && !win.app_name.trim().is_empty() {
 					applications.push(win.app_name.clone());
-					let _ = app_handle.get_webview_window("main").unwrap().emit("applications", applications.clone());
+					let _ = app_handle.emit("applications", applications.clone());
 				}
 				win.app_name
 			} else {
@@ -51,7 +51,7 @@ pub fn init_application_watcher() {
 					if crate::store::profiles::DEVICE_STORES.write().await.get_selected_profile(device).ok().as_ref() == Some(profile) {
 						continue;
 					}
-					let _ = app_handle.get_webview_window("main").unwrap().emit(
+					let _ = app_handle.emit(
 						"switch_profile",
 						SwitchProfileEvent {
 							device: device.clone(),

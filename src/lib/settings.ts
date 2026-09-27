@@ -4,12 +4,6 @@ export type Settings = {
 	brightness: number;
 	sleep_timeout_minutes: number;
 	sleep_when_computer_locked: boolean;
-	screensaver_enabled: boolean;
-	screensaver_timeout_minutes: number;
-	screensaver_mode: "video" | "slideshow";
-	screensaver_video_path: string;
-	screensaver_photo_paths: string[];
-	screensaver_slide_seconds: number;
 	rotation: number;
 	background: boolean;
 	autolaunch: boolean;

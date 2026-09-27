@@ -3,7 +3,7 @@ use super::Error;
 use crate::shared::{Action, ActionContext, ActionInstance, ActionState, Context, config_dir};
 use crate::store::profiles::{LocksMut, acquire_locks, acquire_locks_mut, get_instance_mut, get_slot, get_slot_mut, save_profile_now};
 
-use tauri::{AppHandle, Emitter, Manager, command};
+use tauri::{AppHandle, Emitter, command};
 use tokio::fs::remove_dir_all;
 
 #[derive(serde::Serialize)]
@@ -380,8 +380,7 @@ struct UpdateStateEvent {
 }
 
 pub async fn update_state(app: &AppHandle, context: ActionContext, locks: &mut LocksMut<'_>) -> Result<(), anyhow::Error> {
-	let window = app.get_webview_window("main").unwrap();
-	window.emit(
+	app.emit(
 		"update_state",
 		UpdateStateEvent {
 			contents: get_instance_mut(&context, locks).await?.cloned(),
@@ -389,6 +388,16 @@ pub async fn update_state(app: &AppHandle, context: ActionContext, locks: &mut L
 		},
 	)?;
 	Ok(())
+}
+
+/// Flash the alert badge on a key. The editor redraws the key with the badge
+/// and forwards that image to the M18, so the failure is visible on the device.
+pub fn show_alert(context: &ActionContext) {
+	if let Some(app) = crate::APP_HANDLE.get()
+		&& let Err(error) = app.emit("show_alert", context.to_string())
+	{
+		log::debug!("Failed to show alert for {context}: {error}");
+	}
 }
 
 #[command]
@@ -518,7 +527,6 @@ struct KeyMovedEvent {
 }
 
 pub async fn key_moved(app: &AppHandle, context: Context, pressed: bool) -> Result<(), anyhow::Error> {
-	let window = app.get_webview_window("main").unwrap();
-	window.emit("key_moved", KeyMovedEvent { context, pressed })?;
+	app.emit("key_moved", KeyMovedEvent { context, pressed })?;
 	Ok(())
 }

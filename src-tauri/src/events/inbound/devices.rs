@@ -21,7 +21,6 @@ pub async fn register_device(uuid: &str, mut event: PayloadEvent<crate::shared::
 		let _ = crate::events::outbound::devices::device_did_connect(&event.payload.id, (&event.payload).into()).await;
 		DEVICES.insert(event.payload.id.clone(), event.payload.clone());
 		let _ = crate::device_sleep::apply_initial_device_sleep(&event.payload.id).await;
-		crate::screensaver::apply_initial_device(&event.payload.id);
 		crate::events::frontend::update_devices().await;
 
 		let mut locks = crate::store::profiles::acquire_locks_mut().await;
@@ -87,7 +86,6 @@ pub async fn deregister_device(uuid: &str, event: PayloadEvent<String>) -> Resul
 		let _ = crate::events::outbound::devices::device_did_disconnect(&event.payload).await;
 		DEVICES.remove(&event.payload);
 		crate::device_sleep::deregister_device(&event.payload);
-		crate::screensaver::deregister_device(&event.payload);
 		crate::events::frontend::update_devices().await;
 
 		Ok(())
@@ -103,20 +101,15 @@ pub struct PressPayload {
 }
 
 pub async fn key_down(event: PayloadEvent<PressPayload>) -> Result<(), anyhow::Error> {
-	if crate::screensaver::note_button_activity(&event.payload.device, event.payload.position).await {
-		return Ok(());
-	}
-	if crate::device_sleep::note_activity(&event.payload.device).await.unwrap_or(false) {
+	// A press that only wakes the display must not also run the key's action.
+	if crate::device_sleep::note_key_down(&event.payload.device, event.payload.position).await {
 		return Ok(());
 	}
 	crate::events::outbound::keypad::key_down(&event.payload.device, event.payload.position).await
 }
 
 pub async fn key_up(event: PayloadEvent<PressPayload>) -> Result<(), anyhow::Error> {
-	if crate::screensaver::consume_wake_release(&event.payload.device, event.payload.position) {
-		return Ok(());
-	}
-	if crate::device_sleep::note_activity(&event.payload.device).await.unwrap_or(false) {
+	if crate::device_sleep::note_key_up(&event.payload.device, event.payload.position) {
 		return Ok(());
 	}
 	crate::events::outbound::keypad::key_up(&event.payload.device, event.payload.position).await
@@ -130,21 +123,21 @@ pub struct TicksPayload {
 }
 
 pub async fn encoder_change(event: PayloadEvent<TicksPayload>) -> Result<(), anyhow::Error> {
-	if crate::device_sleep::note_activity(&event.payload.device).await.unwrap_or(false) {
+	if crate::device_sleep::note_activity(&event.payload.device).await {
 		return Ok(());
 	}
 	crate::events::outbound::encoder::dial_rotate(&event.payload.device, event.payload.position, event.payload.ticks).await
 }
 
 pub async fn encoder_down(event: PayloadEvent<PressPayload>) -> Result<(), anyhow::Error> {
-	if crate::device_sleep::note_activity(&event.payload.device).await.unwrap_or(false) {
+	if crate::device_sleep::note_activity(&event.payload.device).await {
 		return Ok(());
 	}
 	crate::events::outbound::encoder::dial_press(&event.payload.device, "dialDown", event.payload.position).await
 }
 
 pub async fn encoder_up(event: PayloadEvent<PressPayload>) -> Result<(), anyhow::Error> {
-	if crate::device_sleep::note_activity(&event.payload.device).await.unwrap_or(false) {
+	if crate::device_sleep::note_activity(&event.payload.device).await {
 		return Ok(());
 	}
 	crate::events::outbound::encoder::dial_press(&event.payload.device, "dialUp", event.payload.position).await
@@ -161,7 +154,7 @@ pub struct TouchscreenPressPayload {
 }
 
 pub async fn touchscreen_press(event: PayloadEvent<TouchscreenPressPayload>) -> Result<(), anyhow::Error> {
-	if crate::device_sleep::note_activity(&event.payload.device).await.unwrap_or(false) {
+	if crate::device_sleep::note_activity(&event.payload.device).await {
 		return Ok(());
 	}
 	crate::events::outbound::encoder::touch_tap(&event.payload.device, event.payload.position, event.payload.x, event.payload.y, event.payload.hold).await

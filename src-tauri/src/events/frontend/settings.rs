@@ -21,20 +21,44 @@ pub async fn get_settings() -> crate::store::Settings {
 
 #[command]
 pub async fn set_settings(_app: AppHandle, settings: crate::store::Settings) -> Result<(), Error> {
-	#[cfg(not(debug_assertions))]
-	let _ = match settings.autolaunch {
-		true => _app.autolaunch().enable(),
-		false => _app.autolaunch().disable(),
-	};
-
-	crate::events::outbound::devices::set_brightness(settings.brightness).await?;
-	crate::device_sleep::update_sleep_timeout_minutes(settings.sleep_timeout_minutes).await?;
-	crate::device_sleep::update_sleep_when_computer_locked(settings.sleep_when_computer_locked).await?;
-	crate::screensaver::update_settings(settings.screensaver_enabled, settings.screensaver_timeout_minutes).await;
-
 	let mut store = crate::store::SETTINGS_MUT.lock().await;
+	if store.value == settings {
+		// The editor re-sends unchanged settings (for example when it starts);
+		// skip the disk write and the USB traffic.
+		crate::store::remember_settings(&settings);
+		return Ok(());
+	}
+	let previous = store.value.clone();
+
+	#[cfg(not(debug_assertions))]
+	if previous.autolaunch != settings.autolaunch {
+		let _ = match settings.autolaunch {
+			true => _app.autolaunch().enable(),
+			false => _app.autolaunch().disable(),
+		};
+	}
+
+	// Applying a setting to hardware must never stop it from being saved: a
+	// device that is reconnecting at this moment picks the value up on connect.
+	if previous.brightness != settings.brightness
+		&& let Err(error) = crate::events::outbound::devices::set_brightness(settings.brightness).await
+	{
+		log::warn!("Failed to apply M18 brightness: {error:#}");
+	}
+	if previous.sleep_timeout_minutes != settings.sleep_timeout_minutes
+		&& let Err(error) = crate::device_sleep::update_sleep_timeout_minutes(settings.sleep_timeout_minutes).await
+	{
+		log::warn!("Failed to apply the M18 sleep timeout: {error:#}");
+	}
+	if previous.sleep_when_computer_locked != settings.sleep_when_computer_locked
+		&& let Err(error) = crate::device_sleep::update_sleep_when_computer_locked(settings.sleep_when_computer_locked).await
+	{
+		log::warn!("Failed to apply the lock-screen sleep setting: {error:#}");
+	}
+
 	store.value = settings;
 	store.save()?;
+	crate::store::remember_settings(&store.value);
 	Ok(())
 }
 
@@ -155,10 +179,29 @@ pub async fn restore_config_directory(app: AppHandle) -> Result<(), Error> {
 	let _ = std::fs::remove_dir_all(&backup_dir);
 
 	crate::zip_extract::extract(File::open(path)?, &temp_dir).map_err(anyhow::Error::from)?;
+	// Refuse archives that are not configuration backups instead of replacing
+	// the whole configuration with arbitrary files.
+	if !temp_dir.join("settings.json").is_file() && !temp_dir.join("profiles").is_dir() {
+		let _ = std::fs::remove_dir_all(&temp_dir);
+		return Err(anyhow::anyhow!("This ZIP file is not a {PRODUCT_NAME} configuration backup; nothing was changed.").into());
+	}
+
+	// Write pending edits into the configuration being replaced, then stop all
+	// profile writes so nothing in memory is flushed over the restored files
+	// before the restart.
+	if let Err(error) = crate::store::profiles::flush_stale_profiles().await {
+		log::warn!("Failed to flush profiles before restoring a backup: {error:#}");
+	}
+	crate::store::profiles::freeze_profile_writes();
+
 	#[cfg(windows)]
 	crate::plugins::deactivate_plugins().await;
 	std::fs::rename(&config_dir, &backup_dir)?;
-	std::fs::rename(temp_dir, &config_dir)?;
+	if let Err(error) = std::fs::rename(&temp_dir, &config_dir) {
+		// Put the previous configuration back rather than leaving none at all.
+		let _ = std::fs::rename(&backup_dir, &config_dir);
+		return Err(anyhow::Error::from(error).into());
+	}
 	let _ = std::fs::remove_dir_all(backup_dir);
 
 	app.restart();

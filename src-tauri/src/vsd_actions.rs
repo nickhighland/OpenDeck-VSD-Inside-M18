@@ -302,6 +302,40 @@ async fn open_target(target: &str) -> Result<(), anyhow::Error> {
 	}
 }
 
+/// Open an application given as a path, a bundle identifier, or a display
+/// name. `open Calculator` treats a bare name as a file path and fails, so
+/// names must go through `open -a`.
+async fn open_application(target: &str) -> Result<(), anyhow::Error> {
+	let target = target.trim();
+	if target.is_empty() {
+		return Ok(());
+	}
+	#[cfg(target_os = "macos")]
+	{
+		if target.contains('/') || target.contains("://") {
+			run("/usr/bin/open", vec![target.to_owned()]).await
+		} else if looks_like_bundle_identifier(target) {
+			run("/usr/bin/open", vec!["-b".to_owned(), target.to_owned()]).await
+		} else {
+			run("/usr/bin/open", vec!["-a".to_owned(), target.trim_end_matches(".app").to_owned()]).await
+		}
+	}
+	#[cfg(not(target_os = "macos"))]
+	{
+		open_target(target).await
+	}
+}
+
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+fn looks_like_bundle_identifier(value: &str) -> bool {
+	let segments = value.split('.').collect::<Vec<_>>();
+	segments.len() >= 3
+		&& !value.to_ascii_lowercase().ends_with(".app")
+		&& segments
+			.iter()
+			.all(|segment| !segment.is_empty() && segment.chars().all(|character| character.is_ascii_alphanumeric() || character == '-' || character == '_'))
+}
+
 fn configured_input(instance: &crate::shared::ActionInstance) -> Option<String> {
 	if let Some(input) = text_setting(&instance.settings, &["down", "Down", "input", "Input"]) {
 		return Some(input.to_owned());
@@ -370,10 +404,38 @@ fn app_for_uuid(uuid: &str) -> Option<&'static str> {
 		"com.hotspot.streamdock.quicktool.controlpanel" => Some("System Settings"),
 		"com.hotspot.streamdock.quicktool.mail" => Some("Mail"),
 		"com.hotspot.streamdock.quicktool.music" => Some("Music"),
-		"com.hotspot.streamdock.quicktool.taskmanager" => Some("Activity Monitor"),
+		// The catalogued UUID carries a `.hotkey.` segment; both spellings exist.
+		"com.hotspot.streamdock.quicktool.taskmanager" | "com.hotspot.streamdock.hotkey.quicktool.taskmanager" => Some("Activity Monitor"),
 		"com.hotspot.streamdock.quicktool.homepage" => Some("Safari"),
-		"com.hotspot.streamdock.quicktool.emoticons" | "com.hotspot.streamdock.emoticons.lib" => Some("Character Viewer"),
 		"com.hotspot.streamdock.touchbar.launchpad" => Some("Launchpad"),
+		_ => None,
+	}
+}
+
+/// Actions that open macOS's Emoji & Symbols viewer. It is not an app that
+/// `open -a` can launch; its standard shortcut is ⌃⌘Space.
+fn opens_emoji_viewer(uuid: &str) -> bool {
+	matches!(
+		uuid.to_ascii_lowercase().as_str(),
+		"com.hotspot.streamdock.quicktool.emoticons" | "com.hotspot.streamdock.hotkey.quicktool.emoticons" | "com.hotspot.streamdock.emoticons.lib"
+	)
+}
+
+fn emoji_viewer_input() -> String {
+	shortcut(&[enigo::Key::Control, enigo::Key::Meta], enigo::Key::Space)
+}
+
+/// Touch Bar media keys, sent as real media keys so they control whichever
+/// player is active (Music, Spotify, a browser), as the hardware keys do.
+fn media_key_input(uuid: &str) -> Option<&'static str> {
+	match uuid.to_ascii_lowercase().as_str() {
+		"com.hotspot.streamdock.touchbar.playpause" => Some("[k(MediaPlayPause)]"),
+		"com.hotspot.streamdock.touchbar.nexttrack" => Some("[k(MediaNextTrack)]"),
+		"com.hotspot.streamdock.touchbar.previoustrack" => Some("[k(MediaPrevTrack)]"),
+		#[cfg(target_os = "macos")]
+		"com.hotspot.streamdock.touchbar.fastforward" => Some("[k(MediaFast)]"),
+		#[cfg(target_os = "macos")]
+		"com.hotspot.streamdock.touchbar.fastrewind" => Some("[k(MediaRewind)]"),
 		_ => None,
 	}
 }
@@ -424,7 +486,8 @@ async fn system_action(uuid: &str, settings: &Value) -> Result<bool, anyhow::Err
 		"com.hotspot.streamdock.quickcontrol.sleep" | "com.hotspot.streamdock.touchbar.sleep" | "com.hotspot.streamdock.device.devsleep" => Some(("/usr/bin/pmset", "displaysleepnow")),
 		"com.hotspot.streamdock.touchbar.desktopsaver" => Some(("/usr/bin/open", "-a ScreenSaverEngine")),
 		"com.hotspot.streamdock.touchbar.siri" => Some(("/usr/bin/open", "-a Siri")),
-		"com.hotspot.streamdock.touchbar.dispatchcenter" => Some(("/usr/bin/open", "x-apple.systempreferences:com.apple.ControlCenter-Settings.extension")),
+		// "Dispatch Center" is VSD Craft's translation of 调度中心: Mission Control.
+		"com.hotspot.streamdock.touchbar.dispatchcenter" => Some(("/usr/bin/open", "-a Mission Control")),
 		"com.hotspot.streamdock.touchbar.screenshot" => Some(("/usr/sbin/screencapture", "-i -c")),
 		"com.hotspot.streamdock.touchbar.decreasescreenbrightness" => Some(("/usr/bin/osascript", "tell application \"System Events\" to key code 145")),
 		"com.hotspot.streamdock.touchbar.increasescreenbrightness" => Some(("/usr/bin/osascript", "tell application \"System Events\" to key code 144")),
@@ -481,15 +544,28 @@ pub async fn key_up(instance: &crate::shared::ActionInstance) -> Result<bool, an
 		}
 		return Ok(false);
 	}
-	let notification_action = uuid == "com.hotspot.streamdock.quicktool.notification";
-	if is_hotkey(&uuid) || (uuid.contains(".hotkey.") && !notification_action) || uuid.contains("hotkey.pr.") {
+	if is_hotkey(&uuid) || uuid.contains(".hotkey.") || uuid.contains("hotkey.pr.") {
 		if let Some(input) = configured_input(instance).or_else(|| preset_input(&uuid)) {
 			crate::m18_actions::execute_input(Some(input)).await?;
+			return Ok(false);
 		}
+		// An ordinary Hotkey with nothing recorded does nothing. Preset UUIDs that
+		// merely carry a `.hotkey.` segment (volume, mute, Task Manager, emoji,
+		// notifications) have no key sequence and fall through to their handlers.
+		if is_hotkey(&uuid) {
+			return Ok(false);
+		}
+	}
+	if opens_emoji_viewer(&uuid) {
+		crate::m18_actions::execute_input(Some(emoji_viewer_input())).await?;
+		return Ok(false);
+	}
+	if let Some(input) = media_key_input(&uuid) {
+		crate::m18_actions::execute_input(Some(input.to_owned())).await?;
 		return Ok(false);
 	}
 	if let Some(app) = app_for_uuid(&uuid) {
-		open_target(app).await?;
+		open_application(app).await?;
 		return Ok(false);
 	}
 	if !is_hotkey(&uuid)
@@ -502,7 +578,7 @@ pub async fn key_up(instance: &crate::shared::ActionInstance) -> Result<bool, an
 	}
 	if uuid == "com.hotspot.streamdock.system.openapps" {
 		if let Some(app) = text_setting(&instance.settings, &["appPath", "path", "application", "app"]) {
-			open_target(app).await?;
+			open_application(app).await?;
 		}
 		return Ok(false);
 	}
@@ -598,19 +674,18 @@ pub async fn key_up(instance: &crate::shared::ActionInstance) -> Result<bool, an
 		}
 		return Ok(false);
 	}
-	if uuid.starts_with("com.mirabox.streamdock.screensaver.") {
-		crate::screensaver::start_device(&instance.context.device).await;
-		return Ok(false);
-	}
 	if uuid == "com.mirabox.streamdock.emoji.emoji" || uuid == "com.mirabox.streamdock.emoji.emoji_send" {
 		if let Some(emoji) = text_setting(&instance.settings, &["emoji", "Emoji", "text", "Text", "value"]) {
 			send_text(emoji).await?;
 		} else {
-			open_target("Character Viewer").await?;
+			crate::m18_actions::execute_input(Some(emoji_viewer_input())).await?;
 		}
 		return Ok(false);
 	}
-	if uuid == "com.hotspot.streamdock.quicktool.notification" || uuid == "com.hotspot.streamdock.touchbar.notificationcenter" {
+	if matches!(
+		uuid.as_str(),
+		"com.hotspot.streamdock.quicktool.notification" | "com.hotspot.streamdock.hotkey.quicktool.notification" | "com.hotspot.streamdock.touchbar.notificationcenter"
+	) {
 		#[cfg(target_os = "macos")]
 		{
 			// macOS has no public notification-center activation API; expose the
@@ -632,10 +707,10 @@ pub async fn key_up(instance: &crate::shared::ActionInstance) -> Result<bool, an
 	if uuid.contains("quickcontrol") || uuid.contains("touchbar") {
 		return Ok(false);
 	}
-	if uuid.contains("dateTime")
+	// `uuid` is lower-cased above, so every pattern here must be lower-case.
+	if uuid.contains("datetime")
 		|| uuid.contains("calendar")
 		|| uuid.contains("time.action")
-		|| uuid.contains("Weather")
 		|| uuid.contains("weather")
 		|| uuid.contains("youtube")
 		|| uuid.contains("soundboard")
@@ -645,7 +720,6 @@ pub async fn key_up(instance: &crate::shared::ActionInstance) -> Result<bool, an
 		|| uuid.contains("eatgoldcoins")
 		|| uuid.contains("musicalrhythma")
 		|| uuid.contains("emoticons")
-		|| uuid.contains("pictureEmoticons")
 	{
 		return Ok(false);
 	}

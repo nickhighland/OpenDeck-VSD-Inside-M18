@@ -15,8 +15,6 @@
 	import ProfileManager from "../components/ProfileManager.svelte";
 	import PropertyInspectorView from "../components/PropertyInspectorView.svelte";
 	import M18PageBar from "../components/M18PageBar.svelte";
-	import M18Screensaver from "../components/M18Screensaver.svelte";
-	import ScreensaverSettings from "../components/ScreensaverSettings.svelte";
 	import SettingsView from "../components/SettingsView.svelte";
 
 	let devices: { [id: string]: DeviceInfo } = {};
@@ -47,7 +45,6 @@
 			<div class="flex flex-row items-center space-x-2" class:mr-4={Object.keys(devices).length > 0}>
 				<PluginManager />
 				<SettingsView />
-				<ScreensaverSettings />
 			</div>
 		</nav>
 
@@ -72,5 +69,3 @@
 
 	<ActionList bind:this={$actionList} />
 </div>
-
-<M18Screensaver />

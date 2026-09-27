@@ -1,17 +1,18 @@
 use std::collections::HashMap;
+use std::future::Future;
 use std::sync::{Arc, LazyLock};
 use std::time::Duration;
 
 use data_url::DataUrl;
-use image::{DynamicImage, GenericImageView, load_from_memory};
+use image::{DynamicImage, load_from_memory};
 use mirajazz::{
 	device::{Device, DeviceQuery, list_devices},
 	error::MirajazzError,
 	types::{DeviceInput, HidDeviceInfo, ImageFormat, ImageMirroring, ImageMode, ImageRotation},
 };
 use tokio::{
-	sync::{RwLock, mpsc, oneshot},
-	time::{Instant, MissedTickBehavior, interval, sleep_until},
+	sync::{Mutex, RwLock, mpsc},
+	time::{Instant, MissedTickBehavior, interval, sleep_until, timeout},
 };
 use tokio_util::sync::CancellationToken;
 
@@ -28,8 +29,6 @@ pub const COL_COUNT: usize = 5;
 pub const KEY_COUNT: usize = ROW_COUNT * COL_COUNT;
 pub const LCD_KEY_COUNT: u8 = 15;
 pub const LED_COUNT: usize = 24;
-const SCREEN_WIDTH: u16 = 480;
-const SCREEN_HEIGHT: u16 = 272;
 
 const QUERY: DeviceQuery = DeviceQuery::new(65440, 1, VSDINSIDE_VID, VSDINSIDE_M18_PID);
 const IMAGE_FORMAT: ImageFormat = ImageFormat {
@@ -47,10 +46,30 @@ const BTN_LEFT: u8 = 0x25;
 const BTN_MIDDLE: u8 = 0x30;
 const BTN_RIGHT: u8 = 0x31;
 
+/// How often the watcher enumerates HID devices.
+const SCAN_INTERVAL: Duration = Duration::from_secs(2);
+/// A connected device must be missing from this many consecutive scans before
+/// its session is torn down. A single glitchy enumeration must not disconnect it.
+const MISSING_SCANS_BEFORE_DISCONNECT: u8 = 2;
+/// Upper bound for a single USB operation. A stalled HID write ends the session
+/// so the watcher can reconnect, instead of freezing every button forever.
+const DEVICE_IO_TIMEOUT: Duration = Duration::from_secs(5);
+/// Upper bound for queueing a command for the output worker.
+const QUEUE_TIMEOUT: Duration = Duration::from_secs(3);
+const MAX_RECONNECT_BACKOFF: Duration = Duration::from_secs(60);
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum ButtonEvent {
 	Down(u8),
 	Up(u8),
+}
+
+impl ButtonEvent {
+	fn position(self) -> u8 {
+		match self {
+			ButtonEvent::Down(position) | ButtonEvent::Up(position) => position,
+		}
+	}
 }
 
 struct ButtonSession {
@@ -109,50 +128,16 @@ struct CandidateDevice {
 }
 
 pub enum DeviceCommand {
-	SetImage {
-		position: u8,
-		image: DynamicImage,
-	},
-	ScreensaverFrame {
-		background: Vec<u8>,
-		images: Vec<DynamicImage>,
-		done: oneshot::Sender<Result<(), String>>,
-	},
-	ClearBackgroundFrame {
-		done: oneshot::Sender<Result<(), String>>,
-	},
+	SetImage { position: u8, image: DynamicImage },
 	ClearImage(u8),
 	ClearAll,
 	SetBrightness(u8),
 	SetLedColors(LedPalette),
 }
 
-fn background_frame_header(image_length: usize) -> Result<Vec<u8>, anyhow::Error> {
-	let image_length = u32::try_from(image_length)?;
-	let mut header = vec![0, b'C', b'R', b'T', 0, 0, b'B', b'G', b'P', b'I', b'C'];
-	header.extend_from_slice(&image_length.to_be_bytes());
-	header.extend_from_slice(&SCREEN_WIDTH.to_be_bytes());
-	header.extend_from_slice(&SCREEN_HEIGHT.to_be_bytes());
-	header.extend_from_slice(&0u16.to_be_bytes()); // x
-	header.extend_from_slice(&0u16.to_be_bytes()); // y
-	header.extend_from_slice(&[0, 0]); // reserved, layer
-	Ok(header)
-}
-
-async fn write_background_frame(device: &Device, jpeg: &[u8]) -> Result<(), MirajazzError> {
-	// BGPIC is the M18 SDK's *temporary* full-display frame command. This does
-	// not modify the persistent boot logo stored in the device.
-	let mut header = background_frame_header(jpeg.len()).map_err(|_| MirajazzError::BadData)?;
-	device.write_extended_data(&mut header).await?;
-	for chunk in jpeg.chunks(1024) {
-		let mut packet = Vec::with_capacity(1025);
-		packet.push(0);
-		packet.extend_from_slice(chunk);
-		device.write_extended_data(&mut packet).await?;
-	}
-	Ok(())
-}
-
+/// Clear any temporary full-display background (for example one left behind
+/// by VSD Craft) so only key images are visible. This never touches the
+/// persistent boot logo stored in the device.
 async fn clear_background_frame(device: &Device) -> Result<(), MirajazzError> {
 	// The manufacturer's clearBackgroundFrameStream defaults to position 0x03.
 	let mut header = vec![0, b'C', b'R', b'T', 0, 0, b'B', b'G', b'C', b'L', b'E', 0x03];
@@ -168,6 +153,28 @@ static SESSIONS: LazyLock<RwLock<HashMap<String, Arc<Session>>>> = LazyLock::new
 static CONNECTING: LazyLock<RwLock<HashMap<String, ()>>> = LazyLock::new(|| RwLock::new(HashMap::new()));
 static LED_PALETTES: LazyLock<RwLock<HashMap<String, LedPalette>>> = LazyLock::new(|| RwLock::new(HashMap::new()));
 static DEVICE_BRIGHTNESS: LazyLock<RwLock<HashMap<String, u8>>> = LazyLock::new(|| RwLock::new(HashMap::new()));
+static RECONNECT_BACKOFF: LazyLock<Mutex<HashMap<String, Backoff>>> = LazyLock::new(|| Mutex::new(HashMap::new()));
+
+/// Failed connection attempts for one device. Retrying every scan while
+/// another application owns the M18 would spam the log every two seconds.
+#[derive(Clone, Copy)]
+struct Backoff {
+	failures: u32,
+	retry_at: Instant,
+}
+
+fn reconnect_delay(failures: u32) -> Duration {
+	SCAN_INTERVAL.saturating_mul(1u32 << failures.min(5)).min(MAX_RECONNECT_BACKOFF)
+}
+
+/// Run one USB operation with a deadline so a stalled device cannot wedge the
+/// session; the caller treats the error like a disconnect and reconnects.
+async fn with_deadline<T>(operation: &str, deadline: Duration, future: impl Future<Output = Result<T, MirajazzError>>) -> Result<T, anyhow::Error> {
+	match timeout(deadline, future).await {
+		Ok(result) => result.map_err(|error| anyhow::anyhow!("{operation} failed: {error}")),
+		Err(_) => Err(anyhow::anyhow!("{operation} did not finish within {} s; the USB connection appears stalled", deadline.as_secs())),
+	}
+}
 
 fn get_device_id(device: &HidDeviceInfo) -> Option<String> {
 	Some(format!("{DEVICE_NAMESPACE}-{}", device.serial_number.clone()?))
@@ -225,22 +232,41 @@ pub fn init() {
 }
 
 async fn watcher_task() {
+	let mut missing_scans: HashMap<String, u8> = HashMap::new();
+	let mut scan_failures = 0u32;
 	loop {
 		match list_devices(&[QUERY]).await {
 			Ok(devices) => {
+				if scan_failures > 0 {
+					log::info!("VSD M18 device scan recovered after {scan_failures} failed attempt(s)");
+					scan_failures = 0;
+				}
 				let candidates = devices.into_iter().filter_map(|device| candidate(device.to_device_info())).collect::<Vec<_>>();
 				let present = candidates.iter().map(|candidate| candidate.id.clone()).collect::<Vec<_>>();
 
-				let stale = SESSIONS.read().await.keys().filter(|id| !present.contains(id)).cloned().collect::<Vec<_>>();
-				for id in stale {
-					if let Some(session) = SESSIONS.read().await.get(&id) {
+				let connected = SESSIONS.read().await.keys().cloned().collect::<Vec<_>>();
+				missing_scans.retain(|id, _| connected.contains(id));
+				for id in connected {
+					if present.contains(&id) {
+						missing_scans.remove(&id);
+						continue;
+					}
+					let misses = missing_scans.entry(id.clone()).or_default();
+					*misses += 1;
+					if *misses >= MISSING_SCANS_BEFORE_DISCONNECT
+						&& let Some(session) = SESSIONS.read().await.get(&id)
+					{
+						log::info!("VSD M18 device {id} is no longer present; closing its session");
 						session.token.cancel();
 					}
 				}
 
+				let now = Instant::now();
 				for candidate in candidates {
-					let connected = SESSIONS.read().await.contains_key(&candidate.id);
-					if connected {
+					if SESSIONS.read().await.contains_key(&candidate.id) {
+						continue;
+					}
+					if RECONNECT_BACKOFF.lock().await.get(&candidate.id).is_some_and(|backoff| backoff.retry_at > now) {
 						continue;
 					}
 					let already_connecting = CONNECTING.write().await.insert(candidate.id.clone(), ()).is_some();
@@ -251,18 +277,50 @@ async fn watcher_task() {
 					tokio::spawn(connect_candidate(candidate));
 				}
 			}
-			Err(error) => log::warn!("VSD M18 scan failed: {error}"),
+			Err(error) => {
+				scan_failures += 1;
+				// Log the first failure and then only occasionally, so a persistent
+				// HID problem cannot flood the log file every two seconds.
+				if scan_failures == 1 || scan_failures.is_multiple_of(30) {
+					log::warn!("VSD M18 scan failed ({scan_failures} consecutive): {error}");
+				}
+			}
 		}
 
-		tokio::time::sleep(Duration::from_secs(2)).await;
+		tokio::time::sleep(SCAN_INTERVAL).await;
 	}
 }
 
 async fn connect_candidate(candidate: CandidateDevice) {
 	let id = candidate.id.clone();
-	let result = run_session(candidate).await;
-	if let Err(error) = result {
-		log::error!("VSD M18 session {id} ended: {error}");
+	// A panic anywhere in the session must not leave the device marked as
+	// "connecting" forever, which would prevent every future reconnect.
+	let result = tokio::spawn(run_session(candidate)).await;
+	let outcome = match result {
+		Ok(outcome) => outcome,
+		Err(error) => Err(anyhow::anyhow!("session task panicked: {error}")),
+	};
+	match outcome {
+		Ok(()) => {
+			RECONNECT_BACKOFF.lock().await.remove(&id);
+		}
+		Err(error) => {
+			let mut backoffs = RECONNECT_BACKOFF.lock().await;
+			let failures = backoffs.get(&id).map(|backoff| backoff.failures + 1).unwrap_or(1);
+			let delay = reconnect_delay(failures);
+			backoffs.insert(
+				id.clone(),
+				Backoff {
+					failures,
+					retry_at: Instant::now() + delay,
+				},
+			);
+			if failures == 1 || failures.is_multiple_of(10) {
+				log::error!("VSD M18 device {id} could not be opened (attempt {failures}; retrying in {} s): {error:#}", delay.as_secs());
+			} else {
+				log::debug!("VSD M18 device {id} could not be opened (attempt {failures}): {error:#}");
+			}
+		}
 	}
 	CONNECTING.write().await.remove(&id);
 }
@@ -270,19 +328,31 @@ async fn connect_candidate(candidate: CandidateDevice) {
 async fn run_session(candidate: CandidateDevice) -> Result<(), anyhow::Error> {
 	let id = candidate.id.clone();
 	log::info!("Connecting to built-in VSD Inside M18 device {id}");
-	let device = Arc::new(Device::connect(&candidate.dev, 3, KEY_COUNT, 0).await?);
-	let brightness = crate::store::get_settings().value.brightness;
-	device.set_brightness(brightness).await?;
-	clear_background_frame(&device).await?;
-	device.clear_all_button_images().await?;
-	device.flush().await?;
+	let device = Arc::new(with_deadline("Opening the M18", Duration::from_secs(10), Device::connect(&candidate.dev, 3, KEY_COUNT, 0)).await?);
+	let brightness = crate::store::current_settings().brightness;
+	let initialised = async {
+		with_deadline("Setting M18 brightness", DEVICE_IO_TIMEOUT, device.set_brightness(brightness)).await?;
+		with_deadline("Clearing the M18 background", DEVICE_IO_TIMEOUT, clear_background_frame(&device)).await?;
+		with_deadline("Clearing M18 keys", DEVICE_IO_TIMEOUT, device.clear_all_button_images()).await?;
+		with_deadline("Flushing M18 keys", DEVICE_IO_TIMEOUT, device.flush()).await
+	}
+	.await;
+	if let Err(error) = initialised {
+		let _ = timeout(DEVICE_IO_TIMEOUT, device.shutdown()).await;
+		return Err(error);
+	}
 
 	let token = Arc::new(CancellationToken::new());
 	let (sender, receiver) = mpsc::channel(256);
 	let session = Arc::new(Session { token: token.clone(), sender });
-	if SESSIONS.write().await.insert(id.clone(), session).is_some() {
-		device.shutdown().await.ok();
-		return Ok(());
+	{
+		let mut sessions = SESSIONS.write().await;
+		if sessions.contains_key(&id) {
+			drop(sessions);
+			let _ = timeout(DEVICE_IO_TIMEOUT, device.shutdown()).await;
+			return Ok(());
+		}
+		sessions.insert(id.clone(), session);
 	}
 	DEVICE_BRIGHTNESS.write().await.insert(id.clone(), brightness);
 
@@ -297,17 +367,24 @@ async fn run_session(candidate: CandidateDevice) -> Result<(), anyhow::Error> {
 		infobars: 0,
 		r#type: 0,
 	};
-	if let Err(error) = crate::events::inbound::devices::register_device("", PayloadEvent { payload: info }).await {
-		SESSIONS.write().await.remove(&id);
-		DEVICE_BRIGHTNESS.write().await.remove(&id);
-		device.shutdown().await.ok();
-		return Err(error);
-	}
-	let _ = restore_led_colors(&id).await;
-
+	// The output worker must be running before the device is registered:
+	// registration renders every key, and those updates must reach the LCDs
+	// instead of piling up in the queue.
 	let output_token = token.clone();
 	let output_device = device.clone();
 	let mut output_task = tokio::spawn(async move { device_output_task(output_device, receiver, output_token).await });
+
+	if let Err(error) = crate::events::inbound::devices::register_device("", PayloadEvent { payload: info }).await {
+		token.cancel();
+		let _ = output_task.await;
+		SESSIONS.write().await.remove(&id);
+		DEVICE_BRIGHTNESS.write().await.remove(&id);
+		let _ = timeout(DEVICE_IO_TIMEOUT, device.shutdown()).await;
+		return Err(error);
+	}
+	let _ = restore_led_colors(&id).await;
+	log::info!("VSD Inside M18 device {id} is ready");
+
 	let input_token = token.clone();
 	let input_device = device.clone();
 	let mut input_task = tokio::spawn(async move { device_input_task(id.clone(), input_device, input_token).await });
@@ -325,14 +402,15 @@ async fn run_session(candidate: CandidateDevice) -> Result<(), anyhow::Error> {
 	let _ = crate::events::inbound::devices::deregister_device("", PayloadEvent { payload: candidate.id.clone() }).await;
 	SESSIONS.write().await.remove(&candidate.id);
 	DEVICE_BRIGHTNESS.write().await.remove(&candidate.id);
-	device.shutdown().await.ok();
+	let _ = timeout(DEVICE_IO_TIMEOUT, device.shutdown()).await;
+	log::info!("VSD Inside M18 device {} disconnected", candidate.id);
 	Ok(())
 }
 
-fn log_task_result<T: std::fmt::Debug, E: std::fmt::Debug>(kind: &str, result: Result<Result<T, E>, tokio::task::JoinError>) {
+fn log_task_result<T: std::fmt::Debug, E: std::fmt::Display>(kind: &str, result: Result<Result<T, E>, tokio::task::JoinError>) {
 	match result {
 		Ok(Ok(_)) => {}
-		Ok(Err(error)) => log::warn!("VSD M18 {kind} task ended: {error:?}"),
+		Ok(Err(error)) => log::warn!("VSD M18 {kind} task ended: {error}"),
 		Err(error) => log::warn!("VSD M18 {kind} task panicked: {error}"),
 	}
 }
@@ -340,23 +418,62 @@ fn log_task_result<T: std::fmt::Debug, E: std::fmt::Debug>(kind: &str, result: R
 async fn device_input_task(id: String, device: Arc<Device>, token: Arc<CancellationToken>) -> Result<(), anyhow::Error> {
 	let reader = device.get_reader(|_, _| Ok(DeviceInput::NoData));
 	let mut buttons = ButtonSession::new();
+	let mut dispatcher = KeyDispatcher::new(id);
 	loop {
 		if token.is_cancelled() {
 			return Ok(());
 		}
+		// Only HID read failures end the session. Action failures are handled
+		// by the key workers and can never disconnect the device.
 		let report = reader.raw_read_data(512).await?;
 		let Some(event) = buttons.process_report(&report)? else { continue };
-		let payload = PressPayload {
-			device: id.clone(),
-			position: match event {
-				ButtonEvent::Down(position) | ButtonEvent::Up(position) => position,
-			},
+		dispatcher.dispatch(event);
+	}
+}
+
+/// Routes button events to one sequential worker per key.
+///
+/// A key's press and release are always handled in order, but a slow action
+/// (a long multi-action, an interactive screenshot, an app that takes seconds
+/// to launch) never blocks the HID reader or any other key.
+struct KeyDispatcher {
+	device: String,
+	workers: HashMap<u8, mpsc::UnboundedSender<ButtonEvent>>,
+}
+
+impl KeyDispatcher {
+	fn new(device: String) -> Self {
+		Self { device, workers: HashMap::new() }
+	}
+
+	fn dispatch(&mut self, event: ButtonEvent) {
+		let position = event.position();
+		if let Some(worker) = self.workers.get(&position)
+			&& worker.send(event).is_ok()
+		{
+			return;
+		}
+		// No worker yet, or the previous one died (for example after a panic in
+		// an action): start a fresh one so the key keeps working.
+		let (sender, receiver) = mpsc::unbounded_channel();
+		tokio::spawn(key_worker(self.device.clone(), position, receiver));
+		let _ = sender.send(event);
+		self.workers.insert(position, sender);
+	}
+}
+
+async fn key_worker(device: String, position: u8, mut events: mpsc::UnboundedReceiver<ButtonEvent>) {
+	while let Some(event) = events.recv().await {
+		let payload = PayloadEvent {
+			payload: PressPayload { device: device.clone(), position },
 		};
-		let result = match event {
-			ButtonEvent::Down(_) => crate::events::inbound::devices::key_down(PayloadEvent { payload }).await,
-			ButtonEvent::Up(_) => crate::events::inbound::devices::key_up(PayloadEvent { payload }).await,
+		let (phase, result) = match event {
+			ButtonEvent::Down(_) => ("press", crate::events::inbound::devices::key_down(payload).await),
+			ButtonEvent::Up(_) => ("release", crate::events::inbound::devices::key_up(payload).await),
 		};
-		result?;
+		if let Err(error) = result {
+			log::warn!("M18 button {} {phase} failed: {error:#}", position + 1);
+		}
 	}
 }
 
@@ -372,7 +489,7 @@ enum OutputStep {
 	ClearFlush,
 }
 
-async fn device_output_task(device: Arc<Device>, mut receiver: mpsc::Receiver<DeviceCommand>, token: Arc<CancellationToken>) -> Result<(), MirajazzError> {
+async fn device_output_task(device: Arc<Device>, mut receiver: mpsc::Receiver<DeviceCommand>, token: Arc<CancellationToken>) -> Result<(), anyhow::Error> {
 	let mut keepalive = interval(Duration::from_secs(10));
 	keepalive.set_missed_tick_behavior(MissedTickBehavior::Skip);
 	keepalive.tick().await;
@@ -388,54 +505,38 @@ async fn device_output_task(device: Arc<Device>, mut receiver: mpsc::Receiver<De
 			_ = keepalive.tick() => OutputAction::KeepAlive,
 		};
 
+		// Every USB operation has a deadline: if the M18 stops acknowledging
+		// writes, the session ends and the watcher reconnects it, instead of the
+		// output queue silently filling up and every caller hanging.
 		let result = match action {
-			OutputAction::Command(Some(DeviceCommand::ScreensaverFrame { background, images, done })) => {
-				let result = async {
-					// Keep normal key-image updates out of the middle of a background
-					// frame stream, then commit all 15 crops as one coherent frame.
-					device.flush().await?;
-					write_background_frame(&device, &background).await?;
-					for (position, image) in images.into_iter().enumerate() {
-						if let Some(key) = device_key(position as u8) {
-							device.set_button_image(key, IMAGE_FORMAT, image).await?;
-						}
-					}
-					device.flush().await?;
-					Ok(OutputStep::ClearFlush)
-				}
-				.await;
-				let _ = done.send(result.as_ref().map(|_| ()).map_err(ToString::to_string));
-				result
-			}
-			OutputAction::Command(Some(DeviceCommand::ClearBackgroundFrame { done })) => {
-				let result = clear_background_frame(&device).await.map(|_| OutputStep::Continue);
-				let _ = done.send(result.as_ref().map(|_| ()).map_err(ToString::to_string));
-				result
-			}
-			OutputAction::Command(Some(DeviceCommand::SetImage { position, image })) => {
-				if let Some(device_position) = device_key(position) {
-					device.set_button_image(device_position, IMAGE_FORMAT, image).await.map(|_| OutputStep::ScheduleFlush)
-				} else {
-					Ok(OutputStep::Continue)
-				}
-			}
-			OutputAction::Command(Some(DeviceCommand::ClearImage(position))) => {
-				if let Some(device_position) = device_key(position) {
-					device.clear_button_image(device_position).await.map(|_| OutputStep::ScheduleFlush)
-				} else {
-					Ok(OutputStep::Continue)
-				}
-			}
+			OutputAction::Command(Some(DeviceCommand::SetImage { position, image })) => match device_key(position) {
+				Some(device_position) => with_deadline("Preparing a key image", DEVICE_IO_TIMEOUT, device.set_button_image(device_position, IMAGE_FORMAT, image))
+					.await
+					.map(|_| OutputStep::ScheduleFlush),
+				None => Ok(OutputStep::Continue),
+			},
+			OutputAction::Command(Some(DeviceCommand::ClearImage(position))) => match device_key(position) {
+				Some(device_position) => with_deadline("Clearing a key image", DEVICE_IO_TIMEOUT, device.clear_button_image(device_position))
+					.await
+					.map(|_| OutputStep::ScheduleFlush),
+				None => Ok(OutputStep::Continue),
+			},
 			OutputAction::Command(Some(DeviceCommand::ClearAll)) => {
-				device.clear_all_button_images().await?;
-				device.flush().await?;
-				Ok(OutputStep::ClearFlush)
+				let clear = async {
+					device.clear_all_button_images().await?;
+					device.flush().await
+				};
+				with_deadline("Clearing all keys", DEVICE_IO_TIMEOUT, clear).await.map(|_| OutputStep::ClearFlush)
 			}
-			OutputAction::Command(Some(DeviceCommand::SetBrightness(brightness))) => device.set_brightness(brightness).await.map(|_| OutputStep::Continue),
-			OutputAction::Command(Some(DeviceCommand::SetLedColors(colors))) => device.set_led_colors(&colors).await.map(|_| OutputStep::Continue),
+			OutputAction::Command(Some(DeviceCommand::SetBrightness(brightness))) => with_deadline("Setting brightness", DEVICE_IO_TIMEOUT, device.set_brightness(brightness))
+				.await
+				.map(|_| OutputStep::Continue),
+			OutputAction::Command(Some(DeviceCommand::SetLedColors(colors))) => with_deadline("Setting LED colors", DEVICE_IO_TIMEOUT, device.set_led_colors(&colors))
+				.await
+				.map(|_| OutputStep::Continue),
 			OutputAction::Command(None) => return Ok(()),
-			OutputAction::Flush => device.flush().await.map(|_| OutputStep::ClearFlush),
-			OutputAction::KeepAlive => device.keep_alive().await.map(|_| OutputStep::Continue),
+			OutputAction::Flush => with_deadline("Updating key images", DEVICE_IO_TIMEOUT, device.flush()).await.map(|_| OutputStep::ClearFlush),
+			OutputAction::KeepAlive => with_deadline("Keep-alive", DEVICE_IO_TIMEOUT, device.keep_alive()).await.map(|_| OutputStep::Continue),
 		};
 
 		match result {
@@ -449,59 +550,6 @@ async fn device_output_task(device: Arc<Device>, mut receiver: mpsc::Receiver<De
 	}
 }
 
-fn decode_data_image(data: &str) -> Result<(Vec<u8>, DynamicImage), anyhow::Error> {
-	let url = DataUrl::process(data).map_err(|error| anyhow::anyhow!("Invalid M18 image data: {error}"))?;
-	let (body, _) = url.decode_to_vec().map_err(|error| anyhow::anyhow!("Invalid M18 image data: {error}"))?;
-	let decoded = load_from_memory(&body)?;
-	Ok((body, decoded))
-}
-
-pub async fn set_screensaver_frame(device: &str, background: String, images: Vec<String>) -> Result<(), anyhow::Error> {
-	if !is_m18(device) || images.len() != LCD_KEY_COUNT as usize {
-		return Err(anyhow::anyhow!("An M18 screensaver frame needs one background and 15 key images"));
-	}
-	let (jpeg, decoded_background) = decode_data_image(&background)?;
-	if jpeg.len() > 512 * 1024 || !jpeg.starts_with(&[0xff, 0xd8]) || decoded_background.dimensions() != (SCREEN_WIDTH.into(), SCREEN_HEIGHT.into()) {
-		return Err(anyhow::anyhow!("M18 background must be a 480×272 JPEG under 512 KiB"));
-	}
-	let decoded_images = images
-		.into_iter()
-		.map(|image| {
-			let (_, decoded) = decode_data_image(&image)?;
-			if decoded.dimensions() != (64, 64) {
-				return Err(anyhow::anyhow!("M18 key images must be 64×64"));
-			}
-			Ok(decoded)
-		})
-		.collect::<Result<Vec<_>, anyhow::Error>>()?;
-	let (done, received) = oneshot::channel();
-	send(
-		device,
-		DeviceCommand::ScreensaverFrame {
-			background: jpeg,
-			images: decoded_images,
-			done,
-		},
-	)
-	.await?;
-	received
-		.await
-		.map_err(|_| anyhow::anyhow!("M18 output worker stopped during screensaver frame"))?
-		.map_err(anyhow::Error::msg)
-}
-
-pub async fn clear_screensaver_background(device: &str) -> Result<(), anyhow::Error> {
-	if !is_m18(device) {
-		return Ok(());
-	}
-	let (done, received) = oneshot::channel();
-	send(device, DeviceCommand::ClearBackgroundFrame { done }).await?;
-	received
-		.await
-		.map_err(|_| anyhow::anyhow!("M18 output worker stopped while clearing background"))?
-		.map_err(anyhow::Error::msg)
-}
-
 async fn send(device: &str, command: DeviceCommand) -> Result<(), anyhow::Error> {
 	let session = SESSIONS
 		.read()
@@ -509,7 +557,11 @@ async fn send(device: &str, command: DeviceCommand) -> Result<(), anyhow::Error>
 		.get(device)
 		.cloned()
 		.ok_or_else(|| anyhow::anyhow!("VSD Inside M18 device is not connected: {device}"))?;
-	session.sender.send(command).await.map_err(|_| anyhow::anyhow!("VSD Inside M18 output worker is unavailable"))
+	match timeout(QUEUE_TIMEOUT, session.sender.send(command)).await {
+		Ok(Ok(())) => Ok(()),
+		Ok(Err(_)) => Err(anyhow::anyhow!("VSD Inside M18 output worker is unavailable")),
+		Err(_) => Err(anyhow::anyhow!("VSD Inside M18 output queue is full; the device is not accepting data")),
+	}
 }
 
 pub async fn update_image(device: &str, position: u8, image: Option<String>) -> Result<(), anyhow::Error> {
@@ -550,7 +602,7 @@ pub async fn adjust_brightness(device: &str, adjustment: i8) -> Result<(), anyho
 		return Ok(());
 	}
 	let mut brightnesses = DEVICE_BRIGHTNESS.write().await;
-	let current = brightnesses.get(device).copied().unwrap_or_else(|| crate::store::get_settings().value.brightness);
+	let current = brightnesses.get(device).copied().unwrap_or_else(|| crate::store::current_settings().brightness);
 	let brightness = adjusted_brightness(current, adjustment);
 	send(device, DeviceCommand::SetBrightness(brightness)).await?;
 	brightnesses.insert(device.to_owned(), brightness);
@@ -633,14 +685,5 @@ mod tests {
 		let settings = default_led_settings();
 		assert_eq!(parse_led_palette(&settings), Some(DEFAULT_LED_PALETTE));
 		assert_eq!(led_settings(&DEFAULT_LED_PALETTE), settings);
-	}
-
-	#[test]
-	fn temporary_background_header_has_full_screen_geometry() {
-		let header = background_frame_header(0x1234).unwrap();
-		assert_eq!(&header[..11], &[0, b'C', b'R', b'T', 0, 0, b'B', b'G', b'P', b'I', b'C']);
-		assert_eq!(&header[11..15], &0x1234u32.to_be_bytes());
-		assert_eq!(&header[15..19], &[0x01, 0xe0, 0x01, 0x10]);
-		assert_eq!(&header[19..], &[0, 0, 0, 0, 0, 0]);
 	}
 }
