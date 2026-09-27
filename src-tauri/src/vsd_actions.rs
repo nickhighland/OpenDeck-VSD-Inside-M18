@@ -29,6 +29,7 @@ pub struct VsdActionDefinition {
 
 static DEFINITIONS: LazyLock<Vec<VsdActionDefinition>> = LazyLock::new(|| serde_json::from_str(include_str!("vsd_action_catalog.json")).expect("bundled VSD action catalog must be valid JSON"));
 
+#[cfg_attr(not(test), allow(dead_code))]
 pub fn definitions() -> &'static [VsdActionDefinition] {
 	&DEFINITIONS
 }
@@ -59,6 +60,7 @@ pub fn is_hotkey(uuid: &str) -> bool {
 pub fn default_settings(uuid: &str) -> Value {
 	match uuid.to_ascii_lowercase().as_str() {
 		"com.hotspot.streamdock.device.brightness" => json!({ "actionIdx": 0 }),
+		"com.hotspot.streamdock.multiactions.delay" => json!({ "delay": 500 }),
 		"com.hotspot.streamdock.system.multimedia" => json!({ "actionIdx": 1 }),
 		"com.hotspot.streamdock.mouse.event" => json!({ "eventType": "click", "button": "left", "x": 0, "y": 0, "axis": "vertical", "amount": 3, "coordinate": "absolute", "modifiers": [] }),
 		"com.hotspot.streamdock.system.openapps" => json!({ "appPath": "" }),

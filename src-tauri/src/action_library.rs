@@ -102,48 +102,11 @@ const fn hidden(uuid: &'static str, group: Group, name: &'static str, tooltip: &
 use crate::m18_actions as native;
 use Group::*;
 
-/// Actions implemented directly in the application core.
-pub const NATIVE_ENTRIES: &[Entry] = &[
-	listed(native::OPEN_APPS_UUID, Apps, "Open App", "Launch or switch to an app; the key shows the app's icon", "open-app"),
-	listed(
-		native::SUPER_HOTKEYS_UUID,
-		Keyboard,
-		"Super Hotkey",
-		"Run one key sequence on press and another on release",
-		"super-hotkey",
-	),
-	listed(native::HOTKEY_SWITCH_UUID, Keyboard, "Hotkey Switch", "Alternate between shortcuts on each press", "hotkey-switch"),
-	listed(
-		native::SUPER_HOTKEY_SWITCH_UUID,
-		Keyboard,
-		"Super Hotkey Switch",
-		"Alternate between press/release sequences on each press",
-		"super-hotkey-switch",
-	),
-	listed(native::PLAY_PAUSE_UUID, Media, "Play / Pause", "Play or pause whatever is playing", "play-pause"),
-	listed(native::PREVIOUS_TRACK_UUID, Media, "Previous Track", "Skip to the previous track", "previous-track"),
-	listed(native::NEXT_TRACK_UUID, Media, "Next Track", "Skip to the next track", "next-track"),
-	listed(native::VOLUME_UP_UUID, Media, "Volume Up", "Raise the output volume", "volume-up"),
-	listed(native::VOLUME_DOWN_UUID, Media, "Volume Down", "Lower the output volume", "volume-down"),
-	listed(native::MUTE_UUID, Media, "Mute", "Mute or unmute the output volume", "mute"),
-	listed(native::SIRI_UUID, System, "Siri", "Open Siri", "siri"),
-	listed(native::DISPATCH_CENTER_UUID, System, "Mission Control", "Show all open windows", "mission-control"),
-	listed(native::LAUNCHPAD_UUID, System, "Launchpad", "Open Launchpad", "launchpad"),
-	listed(native::SCREENSHOT_UUID, System, "Screenshot", "Capture a selected area to the clipboard", "screenshot"),
-	listed(native::SCREEN_BRIGHTNESS_UP_UUID, DisplayPower, "Brightness Up", "Brighten the Mac display", "brightness-up"),
-	listed(native::SCREEN_BRIGHTNESS_DOWN_UUID, DisplayPower, "Brightness Down", "Dim the Mac display", "brightness-down"),
-	listed(native::SLEEP_UUID, DisplayPower, "Sleep Displays", "Turn off the Mac's displays", "display-sleep"),
-	listed(native::DESKTOP_SAVER_UUID, DisplayPower, "Screen Saver", "Start the macOS screen saver", "screen-saver"),
-	listed(native::PAGE_NEXT_UUID, Pages, "Next Page", "Show the next M18 page", "page-next"),
-	listed(native::PAGE_PREVIOUS_UUID, Pages, "Previous Page", "Show the previous M18 page", "page-previous"),
-	listed(native::PAGE_GOTO_UUID, Pages, "Go to Page", "Jump straight to a chosen page", "page-goto"),
-	listed(native::PAGE_INDICATOR_UUID, Pages, "Page Number", "Show the number of the current page", "page-indicator"),
-];
-
-/// VSD Craft catalogue actions (see `vsd_action_catalog.json`). Composite
-/// flow UUIDs are not listed here: the native flow parents replace them.
-pub const VSD_ENTRIES: &[Entry] = &[
+/// Every built-in action, grouped and in the order the library lists them.
+/// Hidden duplicates follow the listed actions of their group.
+pub const LIBRARY: &[Entry] = &[
 	// Apps & websites
+	listed(native::OPEN_APPS_UUID, Apps, "Open App", "Launch or switch to an app; the key shows the app's icon", "open-app"),
 	listed(
 		"com.hotspot.streamdock.system.open",
 		Apps,
@@ -174,6 +137,21 @@ pub const VSD_ENTRIES: &[Entry] = &[
 	hidden("com.hotspot.streamdock.system.openApps", Apps, "Open App (VSD Craft)", "Open an app", "open-app"),
 	// Keyboard & text
 	listed("com.hotspot.streamdock.system.hotkey", Keyboard, "Hotkey", "Press a keyboard shortcut", "hotkey"),
+	listed(native::HOTKEY_SWITCH_UUID, Keyboard, "Hotkey Switch", "Alternate between shortcuts on each press", "hotkey-switch"),
+	listed(
+		native::SUPER_HOTKEYS_UUID,
+		Keyboard,
+		"Super Hotkey",
+		"Run one key sequence on press and another on release",
+		"super-hotkey",
+	),
+	listed(
+		native::SUPER_HOTKEY_SWITCH_UUID,
+		Keyboard,
+		"Super Hotkey Switch",
+		"Alternate between press/release sequences on each press",
+		"super-hotkey-switch",
+	),
 	listed("com.hotspot.streamdock.system.text", Keyboard, "Type Text", "Type a saved piece of text", "type-text"),
 	listed("com.hotspot.streamdock.system.password", Keyboard, "Type Password", "Type a saved password", "password"),
 	listed("com.mirabox.streamdock.emoji.emoji", Keyboard, "Emoji", "Type a saved emoji, or open the emoji picker", "emoji"),
@@ -194,6 +172,9 @@ pub const VSD_ENTRIES: &[Entry] = &[
 		"super-hotkey",
 	),
 	// Media & audio
+	listed(native::PLAY_PAUSE_UUID, Media, "Play / Pause", "Play or pause whatever is playing", "play-pause"),
+	listed(native::PREVIOUS_TRACK_UUID, Media, "Previous Track", "Skip to the previous track", "previous-track"),
+	listed(native::NEXT_TRACK_UUID, Media, "Next Track", "Skip to the next track", "next-track"),
 	listed(
 		"com.hotspot.streamdock.touchbar.fastforward",
 		Media,
@@ -202,6 +183,9 @@ pub const VSD_ENTRIES: &[Entry] = &[
 		"fast-forward",
 	),
 	listed("com.hotspot.streamdock.touchbar.fastrewind", Media, "Rewind", "Skip back in the current track or video", "rewind"),
+	listed(native::VOLUME_UP_UUID, Media, "Volume Up", "Raise the output volume", "volume-up"),
+	listed(native::VOLUME_DOWN_UUID, Media, "Volume Down", "Lower the output volume", "volume-down"),
+	listed(native::MUTE_UUID, Media, "Mute", "Mute or unmute the output volume", "mute"),
 	listed(
 		"com.hotspot.streamdock.quickcontrol.microphone",
 		Media,
@@ -270,7 +254,11 @@ pub const VSD_ENTRIES: &[Entry] = &[
 		"mute",
 	),
 	// System
+	listed(native::DISPATCH_CENTER_UUID, System, "Mission Control", "Show all open windows", "mission-control"),
+	listed(native::LAUNCHPAD_UUID, System, "Launchpad", "Open Launchpad", "launchpad"),
 	listed("com.hotspot.streamdock.hotkey.quicktool.searchbar", System, "Spotlight", "Open Spotlight search", "spotlight"),
+	listed(native::SIRI_UUID, System, "Siri", "Open Siri", "siri"),
+	listed(native::SCREENSHOT_UUID, System, "Screenshot", "Capture a selected area to the clipboard", "screenshot"),
 	listed(
 		"com.hotspot.streamdock.touchbar.showdesktop",
 		System,
@@ -353,6 +341,10 @@ pub const VSD_ENTRIES: &[Entry] = &[
 		"emoji-viewer",
 	),
 	// Display & power
+	listed(native::SCREEN_BRIGHTNESS_UP_UUID, DisplayPower, "Brightness Up", "Brighten the Mac display", "brightness-up"),
+	listed(native::SCREEN_BRIGHTNESS_DOWN_UUID, DisplayPower, "Brightness Down", "Dim the Mac display", "brightness-down"),
+	listed(native::SLEEP_UUID, DisplayPower, "Sleep Displays", "Turn off the Mac's displays", "display-sleep"),
+	listed(native::DESKTOP_SAVER_UUID, DisplayPower, "Screen Saver", "Start the macOS screen saver", "screen-saver"),
 	listed("com.hotspot.streamdock.touchbar.screenlock", DisplayPower, "Lock Screen", "Lock the Mac", "lock-screen"),
 	hidden(
 		"com.hotspot.streamdock.touchbar.increasescreenbrightness",
@@ -397,6 +389,10 @@ pub const VSD_ENTRIES: &[Entry] = &[
 		"display-sleep",
 	),
 	// Pages & folders
+	listed(native::PAGE_NEXT_UUID, Pages, "Next Page", "Show the next M18 page", "page-next"),
+	listed(native::PAGE_PREVIOUS_UUID, Pages, "Previous Page", "Show the previous M18 page", "page-previous"),
+	listed(native::PAGE_GOTO_UUID, Pages, "Go to Page", "Jump straight to a chosen page", "page-goto"),
+	listed(native::PAGE_INDICATOR_UUID, Pages, "Page Number", "Show the number of the current page", "page-indicator"),
 	listed(
 		"com.hotspot.streamdock.profile.openchild",
 		Pages,
@@ -423,8 +419,18 @@ pub const VSD_ENTRIES: &[Entry] = &[
 		"page-indicator",
 	),
 	// Action flows
+	listed("opendeck.multiaction", Flows, "Multi Action", "Run several actions in order with one press", "multi-action"),
+	listed("opendeck.toggleaction", Flows, "Action Cycle", "Each press runs the next action in the list", "action-cycle"),
+	listed(
+		"opendeck.carouselaction",
+		Flows,
+		"Action Carousel",
+		"Each press runs one action, then rotates to the next",
+		"action-carousel",
+	),
 	listed("com.hotspot.streamdock.multiactions.delay", Flows, "Delay", "Wait between the steps of a Multi Action", "delay"),
 	// M18 device
+	listed(crate::m18::LED_ACTION_UUID, Device, "LED Colors", "Set the colors of the M18's 24 LEDs", "led-colors"),
 	listed(
 		"com.hotspot.streamdock.device.brightness",
 		Device,
@@ -525,7 +531,6 @@ pub const VSD_ENTRIES: &[Entry] = &[
 		"focus-search",
 	),
 	listed("com.mirabox.streamdock.emoticons.select", ComingSoon, "Emoticon Stickers", "Send an animated emoticon", "stickers"),
-	hidden("com.mirabox.streamdock.emoticons.select2", ComingSoon, "Emoticon Stickers 2", "Send an animated emoticon", "stickers"),
 	listed(
 		"com.mirabox.streamdock.pigmenteffects.action1",
 		ComingSoon,
@@ -543,6 +548,7 @@ pub const VSD_ENTRIES: &[Entry] = &[
 	listed("com.streamdock.musicalrhythma.action1", ComingSoon, "Musical Rhythm", "Animated audio visualiser", "rhythm"),
 	listed("com.mirabox.streamdock.eatgoldcoins.action1", ComingSoon, "Eat Gold Coins", "A small key game", "game"),
 	listed("com.mirabox.streamdock.watertank.action1", ComingSoon, "Water Tank", "An animated water-tank effect", "water"),
+	hidden("com.mirabox.streamdock.emoticons.select2", ComingSoon, "Emoticon Stickers 2", "Send an animated emoticon", "stickers"),
 ];
 
 pub fn face_path(face: &str) -> String {
@@ -576,30 +582,13 @@ pub fn refresh_default_artwork(instance: &mut crate::shared::ActionInstance) -> 
 }
 
 pub fn entry(uuid: &str) -> Option<&'static Entry> {
-	NATIVE_ENTRIES
-		.iter()
-		.chain(VSD_ENTRIES)
-		.find(|entry| entry.uuid.eq_ignore_ascii_case(uuid))
-		.or_else(|| FLOW_ENTRIES.iter().find(|entry| entry.uuid == uuid))
+	LIBRARY.iter().find(|entry| entry.uuid.eq_ignore_ascii_case(uuid))
 }
 
 /// Whether the action does nothing yet (it is kept for imported profiles).
 pub fn is_coming_soon(uuid: &str) -> bool {
 	entry(uuid).is_some_and(|entry| entry.group == Group::ComingSoon) || uuid.to_ascii_lowercase().starts_with("com.mirabox.streamdock.screensaver.")
 }
-
-const FLOW_ENTRIES: &[Entry] = &[
-	listed("opendeck.multiaction", Flows, "Multi Action", "Run several actions in order with one press", "multi-action"),
-	listed("opendeck.toggleaction", Flows, "Action Cycle", "Each press runs the next action in the list", "action-cycle"),
-	listed(
-		"opendeck.carouselaction",
-		Flows,
-		"Action Carousel",
-		"Each press runs one action, then rotates to the next",
-		"action-carousel",
-	),
-	listed(crate::m18::LED_ACTION_UUID, Device, "LED Colors", "Set the colors of the M18's 24 LEDs", "led-colors"),
-];
 
 fn action(entry: &Entry, plugin: &str, state_count: usize, supported_in_multi_actions: bool) -> Action {
 	let image = face_path(entry.face);
@@ -620,6 +609,8 @@ fn action(entry: &Entry, plugin: &str, state_count: usize, supported_in_multi_ac
 			.map(|index| ActionState {
 				image: image.clone(),
 				name: if state_count > 1 { format!("{} {}", entry.name, index + 1) } else { entry.name.to_owned() },
+				// Titles sit below the icon on built-in artwork.
+				alignment: "bottom".to_owned(),
 				..Default::default()
 			})
 			.collect(),
@@ -632,32 +623,22 @@ pub fn categories() -> HashMap<String, Category> {
 	let mut groups: HashMap<Group, Vec<Action>> = HashMap::new();
 	let mut add = |group: Group, action: Action| groups.entry(group).or_default().push(action);
 
-	for entry in FLOW_ENTRIES {
-		// Multi Action and Action Cycle keep their historical plugin ID; saved
-		// profiles identify them by it.
-		let plugin = match entry.uuid {
-			"opendeck.multiaction" | "opendeck.toggleaction" => "opendeck",
-			uuid if uuid == crate::m18::LED_ACTION_UUID => "opendeck",
-			_ => "",
+	for entry in LIBRARY {
+		let built_action = if matches!(entry.uuid, "opendeck.multiaction" | "opendeck.toggleaction" | "opendeck.carouselaction") || entry.uuid == crate::m18::LED_ACTION_UUID {
+			// Multi Action, Action Cycle, and LED Colors keep their historical
+			// plugin ID; saved profiles identify them by it.
+			let plugin = if entry.uuid == "opendeck.carouselaction" { "" } else { "opendeck" };
+			action(entry, plugin, 1, false)
+		} else if let Some(definition) = crate::vsd_actions::definition(entry.uuid) {
+			let mut vsd = action(entry, "", definition.state_count, definition.supported_in_multi_actions);
+			// Keep the catalogue's UUID spelling: imports match it exactly.
+			vsd.uuid = definition.uuid.clone();
+			vsd
+		} else {
+			let states = if native::is_switch_action(entry.uuid) { 2 } else { 1 };
+			action(entry, "", states, true)
 		};
-		add(entry.group, action(entry, plugin, 1, false));
-	}
-	for entry in NATIVE_ENTRIES {
-		let states = if native::is_switch_action(entry.uuid) { 2 } else { 1 };
-		add(entry.group, action(entry, "", states, true));
-	}
-	for definition in crate::vsd_actions::definitions() {
-		if crate::vsd_actions::is_composite_action(&definition.uuid) {
-			continue;
-		}
-		let Some(entry) = VSD_ENTRIES.iter().find(|entry| entry.uuid.eq_ignore_ascii_case(&definition.uuid)) else {
-			log::warn!("VSD catalogue action {} has no library entry", definition.uuid);
-			continue;
-		};
-		let mut action = action(entry, "", definition.state_count, definition.supported_in_multi_actions);
-		// Keep the catalogue's UUID spelling: imports match it exactly.
-		action.uuid = definition.uuid.clone();
-		add(entry.group, action);
+		add(entry.group, built_action);
 	}
 
 	Group::ALL
@@ -679,11 +660,17 @@ mod tests {
 			if crate::vsd_actions::is_composite_action(&definition.uuid) {
 				continue;
 			}
-			let matches = VSD_ENTRIES.iter().filter(|entry| entry.uuid.eq_ignore_ascii_case(&definition.uuid)).count();
+			let matches = LIBRARY.iter().filter(|entry| entry.uuid.eq_ignore_ascii_case(&definition.uuid)).count();
 			assert_eq!(matches, 1, "{} should have exactly one library entry", definition.uuid);
 		}
-		for entry in VSD_ENTRIES {
-			assert!(crate::vsd_actions::definition(entry.uuid).is_some(), "{} is not in the VSD catalogue", entry.uuid);
+		// Everything else in the library is a built-in core action.
+		for entry in LIBRARY.iter().filter(|entry| crate::vsd_actions::definition(entry.uuid).is_none()) {
+			assert!(
+				entry.uuid.starts_with("opendeck.")
+					&& (native::is_native_action(entry.uuid) || entry.uuid == crate::m18::LED_ACTION_UUID || entry.uuid.starts_with("opendeck.") && entry.group == Group::Flows),
+				"{} is neither a VSD catalogue action nor a built-in action",
+				entry.uuid
+			);
 		}
 	}
 
@@ -752,7 +739,7 @@ mod tests {
 	#[test]
 	fn every_library_entry_has_key_artwork() {
 		let keys = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../static/keys");
-		for entry in NATIVE_ENTRIES.iter().chain(VSD_ENTRIES).chain(FLOW_ENTRIES) {
+		for entry in LIBRARY {
 			assert!(keys.join(format!("{}.svg", entry.face)).is_file(), "missing static/keys/{}.svg", entry.face);
 		}
 		assert!(keys.join("unsupported.svg").is_file(), "missing the unsupported-action artwork");
@@ -794,6 +781,53 @@ mod tests {
 		assert_eq!(instance.states[0].image, "opendeck/keys/volume-up.svg");
 		assert_eq!(instance.states[1].image, "data:image/png;base64,Y3VzdG9t");
 		assert!(!refresh_default_artwork(&mut instance), "a second pass changes nothing");
+	}
+
+	/// Writes the library for the editor's browser preview (`deno task dev`
+	/// outside Tauri). Run with:
+	/// OPENDECK_PREVIEW_LIBRARY=../src/lib/devPreviewLibrary.json cargo test export_preview_library -- --ignored
+	#[test]
+	#[ignore = "writes the editor preview fixture; run explicitly"]
+	fn export_preview_library() {
+		let path = std::env::var("OPENDECK_PREVIEW_LIBRARY").expect("set OPENDECK_PREVIEW_LIBRARY to the output path");
+		std::fs::write(path, serde_json::to_string_pretty(&categories()).unwrap() + "\n").unwrap();
+	}
+
+	#[test]
+	fn groups_list_actions_in_their_curated_order() {
+		let categories = categories();
+		let names = |group: Group| {
+			categories[group.name()]
+				.actions
+				.iter()
+				.filter(|action| action.visible_in_action_list)
+				.map(|action| action.name.as_str())
+				.collect::<Vec<_>>()
+		};
+		assert_eq!(names(Group::Apps)[..3], ["Open App", "Open File or Folder", "Open Website"]);
+		assert_eq!(names(Group::Keyboard)[..2], ["Hotkey", "Hotkey Switch"]);
+		assert_eq!(names(Group::Media)[..3], ["Play / Pause", "Previous Track", "Next Track"]);
+		assert_eq!(names(Group::Flows), ["Multi Action", "Action Cycle", "Action Carousel", "Delay"]);
+	}
+
+	#[test]
+	fn recorded_shortcut_sequences_are_valid_enigo_tokens() {
+		// The exact shapes the editor's shortcut recorder saves (src/lib/shortcuts.ts).
+		for sequence in [
+			"[k(Meta,Press),r(40),k(Meta,Release)]",
+			"[k(Control,Press),k(Alt,Press),r(122,Press)]",
+			"[r(122,Release),k(Alt,Release),k(Control,Release)]",
+			"[k(Meta,Press),k(Unicode('k'),Click),k(Meta,Release)]",
+			"[k(Unicode('\\\\'),Click)]",
+			"[k(Unicode('\\''),Click)]",
+			"[k(F13,Click)]",
+			"[k(Return,Click)]",
+			"[k(Numpad1,Click)]",
+			"[k(Add,Click)]",
+			"[k(LeftArrow,Click)]",
+		] {
+			assert!(ron::from_str::<Vec<enigo::agent::Token>>(sequence).is_ok(), "{sequence} should parse");
+		}
 	}
 
 	#[test]
