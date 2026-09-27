@@ -51,6 +51,41 @@ jobs:
       - name: install frontend dependencies
         run: deno install
 
+      # macOS ties permissions such as Accessibility to the app's signature.
+      # Ad-hoc signatures change with every build, so users would have to
+      # grant them again after each update; a certificate that stays the same
+      # keeps them. See docs/MACOS-SIGNING.md.
+      - name: import the macOS signing certificate
+        if: matrix.platform == 'macos-latest'
+        env:
+          MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+        run: |
+          if [ -z "$MACOS_CERTIFICATE" ]; then
+            echo "::warning::No MACOS_CERTIFICATE secret: this build is ad-hoc signed, so macOS asks for permissions again after updating."
+            exit 0
+          fi
+          certificate="$RUNNER_TEMP/signing.p12"
+          keychain="$RUNNER_TEMP/signing.keychain-db"
+          keychain_password="$(uuidgen)"
+          echo -n "$MACOS_CERTIFICATE" | base64 --decode -o "$certificate"
+          security create-keychain -p "$keychain_password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$keychain_password" "$keychain"
+          security import "$certificate" -P "$MACOS_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$keychain"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$keychain_password" "$keychain" > /dev/null
+          security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
+          rm "$certificate"
+          # A self-signed certificate is not "valid" to `find-identity -v`, so
+          # sign by its hash, which codesign accepts either way.
+          identity="$(security find-identity -p codesigning "$keychain" | awk '/^ *1\)/ { print $2; exit }')"
+          if [ -z "$identity" ]; then
+            echo "::error::MACOS_CERTIFICATE contains no code-signing identity."
+            exit 1
+          fi
+          echo "Signing with certificate $identity"
+          echo "APPLE_SIGNING_IDENTITY=$identity" >> "$GITHUB_ENV"
+
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
