@@ -249,7 +249,7 @@
 					</div>
 				{:else}
 					<div class="flex flex-col items-center gap-3 py-4 text-center">
-						<img src="/app-mark.svg" alt="" class="size-16 drop-shadow-[0_8px_20px_rgb(113_96_251/0.45)]" />
+						<img src="/app-icon.png" alt="" class="size-16 drop-shadow-[0_8px_20px_rgb(0_0_0/0.5)]" />
 						<div>
 							<p class="text-base font-semibold text-ink">{PRODUCT_NAME}</p>
 							<p class="hint">Control software for the VSD Inside M18</p>

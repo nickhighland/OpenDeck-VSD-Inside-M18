@@ -68,7 +68,7 @@
 <div class="flex h-screen flex-col bg-canvas text-ink">
 	<header class="flex h-12 shrink-0 items-center gap-4 border-b border-line bg-panel px-4">
 		<div class="flex items-center gap-2.5">
-			<img src="/app-mark.svg" alt="" class="size-7 drop-shadow-[0_4px_10px_rgb(113_96_251/0.35)]" />
+			<img src="/app-icon.png" alt="" class="size-7 drop-shadow-[0_4px_10px_rgb(0_0_0/0.45)]" />
 			<span class="text-[13px] font-semibold tracking-tight">{PRODUCT_NAME}</span>
 		</div>
 		<DeviceSelector bind:devices bind:value={selectedDevice} bind:selectedProfiles bind:this={$deviceSelector} />

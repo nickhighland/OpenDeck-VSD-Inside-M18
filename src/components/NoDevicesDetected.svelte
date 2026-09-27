@@ -21,8 +21,8 @@
 
 <div class="flex h-full w-full flex-col items-center justify-center px-8 text-center">
 	<div class="relative mb-6">
-		<div class="absolute inset-0 animate-ping rounded-3xl bg-accent/20 [animation-duration:2.4s]"></div>
-		<img src="/app-mark.svg" alt="" class="relative size-20 drop-shadow-[0_12px_30px_rgb(113_96_251/0.5)]" />
+		<div class="absolute inset-0 animate-ping rounded-[22%] bg-accent/20 [animation-duration:2.4s]"></div>
+		<img src="/app-icon.png" alt="" class="relative size-20 drop-shadow-[0_12px_30px_rgb(0_0_0/0.55)]" />
 	</div>
 	<h2 class="text-lg font-semibold text-ink">Looking for your VSD Inside M18…</h2>
 	<p class="mt-1 max-w-md text-[13px] text-ink-muted">The M18 appears here as soon as it is connected. {PRODUCT_NAME} keeps checking in the background.</p>
