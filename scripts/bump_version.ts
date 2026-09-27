@@ -37,7 +37,7 @@ async function bumpCrateVersion(version: string) {
 	if (updated === section) throw new Error(`Cargo.toml already contains ${version}`);
 	await Deno.writeTextFile(manifest, toml.slice(0, pkgStart) + updated + toml.slice(nextHeader));
 
-	await run("cargo", ["update", "-p", "opendeck", "--manifest-path", manifest.pathname], cwd);
+	await run("cargo", ["update", "-p", "opendeck-vsd-m18", "--manifest-path", manifest.pathname], cwd);
 }
 
 async function bumpStarterPackManifestVersion(version: string) {
@@ -65,7 +65,7 @@ async function prependMetainfoRelease(version: string) {
 	const li = subjects.map((s) => `\t\t\t\t\t<li>${s}</li>`).join("\n");
 	const block = [
 		`\t\t<release version="${version}" date="${new Date().toISOString().split("T")[0]}">`,
-		`\t\t\t<url type="details">https://github.com/nekename/OpenDeck/releases/tag/v${version}</url>`,
+		`\t\t\t<url type="details">https://github.com/nickhighland/OpenDeck-VSD-Inside-M18/releases/tag/tv${version}</url>`,
 		"\t\t\t<description>",
 		"\t\t\t\t<ul>",
 		li,

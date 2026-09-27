@@ -185,15 +185,13 @@ Enjoy!"#,
 					} else {
 						app.dialog()
 							.message(format!(
-								r#"{PRODUCT_NAME} has been updated to v{}!
-Every update brings features, bug fixes, and other improvements, which I spend my time implementing for free.
+								r#"{PRODUCT_NAME} has been updated to v{}.
+The release notes on GitHub list what is new.
 
-If you spent $125 on your hardware, please consider spending $10 on the software that makes it work.
-You can donate to support development with just a few clicks on GitHub Sponsors, Ko-fi or Liberapay.
-If you have already donated, thank you so much for your support!"#,
+{PRODUCT_NAME} is built on OpenDeck by Aman Khanna. If you find it useful, please consider supporting OpenDeck's development."#,
 								built_info::PKG_VERSION
 							))
-							.title(format!("{PRODUCT_NAME} has successfully been updated"))
+							.title(format!("{PRODUCT_NAME} has been updated"))
 							.kind(MessageDialogKind::Info)
 							.show(|_| ());
 					}
@@ -289,7 +287,9 @@ If you have already donated, thank you so much for your support!"#,
 					.get("tag_name")
 					.and_then(serde_json::Value::as_str)
 					.ok_or_else(|| anyhow::anyhow!("the latest release has no tag"))?;
-				if semver::Version::parse(built_info::PKG_VERSION)? < semver::Version::parse(tag_name.trim_start_matches('v'))? {
+				// Releases are tagged "tv2.15.0" by the publish workflow; accept "v2.15.0" too.
+				let latest = semver::Version::parse(tag_name.trim_start_matches("tv").trim_start_matches('v'))?;
+				if semver::Version::parse(built_info::PKG_VERSION)? < latest {
 					let app = APP_HANDLE.get().ok_or_else(|| anyhow::anyhow!("the application is not initialised"))?;
 					app.dialog()
 						.message(format!(
