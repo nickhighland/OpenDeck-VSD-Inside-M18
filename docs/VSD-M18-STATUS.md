@@ -26,7 +26,7 @@ Translated VSD actions include:
 
 - ordinary hotkeys and native Super Hotkeys;
 - native HotkeySwitch states;
-- native OpenApps and Open actions; OpenApps resolves and displays the selected macOS app icon;
+- native OpenApps and Open actions; keys that launch an app or open a file or folder show its macOS icon by default, and a chosen image replaces it;
 - Website actions, including VSD Craft's `path` setting;
 - native previous, next, and goto page actions using the M18 page set, plus change page actions;
 - Scene Shift, Open Folder, and parent-profile navigation;
