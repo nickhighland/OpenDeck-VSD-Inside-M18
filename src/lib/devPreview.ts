@@ -312,7 +312,9 @@ async function handle(command: string, args: any): Promise<unknown> {
 		case "get_fonts":
 			return ["Helvetica Neue", "SF Pro", "Menlo"];
 		case "get_build_info":
-			return "<details><summary>OpenDeck VSD M18 v2.14.0 (browser preview) on aarch64-apple-darwin</summary>Preview data only: no device or configuration is used.</details>";
+			return "<details><summary>OpenDeck VSD M18 (browser preview) on aarch64-apple-darwin</summary>Preview data only: no device or configuration is used.</details>";
+		case "get_input_permission":
+			return true;
 		case "get_action_icon":
 			return previewAppIcon(String(args.settings?.appPath ?? ""));
 		case "plugin:dialog|ask":

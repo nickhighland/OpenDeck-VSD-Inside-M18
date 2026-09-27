@@ -14,6 +14,7 @@
 	import Popup from "./Popup.svelte";
 
 	import { t } from "$lib/i18n";
+	import { inputPermission, inputPermissionDialog } from "$lib/permissions";
 	import { LANGUAGES, settings } from "$lib/settings";
 	import { PRODUCT_NAME } from "$lib/singletons";
 	import { attempt, toast } from "$lib/toast";
@@ -30,6 +31,10 @@
 		} catch {}
 	})();
 	$: platform = buildInfo.split("</summary>")[0] ?? "";
+
+	// macOS only: whether keystroke-sending keys are allowed to work.
+	let keystrokes: boolean | null = null;
+	$: if (showPopup && !$inputPermissionDialog) inputPermission().then((allowed) => (keystrokes = allowed));
 
 	const sections = [
 		{ id: "general", label: "General", icon: GearSix },
@@ -145,6 +150,27 @@
 							</div>
 							<input type="checkbox" class="switch" bind:checked={$settings.updatecheck} />
 						</label>
+						{#if keystrokes !== null}
+							<div class="setting">
+								<div>
+									<p class="setting-title">Keystrokes</p>
+									<p class="hint">
+										{keystrokes ? "Allowed by macOS: hotkeys, typed text, and media keys work." : "Blocked by macOS: hotkeys, typed text, and media keys do nothing until this is fixed."}
+									</p>
+								</div>
+								{#if keystrokes}
+									<span class="badge text-success">Allowed</span>
+								{:else}
+									<button
+										class="btn btn-sm"
+										on:click={() => {
+											showPopup = false;
+											$inputPermissionDialog = true;
+										}}>Fix…</button
+									>
+								{/if}
+							</div>
+						{/if}
 					</div>
 				{:else if section === "display"}
 					<div class="settings-list">

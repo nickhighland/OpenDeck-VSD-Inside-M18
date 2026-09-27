@@ -555,6 +555,50 @@ fn release_keys_pressed_since(enigo: &mut Enigo, before: &(Vec<enigo::Key>, Vec<
 	}
 }
 
+/// Logged, and shown on the key, when macOS refuses simulated input.
+const INPUT_PERMISSION_ERROR: &str = "macOS does not allow this version to send keystrokes (System Settings > Privacy & Security > Accessibility)";
+
+/// Create the input engine. macOS's own permission prompt appears for the
+/// first attempt in each launch only. macOS ties the Accessibility
+/// permission to the exact build, so after an update the app can still look
+/// allowed in System Settings while this build is refused; rather than the
+/// prompt reopening on every key press, the editor explains how to fix it.
+fn new_input_engine() -> Result<Enigo, anyhow::Error> {
+	static PROMPTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+	let settings = Settings {
+		open_prompt_to_get_permissions: !PROMPTED.swap(true, std::sync::atomic::Ordering::Relaxed),
+		..Settings::default()
+	};
+	Enigo::new(&settings).map_err(|error| match error {
+		enigo::NewConError::NoPermission => {
+			if let Some(app) = crate::APP_HANDLE.get() {
+				let _ = tauri::Emitter::emit(app, "input_permission_missing", ());
+			}
+			anyhow::anyhow!(INPUT_PERMISSION_ERROR)
+		}
+		error => error.into(),
+	})
+}
+
+/// Whether macOS lets this build send keystrokes and mouse input; `None` on
+/// systems that need no such permission.
+#[tauri::command]
+pub async fn get_input_permission() -> Option<bool> {
+	#[cfg(target_os = "macos")]
+	{
+		#[link(name = "ApplicationServices", kind = "framework")]
+		unsafe extern "C" {
+			fn AXIsProcessTrusted() -> bool;
+		}
+		// Takes no arguments; it only asks the system about this process.
+		Some(unsafe { AXIsProcessTrusted() })
+	}
+	#[cfg(not(target_os = "macos"))]
+	{
+		None
+	}
+}
+
 pub(crate) async fn execute_input(input: Option<String>) -> Result<(), anyhow::Error> {
 	let Some(input) = input.filter(|value| !value.trim().is_empty()) else {
 		return Ok(());
@@ -564,7 +608,7 @@ pub(crate) async fn execute_input(input: Option<String>) -> Result<(), anyhow::E
 	tokio::task::spawn_blocking(move || -> Result<(), anyhow::Error> {
 		let mut guard = input_engine();
 		if guard.is_none() {
-			guard.replace(Enigo::new(&Settings::default())?);
+			guard.replace(new_input_engine()?);
 		}
 		let enigo = guard.as_mut().expect("input engine was initialised");
 		let held_before = enigo.held();
@@ -585,7 +629,7 @@ pub async fn get_mouse_position() -> Result<(i32, i32), String> {
 	tokio::task::spawn_blocking(|| -> Result<(i32, i32), String> {
 		let mut guard = input_engine();
 		if guard.is_none() {
-			guard.replace(Enigo::new(&Settings::default()).map_err(|error| error.to_string())?);
+			guard.replace(new_input_engine().map_err(|error| error.to_string())?);
 		}
 		guard.as_ref().expect("input engine was initialised").location().map_err(|error| error.to_string())
 	})

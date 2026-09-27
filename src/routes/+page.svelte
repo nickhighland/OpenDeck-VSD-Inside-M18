@@ -14,6 +14,7 @@
 	import ProfileManager from "../components/ProfileManager.svelte";
 	import PropertyInspectorView from "../components/PropertyInspectorView.svelte";
 	import SettingsView from "../components/SettingsView.svelte";
+	import InputPermissionDialog from "../components/InputPermissionDialog.svelte";
 	import Toasts from "../components/Toasts.svelte";
 
 	import { initPortBase } from "$lib/ports";
@@ -119,4 +120,5 @@
 	</div>
 </div>
 
+<InputPermissionDialog />
 <Toasts />
