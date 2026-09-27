@@ -53,6 +53,16 @@
 	</branding>
 
 	<releases>
+		<release version="2.15.1" date="2026-09-27">
+			<url type="details">https://github.com/nickhighland/OpenDeck-VSD-Inside-M18/releases/tag/tv2.15.1</url>
+			<description>
+				<ul>
+					<li>Use the M18 render as the app icon</li>
+					<li>Explain blocked keystrokes instead of reopening the macOS prompt</li>
+					<li>Sign macOS releases with a stable certificate when one is configured</li>
+				</ul>
+			</description>
+		</release>
 		<release version="2.15.0" date="2026-09-27">
 			<url type="details">https://github.com/nickhighland/OpenDeck-VSD-Inside-M18/releases/tag/tv2.15.0</url>
 			<description>
