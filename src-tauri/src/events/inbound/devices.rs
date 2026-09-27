@@ -26,6 +26,9 @@ pub async fn register_device(uuid: &str, mut event: PayloadEvent<crate::shared::
 		let mut locks = crate::store::profiles::acquire_locks_mut().await;
 		let selected_profile = locks.device_stores.get_selected_profile(&event.payload.id)?;
 		let profile = locks.profile_stores.get_profile_store(&DEVICES.get(&event.payload.id).unwrap(), &selected_profile)?;
+		// The first page appears in one update once the editor has drawn it.
+		let positions: Vec<u8> = profile.value.keys.iter().enumerate().filter(|(_, key)| key.is_some()).map(|(position, _)| position as u8).collect();
+		let _ = crate::events::outbound::devices::begin_page(&event.payload.id, positions).await;
 		for instance in profile
 			.value
 			.keys
@@ -36,6 +39,9 @@ pub async fn register_device(uuid: &str, mut event: PayloadEvent<crate::shared::
 		{
 			let _ = crate::events::outbound::will_appear::will_appear(instance).await;
 		}
+		// The editor draws keys with their titles and built-in artwork; after
+		// a reconnect it must draw them again even if nothing else changed.
+		let _ = crate::events::frontend::profiles::rerender_images(crate::APP_HANDLE.get().unwrap()).await;
 
 		use tauri_plugin_aptabase::EventTracker;
 		let _ = crate::APP_HANDLE

@@ -39,13 +39,28 @@ pub async fn device_did_disconnect(id: &str) -> Result<(), anyhow::Error> {
 	.await
 }
 
+/// Draw a key as the core renders it.
 pub async fn update_image(context: crate::shared::Context, image: Option<String>) -> Result<(), anyhow::Error> {
+	send_image(context, image, false).await
+}
+
+/// Draw a key with the editor's finished image, which includes its title.
+pub async fn update_editor_image(context: crate::shared::Context, image: Option<String>) -> Result<(), anyhow::Error> {
+	send_image(context, image, true).await
+}
+
+/// Show another page's keys together once they are ready.
+pub async fn begin_page(device: &str, positions: impl IntoIterator<Item = u8>) -> Result<(), anyhow::Error> {
+	crate::m18::begin_page(device, positions).await
+}
+
+async fn send_image(context: crate::shared::Context, image: Option<String>, from_editor: bool) -> Result<(), anyhow::Error> {
 	if context.device.starts_with("18-") {
 		let image = match (context.controller.as_str(), image) {
 			("Encoder", Some(img)) => Some(to_encoder_jpeg_data_uri(&context, &img).await?),
 			(_, img) => img,
 		};
-		crate::m18::update_image(&context.device, context.position, image).await?;
+		crate::m18::update_image(&context.device, context.position, image, from_editor).await?;
 	}
 
 	Ok(())
@@ -62,14 +77,6 @@ async fn to_encoder_jpeg_data_uri(context: &crate::shared::Context, image: &str)
 	let encoded = base64::engine::general_purpose::STANDARD.encode(&buf);
 
 	Ok(format!("data:image/jpeg;base64,{encoded}"))
-}
-
-pub async fn clear_screen(device: String) -> Result<(), anyhow::Error> {
-	if device.starts_with("18-") {
-		crate::m18::clear_screen(&device).await?;
-	}
-
-	Ok(())
 }
 
 /// Set the brightness for all devices.

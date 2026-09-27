@@ -57,8 +57,9 @@ pub async fn select_profile(device: &str, id: &str) -> Result<(), anyhow::Error>
 	}
 
 	let selected_profile = locks.device_stores.get_selected_profile(device)?;
+	let switching = selected_profile != id;
 
-	if selected_profile != id {
+	if switching {
 		let old_profile = &locks.profile_stores.get_profile_store(&device_info, &selected_profile)?.value;
 		for instance in old_profile
 			.keys
@@ -71,12 +72,18 @@ pub async fn select_profile(device: &str, id: &str) -> Result<(), anyhow::Error>
 				let _ = crate::events::outbound::will_appear::will_disappear(target, false).await;
 			}
 		}
-		let _ = crate::events::outbound::devices::clear_screen(device.to_owned()).await;
 	}
 
 	// We must use the mutable version of get_profile_store in order to create the store if it does not exist.
 	let store = locks.profile_stores.get_profile_store_mut(&device_info, id).await?;
 	let new_profile = &store.value;
+	if switching {
+		// The old page stays up until the new page's keys are drawn, then they
+		// all appear in one update, instead of the screen going blank and
+		// filling in over several.
+		let positions: Vec<u8> = new_profile.keys.iter().enumerate().filter(|(_, key)| key.is_some()).map(|(position, _)| position as u8).collect();
+		let _ = crate::events::outbound::devices::begin_page(device, positions).await;
+	}
 	for instance in new_profile
 		.keys
 		.iter()

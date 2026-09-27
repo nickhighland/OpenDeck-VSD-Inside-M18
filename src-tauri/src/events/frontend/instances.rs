@@ -548,7 +548,7 @@ pub async fn update_image(context: Context, image: Option<String>) {
 		return;
 	}
 
-	if let Err(error) = crate::events::outbound::devices::update_image(context, image).await {
+	if let Err(error) = crate::events::outbound::devices::update_editor_image(context, image).await {
 		log::warn!("Failed to update device image: {}", error);
 	}
 }

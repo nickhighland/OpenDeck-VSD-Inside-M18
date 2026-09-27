@@ -128,9 +128,19 @@ struct CandidateDevice {
 }
 
 pub enum DeviceCommand {
-	SetImage { position: u8, image: DynamicImage },
+	/// `from_editor` marks the editor's finished image (with its title), as
+	/// opposed to the core's quick preview of a key.
+	SetImage {
+		position: u8,
+		image: DynamicImage,
+		from_editor: bool,
+	},
 	ClearImage(u8),
-	ClearAll,
+	/// Another page is about to be shown; `expected` has a bit for each LCD
+	/// key that will get an image.
+	BeginPage {
+		expected: u32,
+	},
 	SetBrightness(u8),
 	SetLedColors(LedPalette),
 }
@@ -480,7 +490,50 @@ async fn key_worker(device: String, position: u8, mut events: mpsc::UnboundedRec
 enum OutputAction {
 	Command(Option<DeviceCommand>),
 	Flush,
+	FinishPage,
 	KeepAlive,
+}
+
+/// The longest a page turn waits for the editor's images before showing
+/// what it has; normally every key is ready well before this.
+const PAGE_TURN_LIMIT: Duration = Duration::from_millis(600);
+/// Once every key has its image, a short pause catches any last redraws.
+const PAGE_TURN_SETTLE: Duration = Duration::from_millis(30);
+
+/// A page turn in progress. Key images are collected without being shown and
+/// then appear together, instead of the old page being blanked and the new
+/// one filling in over several updates.
+struct PageTurn {
+	started: Instant,
+	/// Keys on the new page that get an image.
+	expected: u32,
+	/// Keys that have the editor's finished image.
+	finished: u32,
+	/// Keys that have any image yet.
+	drawn: u32,
+	last_image: Instant,
+}
+
+impl PageTurn {
+	fn new(expected: u32) -> Self {
+		let now = Instant::now();
+		Self {
+			started: now,
+			expected,
+			finished: 0,
+			drawn: 0,
+			last_image: now,
+		}
+	}
+
+	fn show_at(&self) -> Instant {
+		let limit = self.started + PAGE_TURN_LIMIT;
+		if self.expected & !self.finished == 0 {
+			(self.last_image + PAGE_TURN_SETTLE).min(limit)
+		} else {
+			limit
+		}
+	}
 }
 
 enum OutputStep {
@@ -495,11 +548,15 @@ async fn device_output_task(device: Arc<Device>, mut receiver: mpsc::Receiver<De
 	keepalive.tick().await;
 
 	let mut flush_deadline: Option<Instant> = None;
+	let mut page_turn: Option<PageTurn> = None;
 	loop {
-		let flush_at = flush_deadline.unwrap_or_else(|| Instant::now() + Duration::from_secs(24 * 60 * 60));
+		let far = Instant::now() + Duration::from_secs(24 * 60 * 60);
+		let flush_at = flush_deadline.unwrap_or(far);
+		let page_at = page_turn.as_ref().map_or(far, PageTurn::show_at);
 		let action = tokio::select! {
 			biased;
 			_ = token.cancelled() => return Ok(()),
+			_ = sleep_until(page_at), if page_turn.is_some() => OutputAction::FinishPage,
 			_ = sleep_until(flush_at), if flush_deadline.is_some() => OutputAction::Flush,
 			command = receiver.recv() => OutputAction::Command(command),
 			_ = keepalive.tick() => OutputAction::KeepAlive,
@@ -509,24 +566,55 @@ async fn device_output_task(device: Arc<Device>, mut receiver: mpsc::Receiver<De
 		// writes, the session ends and the watcher reconnects it, instead of the
 		// output queue silently filling up and every caller hanging.
 		let result = match action {
-			OutputAction::Command(Some(DeviceCommand::SetImage { position, image })) => match device_key(position) {
-				Some(device_position) => with_deadline("Preparing a key image", DEVICE_IO_TIMEOUT, device.set_button_image(device_position, IMAGE_FORMAT, image))
-					.await
-					.map(|_| OutputStep::ScheduleFlush),
+			OutputAction::Command(Some(DeviceCommand::SetImage { position, image, from_editor })) => match device_key(position) {
+				Some(device_position) => {
+					let prepared = with_deadline("Preparing a key image", DEVICE_IO_TIMEOUT, device.set_button_image(device_position, IMAGE_FORMAT, image)).await;
+					match (prepared, page_turn.as_mut()) {
+						// During a page turn the image waits to be shown with the rest.
+						(Ok(()), Some(turn)) => {
+							let bit = 1u32 << position;
+							turn.drawn |= bit;
+							if from_editor {
+								turn.finished |= bit;
+							}
+							turn.last_image = Instant::now();
+							Ok(OutputStep::Continue)
+						}
+						(result, _) => result.map(|_| OutputStep::ScheduleFlush),
+					}
+				}
 				None => Ok(OutputStep::Continue),
 			},
+			// Keys left without an image are cleared when a page turn finishes,
+			// so a passing clear (say, from a key between two pages) is ignored.
+			OutputAction::Command(Some(DeviceCommand::ClearImage(_))) if page_turn.is_some() => Ok(OutputStep::Continue),
 			OutputAction::Command(Some(DeviceCommand::ClearImage(position))) => match device_key(position) {
 				Some(device_position) => with_deadline("Clearing a key image", DEVICE_IO_TIMEOUT, device.clear_button_image(device_position))
 					.await
 					.map(|_| OutputStep::ScheduleFlush),
 				None => Ok(OutputStep::Continue),
 			},
-			OutputAction::Command(Some(DeviceCommand::ClearAll)) => {
-				let clear = async {
-					device.clear_all_button_images().await?;
+			OutputAction::Command(Some(DeviceCommand::BeginPage { expected })) => {
+				// A quick second page turn starts over; nothing is shown in between.
+				page_turn = Some(PageTurn::new(expected));
+				Ok(OutputStep::ClearFlush)
+			}
+			OutputAction::FinishPage => {
+				let drawn = page_turn.take().map_or(0, |turn| turn.drawn);
+				let show = async {
+					if drawn == 0 {
+						return device.clear_all_button_images().await;
+					}
+					// Keys that are empty on the new page are cleared in the same
+					// update that shows the others.
+					for position in (0..LCD_KEY_COUNT).filter(|position| drawn & (1u32 << position) == 0) {
+						if let Some(device_position) = device_key(position) {
+							device.clear_button_image(device_position).await?;
+						}
+					}
 					device.flush().await
 				};
-				with_deadline("Clearing all keys", DEVICE_IO_TIMEOUT, clear).await.map(|_| OutputStep::ClearFlush)
+				with_deadline("Showing a page", DEVICE_IO_TIMEOUT, show).await.map(|_| OutputStep::ClearFlush)
 			}
 			OutputAction::Command(Some(DeviceCommand::SetBrightness(brightness))) => with_deadline("Setting brightness", DEVICE_IO_TIMEOUT, device.set_brightness(brightness))
 				.await
@@ -564,7 +652,7 @@ async fn send(device: &str, command: DeviceCommand) -> Result<(), anyhow::Error>
 	}
 }
 
-pub async fn update_image(device: &str, position: u8, image: Option<String>) -> Result<(), anyhow::Error> {
+pub async fn update_image(device: &str, position: u8, image: Option<String>, from_editor: bool) -> Result<(), anyhow::Error> {
 	if !is_m18(device) {
 		return Ok(());
 	}
@@ -574,15 +662,30 @@ pub async fn update_image(device: &str, position: u8, image: Option<String>) -> 
 			let url = DataUrl::process(&image).map_err(|error| anyhow::anyhow!("Invalid M18 image data: {error}"))?;
 			let (body, _) = url.decode_to_vec().map_err(|error| anyhow::anyhow!("Invalid M18 image data: {error}"))?;
 			let decoded = load_from_memory(&body)?;
-			send(device, DeviceCommand::SetImage { position, image: decoded }).await
+			send(
+				device,
+				DeviceCommand::SetImage {
+					position,
+					image: decoded,
+					from_editor,
+				},
+			)
+			.await
 		}
 		None => send(device, DeviceCommand::ClearImage(position)).await,
 	}
 }
 
-pub async fn clear_screen(device: &str) -> Result<(), anyhow::Error> {
+/// Show the next page's keys together once they are ready. `positions` are
+/// the keys that will get an image; every other key is cleared at the same
+/// moment.
+pub async fn begin_page(device: &str, positions: impl IntoIterator<Item = u8>) -> Result<(), anyhow::Error> {
 	if is_m18(device) {
-		send(device, DeviceCommand::ClearAll).await?;
+		let expected = positions
+			.into_iter()
+			.filter(|position| device_key(*position).is_some())
+			.fold(0u32, |mask, position| mask | 1 << position);
+		send(device, DeviceCommand::BeginPage { expected }).await?;
 	}
 	Ok(())
 }
@@ -646,6 +749,27 @@ mod tests {
 		report[9] = input;
 		report[10] = state;
 		report
+	}
+
+	#[test]
+	fn a_page_turn_waits_for_the_editors_images_but_not_forever() {
+		// Keys 0 and 3 get images on the new page.
+		let mut turn = PageTurn::new(0b1001);
+		assert_eq!(turn.show_at(), turn.started + PAGE_TURN_LIMIT, "nothing is ready yet");
+
+		// The core's quick preview does not finish a key; the editor's image does.
+		turn.drawn |= 0b1001;
+		assert_eq!(turn.show_at(), turn.started + PAGE_TURN_LIMIT);
+		turn.finished |= 0b0001;
+		assert_eq!(turn.show_at(), turn.started + PAGE_TURN_LIMIT, "key 3 is still missing");
+
+		turn.finished |= 0b1000;
+		turn.last_image = turn.started + Duration::from_millis(120);
+		assert_eq!(turn.show_at(), turn.last_image + PAGE_TURN_SETTLE, "shown right after the last image");
+
+		// An empty page is shown straight away.
+		let empty = PageTurn::new(0);
+		assert_eq!(empty.show_at(), empty.last_image + PAGE_TURN_SETTLE);
 	}
 
 	#[test]
