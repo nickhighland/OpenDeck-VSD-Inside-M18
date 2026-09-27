@@ -14,7 +14,7 @@ M18 hardware support is built into the application. There is no M18 hardware plu
 - The three physical bottom keys are supported as positions 16, 17, and 18.
 - JPEG button images are sent at 64×64 pixels with the M18 rotation/mirroring protocol.
 - Key presses, release events, device brightness, reconnects, and device sleep/wake are handled by the built-in Rust driver.
-- LED color palettes are exposed through the built-in **M18 LED Colors** action and applied directly by the core driver.
+- LED color and brightness are set in Settings, and per-page LED palettes through the built-in **M18 LED Colors** action; the core driver applies both directly.
 - The editor shows three rows of five LCD keys and a separate row of three physical bottom buttons. The bottom buttons are assignable but never receive image writes.
 - OpenDeck's 4×5 position numbering remains internal only, so existing actions, plugins, and imported profiles can address positions 0–17 without exposing positions 18–19.
 

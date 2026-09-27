@@ -19,7 +19,7 @@ The VSD Inside M18 hardware driver is built into the application. It is not inst
 
 The M18 screen follows the computer's state: it stays on while the computer is in use, turns off after a configurable period without keyboard, mouse, or trackpad input (and, optionally, while the computer is locked), and turns back on as soon as the computer is used again. Pressing an M18 key while the screen is off only wakes it and does not run the key's action. There is no device screensaver: the M18's keys are windows onto a single LCD panel, which is not prone to OLED-style burn-in, so turning the backlight off is the effective way to protect it.
 
-The action list includes a built-in **M18 LED Colors** action for all 24 RGB LEDs; it does not depend on a hardware plugin process.
+**Settings › M18 Display** sets the color and brightness of the M18's 24 RGB LEDs, which go dark while the M18 sleeps. The built-in **M18 LED Colors** action sets individual LED colors for the page it is on; it does not depend on a hardware plugin process.
 
 Native M18 actions are grouped into Apps & Hotkeys, Device Controls, Page Navigation, and System Controls. Search covers action names, localized labels, tooltips, identifiers, plugin IDs, and category names.
 
