@@ -5,11 +5,9 @@
 //! captured from VSD Craft's installed action manifests; device-specific
 //! encoder/K1 Pro entries are excluded.
 
-use crate::shared::{Action, ActionState, Category};
 use enigo::agent::Token;
 use serde::Deserialize;
 use serde_json::{Value, json};
-use std::collections::HashMap;
 use std::process::Command;
 use std::sync::LazyLock;
 use tauri::Emitter;
@@ -18,7 +16,10 @@ use tauri::Emitter;
 pub struct VsdActionDefinition {
 	pub name: String,
 	pub uuid: String,
+	// Vendor metadata, kept with the inventory; the library has its own names.
+	#[allow(dead_code)]
 	pub tooltip: String,
+	#[allow(dead_code)]
 	pub category: String,
 	#[serde(rename = "stateCount")]
 	pub state_count: usize,
@@ -53,93 +54,6 @@ pub fn is_hotkey_switch(uuid: &str) -> bool {
 
 pub fn is_hotkey(uuid: &str) -> bool {
 	uuid.eq_ignore_ascii_case("com.hotspot.streamdock.system.hotkey")
-}
-
-fn category_icon(category: &str) -> &'static str {
-	match category {
-		"Action Flows" => "opendeck/multi-action.png",
-		"Pages & Profiles" => "opendeck/page-navigation.svg",
-		"Shortcuts & Input" => "opendeck/apps-hotkeys.svg",
-		"System & Apps" => "opendeck/system-controls.svg",
-		"Media & VSD Extras" | "Time & Online" => "opendeck/system-controls.svg",
-		"Network & Integrations" => "opendeck/device-controls.svg",
-		_ => "opendeck/device-controls.svg",
-	}
-}
-
-pub fn insert_catalog(categories: &mut HashMap<String, Category>) {
-	for definition in definitions() {
-		// Flow containers have dedicated native parent editors/runtime below;
-		// exposing their VSD plugin UUIDs as ordinary single actions would make
-		// them look selectable without providing the required child editor.
-		if is_composite_action(&definition.uuid) {
-			continue;
-		}
-		let category_name = format!("M18 · {}", definition.category);
-		let icon = category_icon(&definition.category);
-		let category = categories.entry(category_name).or_insert_with(|| Category {
-			icon: Some(icon.to_owned()),
-			actions: vec![],
-		});
-		let state_count = definition.state_count.max(1);
-		let states = (0..state_count)
-			.map(|index| ActionState {
-				image: "opendeck/multi-action.png".to_owned(),
-				name: if state_count > 1 { format!("{} {}", definition.name, index + 1) } else { definition.name.clone() },
-				..Default::default()
-			})
-			.collect();
-		category.actions.push(Action {
-			name: definition.name.clone(),
-			uuid: definition.uuid.clone(),
-			plugin: String::new(),
-			tooltip: definition.tooltip.clone(),
-			icon: icon.to_owned(),
-			disable_automatic_states: false,
-			visible_in_action_list: true,
-			supported_in_multi_actions: definition.supported_in_multi_actions,
-			property_inspector: String::new(),
-			controllers: vec!["Keypad".to_owned()],
-			encoder: None,
-			states,
-		});
-	}
-	let category = categories.entry("M18 · Action Flows".to_owned()).or_insert_with(|| Category {
-		icon: Some(category_icon("Action Flows").to_owned()),
-		actions: vec![],
-	});
-	for (name, uuid, tooltip, icon) in [
-		(
-			"Action Cycle",
-			"opendeck.toggleaction",
-			"Run one child action per press and cycle through the sequence",
-			"opendeck/toggle-action.png",
-		),
-		(
-			"Action Carousel",
-			"opendeck.carouselaction",
-			"Run one child action per press and cycle through the sequence",
-			"opendeck/toggle-action.png",
-		),
-	] {
-		category.actions.push(Action {
-			name: name.to_owned(),
-			uuid: uuid.to_owned(),
-			plugin: String::new(),
-			tooltip: tooltip.to_owned(),
-			icon: icon.to_owned(),
-			disable_automatic_states: false,
-			visible_in_action_list: true,
-			supported_in_multi_actions: false,
-			property_inspector: String::new(),
-			controllers: vec!["Keypad".to_owned()],
-			encoder: None,
-			states: vec![ActionState {
-				image: icon.to_owned(),
-				..Default::default()
-			}],
-		});
-	}
 }
 
 pub fn default_settings(uuid: &str) -> Value {
@@ -524,6 +438,10 @@ pub async fn key_down(instance: &crate::shared::ActionInstance) -> Result<(), an
 
 pub async fn key_up(instance: &crate::shared::ActionInstance) -> Result<bool, anyhow::Error> {
 	let uuid = instance.action.uuid.to_ascii_lowercase();
+	// Say so on the key instead of silently doing nothing.
+	if crate::action_library::is_coming_soon(&uuid) {
+		return Err(anyhow::anyhow!("{} is not available yet", instance.action.name));
+	}
 	if is_hotkey_switch(&uuid) {
 		if let Some(input) = instance
 			.settings
@@ -793,32 +711,6 @@ mod tests {
 		assert!(definition("com.hotspot.streamdock.device.k1proLED+").is_none());
 		assert!(is_composite_action("com.hotspot.streamdock.multiactions.routine"));
 		assert!(is_composite_action("com.hotspot.streamdock.multiactions.LunBo"));
-	}
-
-	#[test]
-	fn catalog_actions_are_native_keypad_actions() {
-		let mut categories = HashMap::new();
-		insert_catalog(&mut categories);
-		for definition in definitions() {
-			if is_composite_action(&definition.uuid) {
-				continue;
-			}
-			let category = format!("M18 · {}", definition.category);
-			let action = categories[&category].actions.iter().find(|action| action.uuid == definition.uuid).unwrap();
-			assert!(action.plugin.is_empty());
-			assert_eq!(action.controllers, ["Keypad"]);
-		}
-	}
-
-	#[test]
-	fn composite_actions_are_offered_as_native_parent_actions() {
-		let mut categories = HashMap::new();
-		insert_catalog(&mut categories);
-		let flow_actions = &categories["M18 · Action Flows"].actions;
-		assert!(flow_actions.iter().any(|action| action.name == "Action Cycle" && action.uuid == "opendeck.toggleaction"));
-		assert!(flow_actions.iter().any(|action| action.name == "Action Carousel" && action.uuid == "opendeck.carouselaction"));
-		assert!(!flow_actions.iter().any(|action| is_composite_action(&action.uuid)));
-		assert!(flow_actions.iter().all(|action| action.plugin.is_empty()));
 	}
 
 	#[test]

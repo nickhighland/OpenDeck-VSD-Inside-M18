@@ -280,7 +280,7 @@ fn mapping(uuid: &str, _name: &str) -> Mapping {
 
 fn fallback_action(uuid: &str, name: &str, plugin: &str) -> Action {
 	let state = ActionState {
-		image: "opendeck/multi-action.png".to_owned(),
+		image: crate::action_library::face_path("unsupported"),
 		..Default::default()
 	};
 	Action {
@@ -1123,8 +1123,7 @@ mod tests {
 		assert_eq!(hotkey_settings(&settings, 0)["display"], "F18");
 		assert_eq!(ron::from_str::<Vec<enigo::agent::Token>>("[r(79)]").unwrap().len(), 1);
 
-		let mut categories = HashMap::new();
-		crate::vsd_actions::insert_catalog(&mut categories);
+		let categories = crate::action_library::categories();
 		let action = VsdAction {
 			controller: "Keypad".to_owned(),
 			name: "Hotkey".to_owned(),
@@ -1398,8 +1397,7 @@ mod tests {
 
 	#[test]
 	fn imports_catalogued_single_actions_as_native_core_actions_with_settings() {
-		let mut categories = HashMap::new();
-		crate::vsd_actions::insert_catalog(&mut categories);
+		let categories = crate::action_library::categories();
 		let action = VsdAction {
 			controller: "Keypad".to_owned(),
 			name: "UDP".to_owned(),
@@ -1465,8 +1463,7 @@ mod tests {
 		let pages = vec![page];
 		assert_eq!(folder_target(&json!({ "ProfileUUID": "/fixtures/child" }), &pages).as_deref(), Some("VSD Craft/Child"));
 
-		let mut categories = HashMap::new();
-		crate::vsd_actions::insert_catalog(&mut categories);
+		let categories = crate::action_library::categories();
 		let action = VsdAction {
 			controller: "Keypad".to_owned(),
 			name: "Create Folder".to_owned(),

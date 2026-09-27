@@ -63,8 +63,11 @@ impl ProfileStores {
 				if let Some(instance) = slot {
 					if !keep_instance(instance) {
 						*slot = None;
-					} else if let Some(children) = &mut instance.children {
-						children.retain_mut(|child| keep_instance(child));
+					} else {
+						if let Some(children) = &mut instance.children {
+							children.retain_mut(|child| keep_instance(child));
+						}
+						crate::action_library::refresh_default_artwork(instance);
 					}
 				}
 			}

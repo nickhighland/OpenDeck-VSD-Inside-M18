@@ -622,6 +622,10 @@ pub async fn key_up(instance: &ActionInstance) -> Result<bool, anyhow::Error> {
 			Ok(false)
 		}
 		_ if crate::vsd_actions::is_vsd_action(&instance.action.uuid) => crate::vsd_actions::key_up(instance).await,
+		UNSUPPORTED_VSD_UUID => Err(anyhow::anyhow!(
+			"The imported VSD Craft action \"{}\" is not supported yet",
+			instance.settings.get("sourceName").and_then(Value::as_str).unwrap_or("unknown")
+		)),
 		_ => Ok(false),
 	}
 }
