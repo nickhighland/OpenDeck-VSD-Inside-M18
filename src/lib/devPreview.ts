@@ -115,6 +115,15 @@ function seed() {
 }
 seed();
 
+// Stand-ins for the icons that macOS provides for installed apps.
+function previewAppIcon(name: string): string | null {
+	const colours: Record<string, [string, string]> = { Safari: ["#5AC8FA", "#0A84FF"], Mail: ["#6AC4FF", "#1D6BF3"], Music: ["#FF6482", "#FA2D48"] };
+	const colour = colours[name];
+	if (!colour) return null;
+	const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256"><defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${colour[0]}"/><stop offset="1" stop-color="${colour[1]}"/></linearGradient></defs><rect x="22" y="22" width="212" height="212" rx="50" fill="url(#g)"/><text x="128" y="163" font-family="-apple-system, Helvetica, sans-serif" font-size="104" font-weight="600" fill="#fff" text-anchor="middle">${name[0]}</text></svg>`;
+	return `data:image/svg+xml,${encodeURIComponent(svg)}`;
+}
+
 let selectedProfile = "Default";
 let applicationProfiles: Record<string, Record<string, string>> = { Safari: { [DEVICE]: "Default" }, Music: { [DEVICE]: "Page 2" } };
 let settings = {
@@ -304,6 +313,8 @@ async function handle(command: string, args: any): Promise<unknown> {
 			return ["Helvetica Neue", "SF Pro", "Menlo"];
 		case "get_build_info":
 			return "<details><summary>OpenDeck VSD M18 v2.14.0 (browser preview) on aarch64-apple-darwin</summary>Preview data only: no device or configuration is used.</details>";
+		case "get_action_icon":
+			return previewAppIcon(String(args.settings?.appPath ?? ""));
 		case "plugin:dialog|ask":
 		case "plugin:dialog|confirm":
 			return true;

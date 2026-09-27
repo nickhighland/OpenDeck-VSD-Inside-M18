@@ -835,9 +835,17 @@ fn mapped_instance_at_depth(
 		}
 		Mapping::NativeOpenApps => {
 			let mapped = action_from_categories(categories, crate::m18_actions::OPEN_APPS_UUID, "OpenApps", "");
-			let mut instance = action_instance(mapped, context, json!({ "appPath": application_target(&action.settings) }), &action.states, base_dir, action.state);
-			crate::m18_actions::refresh_open_app_icon(&mut instance);
-			instance
+			// Keep the titles but not VSD Craft's stored artwork: an app key shows
+			// the app's own icon by default, and a different image can be chosen.
+			let titles_only = action
+				.states
+				.iter()
+				.map(|state| VsdState {
+					image: String::new(),
+					title: state.title.clone(),
+				})
+				.collect::<Vec<_>>();
+			action_instance(mapped, context, json!({ "appPath": application_target(&action.settings) }), &titles_only, base_dir, action.state)
 		}
 		Mapping::NativeSuperHotkeys => {
 			let mapped = action_from_categories(categories, crate::m18_actions::SUPER_HOTKEYS_UUID, "Super Hotkeys", "");

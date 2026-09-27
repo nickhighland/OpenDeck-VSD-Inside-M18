@@ -317,9 +317,10 @@ pub async fn key_up(device: &str, key: u8) -> Result<(), anyhow::Error> {
 				None
 			};
 			if let Some(instance) = updated_instance {
-				let context = instance.context.clone();
-				let _ = update_state(crate::APP_HANDLE.get().unwrap(), context, &mut locks).await;
+				// The core draws first so that the editor's redraw, which adds
+				// the title, is the one left on the M18.
 				let _ = crate::m18_actions::render(&instance).await;
+				let _ = update_state(crate::APP_HANDLE.get().unwrap(), instance.context.clone(), &mut locks).await;
 			}
 			mark_profile_stale(device, &mut locks).await?;
 		}

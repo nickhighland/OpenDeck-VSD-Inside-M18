@@ -19,6 +19,7 @@
 	import { t } from "$lib/i18n";
 	import { getWebserverUrl, getWebSocketPort } from "$lib/ports";
 	import { inspectedInstance, inspectedParentAction, inspectorTab } from "$lib/propertyInspector";
+	import { resolveState } from "$lib/appIcons";
 	import { getImage } from "$lib/rendererHelper";
 	import { attempt } from "$lib/toast";
 
@@ -230,7 +231,24 @@
 	$: title = inspected ? (entry && builtIn ? entry.action.name : inspected.action.name) : "";
 	$: group = entry && builtIn ? entry.category : undefined;
 	$: pluginInfo = inspected && !builtIn ? $plugins.find((plugin) => plugin.id === inspected?.action.plugin) : undefined;
-	$: faceUrl = inspected ? getImage(inspected.states[inspected.current_state]?.image, inspected.action.icon) : "";
+	let faceUrl = "";
+	let faceRequest = 0;
+	// The appearance editor changes the inspected key in place. Counting its
+	// edits redraws the header without invalidating the bound profile, which
+	// would redraw every key on the device.
+	let edits = 0;
+	async function showFace(shown: ActionInstance | null | undefined, _edits: number) {
+		const request = ++faceRequest;
+		const current = shown?.states[shown.current_state];
+		if (!shown || !current) {
+			faceUrl = shown ? getImage(undefined, shown.action.icon) : "";
+			return;
+		}
+		// Launching keys without a chosen image show the app's icon.
+		const { state } = await resolveState(shown, current);
+		if (request === faceRequest) faceUrl = getImage(state.image, shown.action.icon);
+	}
+	$: showFace(inspected, edits);
 	$: description = entry?.action.tooltip || inspected?.action.tooltip || "";
 	$: hasBehavior = inspected
 		? inspected.action.uuid == "opendeck.m18.led-colors" || inspected.action.uuid.startsWith("opendeck.m18.") || /^com\.(hotspot|mirabox)\.streamdock\.|^com\.streamdock\./.test(inspected.action.uuid) || !!inspected.action.property_inspector
@@ -358,7 +376,7 @@
 
 	{#if inspected && $inspectorTab === "appearance"}
 		<div class="min-h-0 flex-1 overflow-auto px-5 py-4">
-			<InstanceEditor instance={inspected} />
+			<InstanceEditor instance={inspected} on:edit={() => (edits += 1)} />
 		</div>
 	{/if}
 </section>

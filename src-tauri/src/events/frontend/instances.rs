@@ -39,7 +39,7 @@ pub async fn create_instance(app: AppHandle, mut action: Action, context: Contex
 			Some(instance) => instance.context.index + 1,
 		};
 
-		let mut instance = ActionInstance {
+		let instance = ActionInstance {
 			action: action.clone(),
 			context: ActionContext::from_context(context.clone(), index),
 			states: action.states.clone(),
@@ -47,7 +47,6 @@ pub async fn create_instance(app: AppHandle, mut action: Action, context: Contex
 			settings: default_settings.clone(),
 			children: None,
 		};
-		crate::m18_actions::refresh_open_app_icon(&mut instance);
 		children.push(instance.clone());
 
 		if matches!(parent.action.uuid.as_str(), "opendeck.toggleaction" | "opendeck.carouselaction") && parent.states.len() < children.len() {
@@ -66,7 +65,7 @@ pub async fn create_instance(app: AppHandle, mut action: Action, context: Contex
 		let slot = get_slot(&context, &locks).await?.clone();
 		Ok(slot)
 	} else {
-		let mut instance = ActionInstance {
+		let instance = ActionInstance {
 			action: action.clone(),
 			context: ActionContext::from_context(context.clone(), 0),
 			states: action.states.clone(),
@@ -78,7 +77,6 @@ pub async fn create_instance(app: AppHandle, mut action: Action, context: Contex
 				None
 			},
 		};
-		crate::m18_actions::refresh_open_app_icon(&mut instance);
 
 		*slot = Some(instance.clone());
 		let slot = slot.clone();
@@ -394,9 +392,15 @@ pub async fn set_state(context: ActionContext, index: u16, state: ActionState) -
 	*slot = state;
 	let clone = reference.clone();
 	save_profile_now(&context.device, &mut locks).await?;
+	// The core draws first so that the editor's redraw, which adds the title,
+	// is the one left on the M18.
 	if crate::m18_actions::is_native_action(&clone.action.uuid) {
 		let _ = crate::m18_actions::render(&clone).await;
 	}
+	// Let the key redraw itself (in the editor and on the M18) while its
+	// appearance is edited in the inspector.
+	let _ = update_state(crate::APP_HANDLE.get().unwrap(), context, &mut locks).await;
+	drop(locks);
 	crate::events::outbound::states::title_parameters_did_change(&clone, index).await?;
 	Ok(())
 }
@@ -415,7 +419,6 @@ pub async fn set_instance_settings(context: ActionContext, settings: serde_json:
 		instance.action.states.resize(count, template);
 		instance.current_state = instance.settings.get("index").and_then(serde_json::Value::as_u64).unwrap_or(0).min((count - 1) as u64) as u16;
 	}
-	crate::m18_actions::refresh_open_app_icon(instance);
 	let clone = instance.clone();
 	save_profile_now(&context.device, &mut locks).await?;
 	if crate::m18_actions::is_native_action(&clone.action.uuid) {

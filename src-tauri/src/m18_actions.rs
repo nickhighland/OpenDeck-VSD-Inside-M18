@@ -4,7 +4,7 @@
 //! action-plugin process, which is important for the actions used by the
 //! user's everyday M18 profile.
 
-use crate::shared::ActionInstance;
+use crate::shared::{ActionInstance, ActionState};
 
 use base64::Engine;
 use enigo::{
@@ -15,10 +15,9 @@ use image::{Rgb, RgbImage};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::fs;
-use std::hash::{Hash, Hasher};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::Command;
-use std::sync::{Mutex, OnceLock};
+use std::sync::{Arc, Mutex, OnceLock, PoisonError};
 
 pub const OPEN_APPS_UUID: &str = "opendeck.m18.open-apps";
 pub const SUPER_HOTKEYS_UUID: &str = "opendeck.m18.super-hotkeys";
@@ -47,7 +46,14 @@ pub const PAGE_INDICATOR_UUID: &str = "opendeck.m18.page-indicator";
 pub const UNSUPPORTED_VSD_UUID: &str = "opendeck.m18.unsupported-vsd-action";
 
 static ENIGO: OnceLock<Mutex<Option<Enigo>>> = OnceLock::new();
-static APP_ICON_CACHE: OnceLock<Mutex<HashMap<String, Option<String>>>> = OnceLock::new();
+static ICON_LOOKUPS: OnceLock<Mutex<HashMap<String, IconLookup>>> = OnceLock::new();
+
+/// One icon lookup per launch target. Requests made while it runs share it,
+/// so the editor and the core never start the same slow lookup twice.
+struct IconLookup {
+	started: std::time::Instant,
+	icon: Arc<tokio::sync::OnceCell<Option<String>>>,
+}
 
 pub fn is_native_action(uuid: &str) -> bool {
 	matches!(
@@ -116,144 +122,149 @@ fn image_data_url(image: &str) -> Option<String> {
 	Some(format!("data:{mime};base64,{}", base64::engine::general_purpose::STANDARD.encode(bytes)))
 }
 
-fn application_bundle(value: &str) -> Option<PathBuf> {
-	let value = value.trim();
-	if value.is_empty() {
-		return None;
-	}
-
-	let direct = PathBuf::from(value);
-	if direct.is_dir() {
-		return Some(direct);
-	}
-
-	// The inspector accepts a path, bundle identifier, or application name.
-	// Resolve the latter two through LaunchServices' metadata index so the
-	// icon follows the same application that `/usr/bin/open` will launch.
-	let escaped = value.replace('\\', "\\\\").replace('\'', "\\'");
-	let queries = if value.starts_with("com.") {
-		vec![format!("kMDItemCFBundleIdentifier == '{escaped}'c")]
+/// A macOS script that finds an app the way `open -a` does (by path, bundle
+/// identifier, or name), or takes any file or folder, and writes the icon
+/// Finder shows for it as a 256-pixel PNG. It prints the resolved path, or
+/// `missing` when there is nothing to show.
+#[cfg(target_os = "macos")]
+const ICON_SCRIPT: &str = r#"
+function run(argv) {
+	ObjC.import("AppKit");
+	const target = argv[0];
+	const output = argv[1];
+	const size = 256;
+	const workspace = $.NSWorkspace.sharedWorkspace;
+	let path = null;
+	if (target.startsWith("/") || target.startsWith("~")) {
+		path = $(target).stringByExpandingTildeInPath.js;
 	} else {
-		vec![format!("kMDItemFSName == '{escaped}.app'c"), format!("kMDItemDisplayName == '{escaped}'c")]
-	};
-
-	for query in queries {
-		let output = Command::new("/usr/bin/mdfind").arg(query).output().ok()?;
-		for line in String::from_utf8_lossy(&output.stdout).lines() {
-			let path = PathBuf::from(line.trim());
-			if path.is_dir() {
-				return Some(path);
-			}
+		const byIdentifier = workspace.URLForApplicationWithBundleIdentifier(target);
+		if (byIdentifier && !byIdentifier.isNil()) path = byIdentifier.path.js;
+		if (!path) {
+			const byName = workspace.fullPathForApplication(target.replace(/\.app$/i, ""));
+			if (byName && !byName.isNil()) path = byName.js;
 		}
 	}
+	if (!path || !$.NSFileManager.defaultManager.fileExistsAtPath(path)) return "missing";
+	const icon = workspace.iconForFile(path);
+	const rep = $.NSBitmapImageRep.alloc.initWithBitmapDataPlanesPixelsWidePixelsHighBitsPerSampleSamplesPerPixelHasAlphaIsPlanarColorSpaceNameBytesPerRowBitsPerPixel(null, size, size, 8, 4, true, false, $.NSDeviceRGBColorSpace, 0, 0);
+	$.NSGraphicsContext.saveGraphicsState;
+	$.NSGraphicsContext.setCurrentContext($.NSGraphicsContext.graphicsContextWithBitmapImageRep(rep));
+	icon.drawInRectFromRectOperationFraction($.NSMakeRect(0, 0, size, size), $.NSZeroRect, $.NSCompositingOperationSourceOver, 1.0);
+	$.NSGraphicsContext.restoreGraphicsState;
+	rep.representationUsingTypeProperties($.NSBitmapImageFileTypePNG, $()).writeToFileAtomically(output, true);
+	return path;
+}
+"#;
 
+/// Missing icons are looked up again after this long, so an app installed
+/// later gets its icon without restarting.
+const MISSING_ICON_RETRY: std::time::Duration = std::time::Duration::from_secs(60);
+
+/// What a key that launches or opens something shows by default: the app's,
+/// file's, or folder's own icon. `None` for actions that open nothing.
+pub fn icon_target(uuid: &str, settings: &Value) -> Option<String> {
+	let first = |keys: &[&str]| keys.iter().find_map(|key| string_setting(settings, key));
+	let uuid = uuid.to_ascii_lowercase();
+	match uuid.as_str() {
+		OPEN_APPS_UUID => string_setting(settings, "appPath"),
+		"com.hotspot.streamdock.system.openapps" => first(&["appPath", "path", "application", "app"]),
+		// Websites have no Finder icon; files, folders, and apps do.
+		"com.hotspot.streamdock.system.open" => first(&["path", "Path", "file", "folder"]).filter(|target| !target.contains("://")),
+		_ => crate::vsd_actions::app_for_uuid(&uuid).map(str::to_owned),
+	}
+}
+
+#[cfg(target_os = "macos")]
+fn generate_icon(target: &str) -> Option<String> {
+	use std::sync::atomic::{AtomicU64, Ordering};
+	static NEXT_FILE: AtomicU64 = AtomicU64::new(0);
+
+	let directory = std::env::temp_dir().join("opendeck-vsd-m18-icons");
+	fs::create_dir_all(&directory).ok()?;
+	let output = directory.join(format!("{}-{}.png", std::process::id(), NEXT_FILE.fetch_add(1, Ordering::Relaxed)));
+	let mut child = Command::new("/usr/bin/osascript")
+		.args(["-l", "JavaScript", "-e", ICON_SCRIPT, target])
+		.arg(&output)
+		.stdout(std::process::Stdio::null())
+		.stderr(std::process::Stdio::null())
+		.spawn()
+		.ok()?;
+	// A slow volume or a stuck LaunchServices query must not hold a key's
+	// render forever.
+	let deadline = std::time::Instant::now() + std::time::Duration::from_secs(8);
+	let finished = loop {
+		match child.try_wait() {
+			Ok(Some(status)) => break status.success(),
+			Ok(None) if std::time::Instant::now() < deadline => std::thread::sleep(std::time::Duration::from_millis(20)),
+			_ => {
+				let _ = child.kill();
+				let _ = child.wait();
+				break false;
+			}
+		}
+	};
+	let data = finished.then(|| fs::read(&output).ok()).flatten();
+	let _ = fs::remove_file(&output);
+	data.filter(|data| !data.is_empty())
+		.map(|data| format!("data:image/png;base64,{}", base64::engine::general_purpose::STANDARD.encode(data)))
+}
+
+#[cfg(not(target_os = "macos"))]
+fn generate_icon(_target: &str) -> Option<String> {
 	None
 }
 
-fn plist_value(info_plist: &Path, key: &str) -> Option<String> {
-	let output = Command::new("/usr/bin/plutil").args(["-extract", key, "raw", "-o", "-", info_plist.to_str()?]).output().ok()?;
-	if !output.status.success() {
-		return None;
-	}
-	let value = String::from_utf8_lossy(&output.stdout).trim().to_owned();
-	(!value.is_empty()).then_some(value)
-}
-
-fn icon_file(bundle: &Path) -> Option<PathBuf> {
-	let resources = bundle.join("Contents/Resources");
-	let info_plist = bundle.join("Contents/Info.plist");
-	let mut names = vec![];
-	for key in ["CFBundleIconFile", "CFBundleIconName"] {
-		if let Some(name) = plist_value(&info_plist, key) {
-			names.push(name);
-		}
-	}
-
-	for name in names {
-		let path = resources.join(&name);
-		if path.is_file() {
-			return Some(path);
-		}
-		if path.extension().is_none() {
-			let with_extension = path.with_extension("icns");
-			if with_extension.is_file() {
-				return Some(with_extension);
-			}
-		}
-	}
-
-	for name in ["AppIcon.icns", "app.icns", "icon.icns", "electron.icns", "mac_icon.icns"] {
-		let path = resources.join(name);
-		if path.is_file() {
-			return Some(path);
-		}
-	}
-
-	let mut candidates = fs::read_dir(resources)
-		.ok()?
-		.flatten()
-		.map(|entry| entry.path())
-		.filter(|path| {
-			path.extension()
-				.and_then(|extension| extension.to_str())
-				.is_some_and(|extension| extension.eq_ignore_ascii_case("icns"))
-		})
-		.filter(|path| path.file_name().and_then(|name| name.to_str()) != Some(".VolumeIcon.icns"))
-		.collect::<Vec<_>>();
-	candidates.sort();
-	candidates.into_iter().next()
-}
-
-fn generated_app_icon(app: &str) -> Option<String> {
-	let bundle = application_bundle(app)?;
-	let source = icon_file(&bundle)?;
-	let mut hasher = std::collections::hash_map::DefaultHasher::new();
-	bundle.hash(&mut hasher);
-	let temp_dir = std::env::temp_dir().join(format!("opendeck-vsd-m18-app-icon-{}", hasher.finish()));
-	fs::create_dir_all(&temp_dir).ok()?;
-	let output = temp_dir.join("icon.png");
-	let result = Command::new("/usr/bin/sips")
-		.args(["-s", "format", "png", "--resampleHeightWidth", "256", "256"])
-		.arg(&source)
-		.args(["--out", output.to_str()?])
-		.output()
-		.ok();
-	let data = result.filter(|result| result.status.success()).and_then(|_| fs::read(&output).ok());
-	let _ = fs::remove_file(&output);
-	let _ = fs::remove_dir(&temp_dir);
-	data.map(|data| format!("data:image/png;base64,{}", base64::engine::general_purpose::STANDARD.encode(data)))
-}
-
-fn app_icon_data_url(settings: &Value) -> Option<String> {
-	let app = string_setting(settings, "appPath")?;
-	let cache = APP_ICON_CACHE.get_or_init(|| Mutex::new(HashMap::new()));
-	if let Ok(icons) = cache.lock()
-		&& let Some(icon) = icons.get(&app)
+fn icon_lookup(target: &str) -> Arc<tokio::sync::OnceCell<Option<String>>> {
+	let mut lookups = ICON_LOOKUPS.get_or_init(Default::default).lock().unwrap_or_else(PoisonError::into_inner);
+	if let Some(lookup) = lookups.get(target)
+		&& !(matches!(lookup.icon.get(), Some(None)) && lookup.started.elapsed() >= MISSING_ICON_RETRY)
 	{
-		return icon.clone();
+		return lookup.icon.clone();
 	}
-
-	let icon = generated_app_icon(&app);
-	if let Ok(mut icons) = cache.lock() {
-		icons.insert(app, icon.clone());
-	}
+	let icon = Arc::new(tokio::sync::OnceCell::new());
+	lookups.insert(
+		target.to_owned(),
+		IconLookup {
+			started: std::time::Instant::now(),
+			icon: icon.clone(),
+		},
+	);
 	icon
 }
 
-/// Refreshes the visible state artwork for a native OpenApps instance.
-///
-/// This is called when an instance is imported, created, edited, or loaded so
-/// both the editor and the physical M18 show the selected application's icon.
-pub fn refresh_open_app_icon(instance: &mut ActionInstance) {
-	if instance.action.uuid != OPEN_APPS_UUID {
-		return;
+/// The default icon for a launching action, generated once per target and cached.
+pub async fn action_icon(uuid: &str, settings: &Value) -> Option<String> {
+	let target = icon_target(uuid, settings)?;
+	icon_lookup(&target)
+		.get_or_init(|| async move { tokio::task::spawn_blocking(move || generate_icon(&target)).await.ok().flatten() })
+		.await
+		.clone()
+}
+
+/// The icon if it has already been looked up. Otherwise the lookup starts in
+/// the background and this returns `None`: a page switch must never wait for
+/// Launch Services, and the editor draws the key once the icon is ready.
+fn cached_action_icon(uuid: &str, settings: &Value) -> Option<String> {
+	let target = icon_target(uuid, settings)?;
+	if let Some(icon) = icon_lookup(&target).get() {
+		return icon.clone();
 	}
-	let Some(icon) = app_icon_data_url(&instance.settings) else {
-		return;
-	};
-	for state in &mut instance.states {
-		state.image = icon.clone();
-	}
+	let (uuid, settings) = (uuid.to_owned(), settings.clone());
+	tauri::async_runtime::spawn(async move { action_icon(&uuid, &settings).await });
+	None
+}
+
+/// The editor asks for this to draw launching keys that have no custom image.
+#[tauri::command]
+pub async fn get_action_icon(uuid: String, settings: Value) -> Option<String> {
+	action_icon(&uuid, &settings).await
+}
+
+/// Whether a state shows the action's automatic artwork rather than an image
+/// the user chose.
+pub fn uses_default_artwork(image: &str) -> bool {
+	image.is_empty() || image.starts_with("opendeck/")
 }
 
 fn page_number_for_profile(pages: &[crate::m18_pages::M18Page], selected: usize, profile: &str) -> Option<usize> {
@@ -312,6 +323,51 @@ fn draw_page_number(image: &mut RgbImage, number: usize) {
 	}
 }
 
+/// How much of the key an app icon covers, in percent, without and with a
+/// title along the bottom. Mirrors `resolveState()` in `src/lib/appIcons.ts`.
+const APP_ICON_SCALE: u32 = 84;
+const TITLED_APP_ICON_SCALE: u32 = 62;
+
+fn shows_bottom_title(state: &ActionState) -> bool {
+	state.show && !state.text.trim().is_empty() && state.alignment == "bottom"
+}
+
+fn hex_colour(colour: &str) -> Option<Rgb<u8>> {
+	let hex = colour.strip_prefix('#')?;
+	let channel = |index: usize| hex.get(index..index + 2).and_then(|value| u8::from_str_radix(value, 16).ok());
+	let alpha = if hex.len() == 8 { channel(6)? as u16 } else { 255 };
+	// The editor paints the colour over black, so translucency darkens it.
+	let blend = |value: u8| (value as u16 * alpha / 255) as u8;
+	(hex.len() == 6 || hex.len() == 8).then_some(Rgb([blend(channel(0)?), blend(channel(2)?), blend(channel(4)?)]))
+}
+
+/// Lay out an app icon the way the editor does (on the key's background
+/// colour, raised above a bottom title), so the editor's redraw, which adds
+/// the title, does not visibly move or resize it on the M18.
+fn app_icon_face(icon: &str, state: Option<&ActionState>) -> Option<String> {
+	const SIZE: u32 = 144;
+	let bytes = base64::engine::general_purpose::STANDARD.decode(icon.split_once(',')?.1).ok()?;
+	let decoded = image::load_from_memory(&bytes).ok()?;
+	let title = state.filter(|state| shows_bottom_title(state));
+	// The key's own image scale applies on top of the automatic one.
+	let chosen = state.map_or(100, |state| if state.image_scale == 0 { 100 } else { state.image_scale.max(10) as u32 });
+	let percent = ((if title.is_some() { TITLED_APP_ICON_SCALE } else { APP_ICON_SCALE }) * chosen + 50) / 100;
+	let side = (SIZE * percent / 100).max(1);
+	let x = (SIZE as i64 - side as i64) / 2;
+	let y = match title {
+		Some(state) if side < SIZE => {
+			let lines = state.text.split('\n').count() as f32;
+			let title_height = state.size.0 as f32 * 2.0 * lines + state.stroke_size.0 as f32 * 2.0;
+			((SIZE as f32 - title_height - side as f32) / 2.0).max(SIZE as f32 * 0.04).round() as i64
+		}
+		_ => x,
+	};
+	let Rgb([red, green, blue]) = state.and_then(|state| hex_colour(&state.background_colour)).unwrap_or(Rgb([0, 0, 0]));
+	let mut face = image::RgbaImage::from_pixel(SIZE, SIZE, image::Rgba([red, green, blue, 255]));
+	image::imageops::overlay(&mut face, &decoded.resize_exact(side, side, image::imageops::FilterType::Lanczos3).to_rgba8(), x, y);
+	encode_key_image(&image::DynamicImage::ImageRgba8(face).to_rgb8())
+}
+
 fn encode_key_image(image: &RgbImage) -> Option<String> {
 	let mut bytes = Vec::new();
 	image::codecs::jpeg::JpegEncoder::new_with_quality(&mut bytes, 92)
@@ -342,6 +398,61 @@ fn page_number_over_image(number: usize, source: Option<&str>) -> Option<String>
 #[cfg(test)]
 mod tests {
 	use super::*;
+
+	#[test]
+	fn app_icons_are_laid_out_like_the_editor_draws_them() {
+		let mut bytes = std::io::Cursor::new(Vec::new());
+		image::DynamicImage::ImageRgba8(image::RgbaImage::from_pixel(256, 256, image::Rgba([220, 30, 30, 255])))
+			.write_to(&mut bytes, image::ImageFormat::Png)
+			.unwrap();
+		let icon = format!("data:image/png;base64,{}", base64::engine::general_purpose::STANDARD.encode(bytes.into_inner()));
+		let decode = |face: String| {
+			let data = face.strip_prefix("data:image/jpeg;base64,").expect("JPEG data URL");
+			image::load_from_memory(&base64::engine::general_purpose::STANDARD.decode(data).unwrap()).unwrap().to_rgb8()
+		};
+		let red = |pixel: &Rgb<u8>| pixel[0] > 180 && pixel[1] < 70;
+		let black = |pixel: &Rgb<u8>| pixel.0.iter().all(|channel| *channel < 40);
+
+		// Without a title the icon is centred with a margin all round.
+		let plain = ActionState { show: false, ..Default::default() };
+		let face = decode(app_icon_face(&icon, Some(&plain)).unwrap());
+		assert_eq!(face.dimensions(), (144, 144));
+		assert!(red(face.get_pixel(72, 72)) && red(face.get_pixel(72, 128)));
+		assert!(black(face.get_pixel(3, 3)) && black(face.get_pixel(72, 140)));
+
+		// A bottom title gets the lower part of the key to itself.
+		let titled = ActionState {
+			show: true,
+			text: "Safari".to_owned(),
+			alignment: "bottom".to_owned(),
+			background_colour: "#1e40af".to_owned(),
+			..Default::default()
+		};
+		let face = decode(app_icon_face(&icon, Some(&titled)).unwrap());
+		assert!(red(face.get_pixel(72, 40)));
+		let below = face.get_pixel(72, 122);
+		assert!(below[2] > 140 && below[0] < 70, "the title area keeps the key's background colour");
+
+		assert_eq!(hex_colour("#00ff00"), Some(Rgb([0, 255, 0])));
+		assert_eq!(hex_colour("#ff000080"), Some(Rgb([128, 0, 0])));
+		assert_eq!(hex_colour("#abc"), None);
+		assert_eq!(hex_colour("red"), None);
+	}
+
+	/// Needs a macOS desktop session: cargo test finds_app_icons -- --ignored
+	#[cfg(target_os = "macos")]
+	#[test]
+	#[ignore = "runs osascript in a macOS desktop session"]
+	fn finds_app_icons_with_launch_services() {
+		for target in ["Calculator", "com.apple.Safari", "/System/Applications/Music.app"] {
+			let icon = generate_icon(target).unwrap_or_else(|| panic!("no icon for {target}"));
+			let data = icon.strip_prefix("data:image/png;base64,").expect("PNG data URL");
+			let bytes = base64::engine::general_purpose::STANDARD.decode(data).unwrap();
+			let decoded = image::load_from_memory(&bytes).unwrap();
+			assert_eq!((decoded.width(), decoded.height()), (256, 256), "{target}");
+		}
+		assert!(generate_icon("No Such Application 7f3a").is_none());
+	}
 
 	#[test]
 	fn page_indicator_uses_its_profile_position_then_selected_page_as_fallback() {
@@ -399,18 +510,17 @@ fn state_image(instance: &ActionInstance) -> Option<String> {
 }
 
 pub async fn render(instance: &ActionInstance) -> Result<(), anyhow::Error> {
-	let image = if instance.action.uuid == OPEN_APPS_UUID {
-		let settings = instance.settings.clone();
-		tokio::task::spawn_blocking(move || app_icon_data_url(&settings)).await.ok().flatten().or_else(|| state_image(instance))
-	} else if instance.action.uuid == PAGE_INDICATOR_UUID {
+	let current = instance.states.get(instance.current_state as usize);
+	let image = if instance.action.uuid == PAGE_INDICATOR_UUID {
 		current_page_number(instance).and_then(page_number_image).or_else(|| state_image(instance))
-	} else if instance.action.uuid == PAGE_GOTO_UUID
-		&& instance.settings.get("showPageNumber").and_then(Value::as_bool).unwrap_or(true)
-		&& instance.states.get(instance.current_state as usize).is_some_and(|state| state.text.trim().is_empty())
-	{
+	} else if instance.action.uuid == PAGE_GOTO_UUID && instance.settings.get("showPageNumber").and_then(Value::as_bool).unwrap_or(true) && current.is_some_and(|state| state.text.trim().is_empty()) {
 		let page_number = instance.settings.get("pageIndex").and_then(Value::as_u64).unwrap_or(0).saturating_add(1) as usize;
-		let state = instance.states.get(instance.current_state as usize);
-		page_number_over_image(page_number, state.map(|state| state.image.as_str())).or_else(|| state_image(instance))
+		page_number_over_image(page_number, current.map(|state| state.image.as_str())).or_else(|| state_image(instance))
+	} else if current.is_none_or(|state| uses_default_artwork(&state.image))
+		&& let Some(icon) = cached_action_icon(&instance.action.uuid, &instance.settings)
+	{
+		// A launching key shows its app's icon until the user picks an image.
+		app_icon_face(&icon, current).or(Some(icon))
 	} else {
 		state_image(instance)
 	};

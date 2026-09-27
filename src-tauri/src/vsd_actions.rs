@@ -314,7 +314,7 @@ async fn send_text(text: &str) -> Result<(), anyhow::Error> {
 	crate::m18_actions::execute_input(Some(encoded)).await
 }
 
-fn app_for_uuid(uuid: &str) -> Option<&'static str> {
+pub(crate) fn app_for_uuid(uuid: &str) -> Option<&'static str> {
 	match uuid.to_ascii_lowercase().as_str() {
 		"com.hotspot.streamdock.quicktool.calculator" => Some("Calculator"),
 		"com.hotspot.streamdock.quicktool.controlpanel" => Some("System Settings"),

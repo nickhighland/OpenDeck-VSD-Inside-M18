@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { ActionInstance } from "$lib/ActionInstance";
+	import type { ActionState } from "$lib/ActionState";
 
 	import ArrowCounterClockwise from "phosphor-svelte/lib/ArrowCounterClockwise";
 	import ImageSquare from "phosphor-svelte/lib/ImageSquare";
@@ -10,13 +11,17 @@
 	import TextItalic from "phosphor-svelte/lib/TextItalic";
 	import TextUnderline from "phosphor-svelte/lib/TextUnderline";
 
+	import { iconSource, isDefaultArtwork, launchesSomething, resolveState } from "$lib/appIcons";
 	import { t } from "$lib/i18n";
-	import { renderImage, resizeImage } from "$lib/rendererHelper";
+	import { CanvasLock, renderImage, resizeImage } from "$lib/rendererHelper";
 
 	import { invoke } from "@tauri-apps/api/core";
-	import { onDestroy, onMount } from "svelte";
+	import { createEventDispatcher, onDestroy, onMount } from "svelte";
 
 	export let instance: ActionInstance;
+
+	// Edits change `instance` in place; this tells the inspector to redraw its header.
+	const dispatch = createEventDispatcher<{ edit: void }>();
 
 	let state: number = 0;
 	$: if (state >= instance.states.length) state = 0;
@@ -46,8 +51,15 @@
 		instance.states[state].image_scale = Math.max(10, Math.min(200, next));
 	}
 
+	// Keys that launch an app (or open a file) show its icon until an image is chosen.
+	$: launches = launchesSomething(instance.action.uuid);
+	$: automaticIcon = launches && isDefaultArtwork(current?.image);
+	$: source = iconSource(instance.action.uuid);
+
 	function resetImage() {
-		instance.states[state].image = instance.action.states[state]?.image ?? instance.action.icon;
+		const original = instance.action.states[state]?.image ?? instance.action.icon;
+		// Launching keys go back to the app's own icon.
+		instance.states[state].image = launches && !isDefaultArtwork(original) ? "" : original;
 		instance.states[state].image_scale = 100;
 	}
 
@@ -85,24 +97,46 @@
 		invoke("set_state", request).catch((error) => console.warn("Failed to save the key appearance", error));
 	}
 	let editing = "";
+	let saved = "";
 	$: {
 		const key = `${instance.context}#${state}`;
 		const snapshot = structuredClone(instance.states[state]);
+		const serialised = JSON.stringify(snapshot ?? null);
 		if (key !== editing) {
 			// Another key or state was opened: save what is pending for the
 			// previous one, but do not re-save the one that was just opened.
 			flush();
 			editing = key;
-		} else if (snapshot) {
+			saved = serialised;
+		} else if (snapshot && serialised !== saved) {
+			// Only real edits are saved, not redraws of unchanged content.
+			saved = serialised;
 			pending = { context: instance.context, index: state, state: snapshot };
 			clearTimeout(saveTimer);
 			saveTimer = setTimeout(flush, 150);
+			dispatch("edit");
 		}
 	}
 	onDestroy(flush);
 
 	let canvas: HTMLCanvasElement;
-	$: if (canvas && current) renderImage(canvas, null, current, instance.action.states[state]?.image ?? instance.action.icon, false, false, true, false, false, 0);
+	let showsAppIcon = false;
+	let previewRequest = 0;
+	const previewLock = new CanvasLock();
+	async function drawPreview(shown: ActionState, settings: unknown) {
+		const request = ++previewRequest;
+		const resolved = await resolveState({ action: instance.action, settings }, shown);
+		const unlock = await previewLock.lock();
+		try {
+			// A newer edit already started its own draw.
+			if (request !== previewRequest) return;
+			showsAppIcon = resolved.appIcon;
+			await renderImage(canvas, null, resolved.state, instance.action.states[state]?.image ?? instance.action.icon, false, false, true, false, false, 0);
+		} finally {
+			unlock();
+		}
+	}
+	$: if (canvas && current) drawPreview(current, instance.settings);
 
 	let dragging = false;
 	const alignments = ["top", "middle", "bottom"] as const;
@@ -143,7 +177,11 @@
 				<PaintBucket size="13" />
 				{$t("instance_editor.solid_colour")}
 			</button>
-			<button class="btn btn-sm btn-ghost w-full" on:click={resetImage}><ArrowCounterClockwise size="13" /> Reset image</button>
+			{#if automaticIcon}
+				<p class="hint text-center">{showsAppIcon ? `Showing the ${source}'s own icon` : `Shows the ${source}'s icon once one is chosen`}</p>
+			{:else}
+				<button class="btn btn-sm btn-ghost w-full" on:click={resetImage}><ArrowCounterClockwise size="13" /> {launches ? `Use ${source} icon` : "Reset image"}</button>
+			{/if}
 		</div>
 		<input bind:this={solidColourInput} type="color" class="invisible absolute size-0" value="#7160fb" on:change={useSolidColour} />
 		<input

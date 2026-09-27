@@ -12,6 +12,7 @@
 	import Trash from "phosphor-svelte/lib/Trash";
 
 	import { isFlowParent } from "$lib/actionLibrary";
+	import { resolveState } from "$lib/appIcons";
 	import { actionIndex } from "$lib/catalog";
 	import { pageNumber, pageSets, redrawEpoch } from "$lib/pages";
 	import { contextKey, copiedItem, inspectedInstance, inspectedParentAction, inspectorTab, openContextMenu } from "$lib/propertyInspector";
@@ -212,7 +213,11 @@
 			const unlock = await lock.lock();
 			try {
 				let fallback = sl.action.states[sl.current_state]?.image ?? sl.action.icon;
-				if (state) await renderImage(canvas, context, state, fallback, showOk, showAlert, true, active, pressed, $settings?.rotation);
+				if (state) {
+					// Launching keys without a chosen image show the app's icon.
+					const resolved = await resolveState(sl, state);
+					await renderImage(canvas, context, resolved.state, fallback, showOk, showAlert, true, active, pressed, $settings?.rotation);
+				}
 			} finally {
 				unlock();
 			}
@@ -239,7 +244,21 @@
 	}
 
 	$: accessibleLabel = label + (slot ? ": " + displayName + (state?.show && state?.text ? " - " + state.text : "") : ", empty");
-	$: bottomFace = slot ? getImage(state?.image, slot.action.states[slot.current_state]?.image ?? slot.action.icon) : "";
+	let bottomFace = "";
+	let bottomFaceIsIcon = false;
+	let bottomFaceRequest = 0;
+	async function showBottomFace(sl: ActionInstance | null, shown: ActionState | undefined) {
+		const request = ++bottomFaceRequest;
+		if (!sl || !shown) {
+			bottomFace = "";
+			return;
+		}
+		const resolved = await resolveState(sl, shown);
+		if (request !== bottomFaceRequest) return;
+		bottomFaceIsIcon = resolved.appIcon;
+		bottomFace = getImage(resolved.state.image, sl.action.states[sl.current_state]?.image ?? sl.action.icon);
+	}
+	$: if (m18Bottom) showBottomFace(slot, state);
 
 	function handleKeydown(e: KeyboardEvent) {
 		if (!active || !context) return;
@@ -294,7 +313,7 @@
 			on:contextmenu={contextMenu}
 		>
 			{#if slot}
-				<img src={bottomFace} alt="" class="pointer-events-none size-full object-cover" draggable="false" />
+				<img src={bottomFace} alt="" class={`pointer-events-none size-full ${bottomFaceIsIcon ? "object-contain p-[9%]" : "object-cover"}`} draggable="false" />
 			{:else}
 				<Plus size="16" weight="bold" class="text-ink-faint" />
 			{/if}

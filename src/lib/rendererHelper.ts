@@ -107,7 +107,12 @@ export async function renderImage(
 		const xScaled = canvas.width * imageScale;
 		const yScaled = canvas.height * imageScale;
 		const xOffset = (canvas.width - xScaled) / 2;
-		const yOffset = (canvas.height - yScaled) / 2;
+		let yOffset = (canvas.height - yScaled) / 2;
+		// A reduced image sits centred in the space above a bottom title.
+		if (imageScale < 1 && state.show && state.text.trim() && state.alignment === "bottom") {
+			const titleHeight = state.size * 2 * scale * state.text.split("\n").length + state.stroke_size * scale * 2;
+			yOffset = Math.max(canvas.height * 0.04, (canvas.height - titleHeight - yScaled) / 2);
+		}
 		context.drawImage(image, xOffset, yOffset, xScaled, yScaled);
 	} catch (error: any) {
 		if (!(error instanceof Event)) console.error(error);

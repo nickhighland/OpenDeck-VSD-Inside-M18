@@ -178,16 +178,14 @@ impl DiskActionInstance {
 		action.icon = reconstruct_path(&action.icon);
 		action.property_inspector = reconstruct_path(&action.property_inspector);
 
-		let mut instance = ActionInstance {
+		ActionInstance {
 			context: self.context.into_action_context(device, profile),
 			action,
 			states,
 			current_state: self.current_state,
 			settings: self.settings,
 			children: self.children.map(|c| c.into_iter().map(|v| v.into_action_instance(path)).collect()),
-		};
-		crate::m18_actions::refresh_open_app_icon(&mut instance);
-		instance
+		}
 	}
 }
 

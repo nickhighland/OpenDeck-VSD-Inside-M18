@@ -555,6 +555,21 @@ pub fn face_path(face: &str) -> String {
 	format!("opendeck/keys/{face}.svg")
 }
 
+/// Whether an image is an app icon that an earlier version generated: exactly
+/// 256×256. Images chosen in the editor are stored at 288×288.
+fn is_baked_app_icon(image: &str) -> bool {
+	if image.is_empty() || image.starts_with("opendeck/") {
+		return false;
+	}
+	if let Some((_, data)) = image.strip_prefix("data:").and_then(|rest| rest.split_once(";base64,")) {
+		return base64::Engine::decode(&base64::engine::general_purpose::STANDARD, data)
+			.ok()
+			.and_then(|bytes| image::load_from_memory(&bytes).ok())
+			.is_some_and(|decoded| (decoded.width(), decoded.height()) == (256, 256));
+	}
+	image::image_dimensions(image).is_ok_and(|dimensions| dimensions == (256, 256))
+}
+
 /// Placeholder artwork that earlier versions gave every built-in key.
 const LEGACY_PLACEHOLDERS: [&str; 3] = ["opendeck/multi-action.png", "opendeck/toggle-action.png", "opendeck/led-colors.svg"];
 
@@ -565,11 +580,15 @@ pub fn refresh_default_artwork(instance: &mut crate::shared::ActionInstance) -> 
 	let mut changed = false;
 	if let Some(entry) = entry(&instance.action.uuid) {
 		let face = face_path(entry.face);
+		// Earlier versions copied the app's icon into every Open App state (as a
+		// 256-pixel PNG), which also overwrote any image the user chose. Those
+		// copies go back to automatic, so the icon follows the app again.
+		let baked_app_icons = instance.action.uuid == crate::m18_actions::OPEN_APPS_UUID;
 		let images = std::iter::once(&mut instance.action.icon)
 			.chain(instance.action.states.iter_mut().map(|state| &mut state.image))
 			.chain(instance.states.iter_mut().map(|state| &mut state.image));
 		for image in images {
-			if LEGACY_PLACEHOLDERS.contains(&image.as_str()) {
+			if LEGACY_PLACEHOLDERS.contains(&image.as_str()) || (baked_app_icons && is_baked_app_icon(image)) {
 				image.clone_from(&face);
 				changed = true;
 			}
@@ -828,6 +847,34 @@ mod tests {
 		] {
 			assert!(ron::from_str::<Vec<enigo::agent::Token>>(sequence).is_ok(), "{sequence} should parse");
 		}
+	}
+
+	#[test]
+	fn app_keys_show_the_app_icon_until_an_image_is_chosen() {
+		use crate::m18_actions::{icon_target, uses_default_artwork};
+		let app = serde_json::json!({ "appPath": "Safari" });
+		assert_eq!(icon_target(native::OPEN_APPS_UUID, &app).as_deref(), Some("Safari"));
+		assert_eq!(icon_target("com.hotspot.streamdock.quicktool.calculator", &serde_json::json!({})).as_deref(), Some("Calculator"));
+		assert_eq!(
+			icon_target("com.hotspot.streamdock.system.open", &serde_json::json!({ "path": "~/Documents" })).as_deref(),
+			Some("~/Documents")
+		);
+		assert_eq!(icon_target("com.hotspot.streamdock.system.open", &serde_json::json!({ "path": "https://example.com" })), None);
+		assert_eq!(icon_target(native::VOLUME_UP_UUID, &serde_json::json!({})), None);
+		assert!(uses_default_artwork("opendeck/keys/open-app.svg"));
+		assert!(!uses_default_artwork("data:image/png;base64,Y3VzdG9t"));
+	}
+
+	#[test]
+	fn old_generated_app_icons_become_automatic_but_chosen_images_stay() {
+		let encode = |size: u32| {
+			let mut bytes = std::io::Cursor::new(Vec::new());
+			image::DynamicImage::new_rgba8(size, size).write_to(&mut bytes, image::ImageFormat::Png).unwrap();
+			format!("data:image/png;base64,{}", base64::Engine::encode(&base64::engine::general_purpose::STANDARD, bytes.into_inner()))
+		};
+		assert!(is_baked_app_icon(&encode(256)));
+		assert!(!is_baked_app_icon(&encode(288)));
+		assert!(!is_baked_app_icon("opendeck/keys/open-app.svg"));
 	}
 
 	#[test]

@@ -112,6 +112,7 @@ async fn main() {
 			m18_pages::delete_m18_page,
 			m18_pages::move_m18_page,
 			m18_actions::get_mouse_position,
+			m18_actions::get_action_icon,
 			soundboard::get_audio_output_devices,
 			frontend::property_inspector::make_info,
 			frontend::property_inspector::switch_property_inspector,
