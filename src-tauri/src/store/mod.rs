@@ -139,6 +139,13 @@ pub struct Settings {
 	pub statistics: bool,
 	pub separatewine: bool,
 	pub developer: bool,
+	/// Color of the M18's LEDs as `#rrggbb`. A page with an LED Colors key
+	/// shows that key's colors instead.
+	pub led_color: String,
+	/// Brightness of the M18's LEDs, 0 to 100.
+	pub led_brightness: u8,
+	/// Size of app icons on keys that launch apps, in percent of the key.
+	pub app_icon_scale: u8,
 }
 
 impl Default for Settings {
@@ -157,6 +164,9 @@ impl Default for Settings {
 			statistics: true,
 			separatewine: false,
 			developer: false,
+			led_color: "#780000".to_owned(),
+			led_brightness: 100,
+			app_icon_scale: 100,
 		}
 	}
 }

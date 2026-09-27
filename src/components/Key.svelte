@@ -198,6 +198,7 @@
 	$: (async () => {
 		// Dependencies that should trigger a redraw of the key.
 		void $redrawEpoch;
+		void $settings?.app_icon_scale;
 		const sl = structuredClone(slot);
 		if (m18Bottom) return;
 		if (!sl) {

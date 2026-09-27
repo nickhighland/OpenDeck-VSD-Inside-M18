@@ -81,10 +81,32 @@ async fn to_encoder_jpeg_data_uri(context: &crate::shared::Context, image: &str)
 
 /// Set the brightness for all devices.
 pub async fn set_brightness(brightness: u8) -> Result<(), anyhow::Error> {
-	for device in crate::shared::DEVICES.iter() {
-		set_device_brightness(&device.id, brightness).await?;
+	let devices = crate::shared::DEVICES.iter().map(|device| device.id.clone()).collect::<Vec<_>>();
+	for device in devices {
+		// A sleeping display stays off; it wakes with the new brightness.
+		if !crate::device_sleep::is_sleeping(&device) {
+			set_device_brightness(&device, brightness).await?;
+		}
 	}
 
+	Ok(())
+}
+
+/// Apply the LED brightness from Settings to every awake M18.
+pub async fn set_led_brightness(brightness: u8) -> Result<(), anyhow::Error> {
+	let devices = crate::shared::DEVICES.iter().map(|device| device.id.clone()).collect::<Vec<_>>();
+	for device in devices.iter().filter(|device| !crate::device_sleep::is_sleeping(device)) {
+		crate::m18::set_led_brightness(device, brightness).await?;
+	}
+	Ok(())
+}
+
+/// Show the LED color from Settings on every M18 whose page has no LED Colors key.
+pub async fn show_settings_leds() -> Result<(), anyhow::Error> {
+	let devices = crate::shared::DEVICES.iter().map(|device| device.id.clone()).collect::<Vec<_>>();
+	for device in devices {
+		crate::m18::show_settings_leds(&device).await?;
+	}
 	Ok(())
 }
 

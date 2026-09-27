@@ -155,7 +155,21 @@
 		}
 	}
 
+	/** Whether `candidate` is a later version than `installed`. */
+	function isNewer(candidate: string, installed: string): boolean {
+		const parts = (version: string) => version.split(/[.+-]/).slice(0, 3).map((part) => parseInt(part, 10) || 0);
+		const [next, current] = [parts(candidate), parts(installed)];
+		for (let index = 0; index < 3; index++) {
+			if ((next[index] ?? 0) !== (current[index] ?? 0)) return (next[index] ?? 0) > (current[index] ?? 0);
+		}
+		return false;
+	}
+
 	async function isUpdateAvailable(plugin: any): Promise<string | false> {
+		// Built-in plugins come with this app and update with it; the public
+		// catalogue lists upstream OpenDeck's releases for them. Other plugins
+		// are checked only while update checks are switched on.
+		if (plugin.builtin || !$settings?.updatecheck) return false;
 		const id = plugin.id.endsWith(".sdPlugin") ? plugin.id.slice(0, -9) : plugin.id;
 		const cataloguePlugin = plugins[id];
 		if (!cataloguePlugin || cataloguePlugin.download_url) return false;
@@ -170,7 +184,7 @@
 			const release = await res.json();
 
 			const normalizeVersion = (v: string) => v.replace(/^v/, "").replace(/^(\d+\.\d+\.\d+)\.\d+$/, "$1");
-			if (normalizeVersion(release.tag_name) != normalizeVersion(plugin.version)) {
+			if (isNewer(normalizeVersion(release.tag_name), normalizeVersion(plugin.version))) {
 				return release.tag_name.replace(/^v/, "");
 			} else {
 				return false;

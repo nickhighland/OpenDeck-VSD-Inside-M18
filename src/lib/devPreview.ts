@@ -160,6 +160,9 @@ let settings = {
 	statistics: false,
 	separatewine: false,
 	developer: false,
+	led_color: "#780000",
+	led_brightness: 100,
+	app_icon_scale: 100,
 };
 
 function parseContext(context: string) {
@@ -349,6 +352,8 @@ async function handle(command: string, args: any): Promise<unknown> {
 			return "<details><summary>OpenDeck VSD M18 (browser preview) on aarch64-apple-darwin</summary>Preview data only: no device or configuration is used.</details>";
 		case "get_input_permission":
 			return true;
+		case "check_for_updates":
+			return { current: "2.15.3", latest: "2.15.3", newer: false, url: "https://github.com/nickhighland/OpenDeck-VSD-Inside-M18/releases/latest", notes: "" };
 		case "get_action_icon":
 			return previewAppIcon(String(args.settings?.appPath ?? ""));
 		case "plugin:dialog|ask":

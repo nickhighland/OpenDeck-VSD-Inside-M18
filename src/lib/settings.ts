@@ -11,6 +11,9 @@ export type Settings = {
 	statistics: boolean;
 	separatewine: boolean;
 	developer: boolean;
+	led_color: string;
+	led_brightness: number;
+	app_icon_scale: number;
 };
 
 import { invoke } from "@tauri-apps/api/core";

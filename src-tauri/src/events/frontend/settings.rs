@@ -45,6 +45,16 @@ pub async fn set_settings(_app: AppHandle, settings: crate::store::Settings) -> 
 	{
 		log::warn!("Failed to apply M18 brightness: {error:#}");
 	}
+	if previous.led_brightness != settings.led_brightness
+		&& let Err(error) = crate::events::outbound::devices::set_led_brightness(settings.led_brightness).await
+	{
+		log::warn!("Failed to apply M18 LED brightness: {error:#}");
+	}
+	if previous.led_color != settings.led_color
+		&& let Err(error) = crate::events::outbound::devices::show_settings_leds().await
+	{
+		log::warn!("Failed to apply M18 LED color: {error:#}");
+	}
 	if previous.sleep_timeout_minutes != settings.sleep_timeout_minutes
 		&& let Err(error) = crate::device_sleep::update_sleep_timeout_minutes(settings.sleep_timeout_minutes).await
 	{

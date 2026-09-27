@@ -164,6 +164,10 @@ async fn put_to_sleep(device: &str, reason: SleepReason) {
 		log::warn!("Failed to turn off the display of {device}: {error:#}");
 		return;
 	}
+	// The LEDs go dark with the display.
+	if let Err(error) = crate::m18::set_led_brightness(device, 0).await {
+		log::warn!("Failed to turn off the LEDs of {device}: {error:#}");
+	}
 	SLEEPING_DEVICES.insert(device.to_owned(), reason);
 	log::debug!("Turned off the display of {device} ({reason:?})");
 }
@@ -173,11 +177,20 @@ async fn wake_device(device: &str) -> bool {
 	if SLEEPING_DEVICES.remove(device).is_none() {
 		return false;
 	}
-	let brightness = crate::store::current_settings().brightness;
-	if let Err(error) = crate::events::outbound::devices::set_device_brightness(device, brightness).await {
+	let settings = crate::store::current_settings();
+	if let Err(error) = crate::events::outbound::devices::set_device_brightness(device, settings.brightness).await {
 		log::warn!("Failed to turn on the display of {device}: {error:#}");
 	}
+	if let Err(error) = crate::m18::set_led_brightness(device, settings.led_brightness).await {
+		log::warn!("Failed to turn on the LEDs of {device}: {error:#}");
+	}
 	true
+}
+
+/// Whether a device's display is off because it is asleep. Brightness
+/// changes wait for it to wake.
+pub fn is_sleeping(device: &str) -> bool {
+	SLEEPING_DEVICES.contains_key(device)
 }
 
 /// Record an M18 key press. Returns `true` when the press must not run its

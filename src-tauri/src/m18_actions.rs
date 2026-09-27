@@ -323,10 +323,15 @@ fn draw_page_number(image: &mut RgbImage, number: usize) {
 	}
 }
 
-/// How much of the key an app icon covers, in percent, without and with a
-/// title along the bottom. Mirrors `resolveState()` in `src/lib/appIcons.ts`.
-const APP_ICON_SCALE: u32 = 84;
-const TITLED_APP_ICON_SCALE: u32 = 62;
+/// With a title along the bottom, an app icon is this share (in percent) of
+/// its size without one, raised to leave the bottom of the key to the title.
+/// Mirrors `resolveState()` in `src/lib/appIcons.ts`.
+const TITLED_APP_ICON_SHARE: u32 = 80;
+
+/// How much of the key an app icon covers, in percent, from Settings.
+fn app_icon_scale() -> u32 {
+	u32::from(crate::store::current_settings().app_icon_scale).clamp(30, 150)
+}
 
 fn shows_bottom_title(state: &ActionState) -> bool {
 	state.show && !state.text.trim().is_empty() && state.alignment == "bottom"
@@ -344,14 +349,15 @@ fn hex_colour(colour: &str) -> Option<Rgb<u8>> {
 /// Lay out an app icon the way the editor does (on the key's background
 /// colour, raised above a bottom title), so the editor's redraw, which adds
 /// the title, does not visibly move or resize it on the M18.
-fn app_icon_face(icon: &str, state: Option<&ActionState>) -> Option<String> {
+fn app_icon_face(icon: &str, state: Option<&ActionState>, scale: u32) -> Option<String> {
 	const SIZE: u32 = 144;
 	let bytes = base64::engine::general_purpose::STANDARD.decode(icon.split_once(',')?.1).ok()?;
 	let decoded = image::load_from_memory(&bytes).ok()?;
 	let title = state.filter(|state| shows_bottom_title(state));
 	// The key's own image scale applies on top of the automatic one.
 	let chosen = state.map_or(100, |state| if state.image_scale == 0 { 100 } else { state.image_scale.max(10) as u32 });
-	let percent = ((if title.is_some() { TITLED_APP_ICON_SCALE } else { APP_ICON_SCALE }) * chosen + 50) / 100;
+	let automatic = if title.is_some() { (scale * TITLED_APP_ICON_SHARE + 50) / 100 } else { scale };
+	let percent = (automatic * chosen + 50) / 100;
 	let side = (SIZE * percent / 100).max(1);
 	let x = (SIZE as i64 - side as i64) / 2;
 	let y = match title {
@@ -413,12 +419,14 @@ mod tests {
 		let red = |pixel: &Rgb<u8>| pixel[0] > 180 && pixel[1] < 70;
 		let black = |pixel: &Rgb<u8>| pixel.0.iter().all(|channel| *channel < 40);
 
-		// Without a title the icon is centred with a margin all round.
+		// Without a title the icon is centred, as large as Settings says.
 		let plain = ActionState { show: false, ..Default::default() };
-		let face = decode(app_icon_face(&icon, Some(&plain)).unwrap());
+		let face = decode(app_icon_face(&icon, Some(&plain), 84).unwrap());
 		assert_eq!(face.dimensions(), (144, 144));
 		assert!(red(face.get_pixel(72, 72)) && red(face.get_pixel(72, 128)));
 		assert!(black(face.get_pixel(3, 3)) && black(face.get_pixel(72, 140)));
+		let full = decode(app_icon_face(&icon, Some(&plain), 100).unwrap());
+		assert!(red(full.get_pixel(2, 2)) && red(full.get_pixel(141, 141)), "at 100% the icon fills the key");
 
 		// A bottom title gets the lower part of the key to itself.
 		let titled = ActionState {
@@ -428,7 +436,7 @@ mod tests {
 			background_colour: "#1e40af".to_owned(),
 			..Default::default()
 		};
-		let face = decode(app_icon_face(&icon, Some(&titled)).unwrap());
+		let face = decode(app_icon_face(&icon, Some(&titled), 84).unwrap());
 		assert!(red(face.get_pixel(72, 40)));
 		let below = face.get_pixel(72, 122);
 		assert!(below[2] > 140 && below[0] < 70, "the title area keeps the key's background colour");
@@ -520,7 +528,7 @@ pub async fn render(instance: &ActionInstance) -> Result<(), anyhow::Error> {
 		&& let Some(icon) = cached_action_icon(&instance.action.uuid, &instance.settings)
 	{
 		// A launching key shows its app's icon until the user picks an image.
-		app_icon_face(&icon, current).or(Some(icon))
+		app_icon_face(&icon, current, app_icon_scale()).or(Some(icon))
 	} else {
 		state_image(instance)
 	};

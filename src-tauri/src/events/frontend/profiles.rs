@@ -84,6 +84,9 @@ pub async fn select_profile(device: &str, id: &str) -> Result<(), anyhow::Error>
 		let positions: Vec<u8> = new_profile.keys.iter().enumerate().filter(|(_, key)| key.is_some()).map(|(position, _)| position as u8).collect();
 		let _ = crate::events::outbound::devices::begin_page(device, positions).await;
 	}
+	// An LED Colors key on the new page sets the LEDs as it appears;
+	// otherwise they return to the color from Settings.
+	crate::m18::end_led_override(device).await;
 	for instance in new_profile
 		.keys
 		.iter()
@@ -95,6 +98,7 @@ pub async fn select_profile(device: &str, id: &str) -> Result<(), anyhow::Error>
 			let _ = crate::events::outbound::will_appear::will_appear(target).await;
 		}
 	}
+	let _ = crate::m18::show_settings_leds(device).await;
 	store.save()?;
 
 	locks.device_stores.set_selected_profile(device, id.to_owned())?;

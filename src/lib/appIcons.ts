@@ -1,7 +1,10 @@
 import type { ActionInstance } from "./ActionInstance.ts";
 import type { ActionState } from "./ActionState.ts";
 
+import { settings } from "./settings.ts";
+
 import { invoke } from "@tauri-apps/api/core";
+import { get } from "svelte/store";
 
 /**
  * Actions that launch or open something, mirroring `icon_target()` in
@@ -57,15 +60,18 @@ export function actionIcon(uuid: string, settings: unknown): Promise<string | nu
 
 /**
  * The state as it should be drawn: a launching key without a chosen image
- * shows the app's icon, sized to leave room for a title along the bottom.
- * The key's own image scale still applies on top. Mirrors `app_icon_face()`
- * in `src-tauri/src/m18_actions.rs`, which draws the same layout on the M18.
+ * shows the app's icon at the size from Settings, smaller and raised when a
+ * title runs along the bottom. The key's own image scale applies on top.
+ * Mirrors `app_icon_face()` in `src-tauri/src/m18_actions.rs`, which draws
+ * the same layout on the M18.
  */
 export async function resolveState(slot: Pick<ActionInstance, "action" | "settings">, state: ActionState): Promise<{ state: ActionState; appIcon: boolean }> {
 	if (!isDefaultArtwork(state.image)) return { state, appIcon: false };
 	const icon = await actionIcon(slot.action.uuid, slot.settings);
 	if (!icon) return { state, appIcon: false };
 	const titled = state.show && state.text.trim() !== "" && state.alignment === "bottom";
+	const size = Math.min(150, Math.max(30, get(settings)?.app_icon_scale ?? 100));
+	const automatic = titled ? Math.round(size * 0.8) : size;
 	const chosen = Math.max(10, state.image_scale || 100);
-	return { state: { ...state, image: icon, image_scale: Math.round(((titled ? 62 : 84) * chosen) / 100) }, appIcon: true };
+	return { state: { ...state, image: icon, image_scale: Math.round((automatic * chosen) / 100) }, appIcon: true };
 }

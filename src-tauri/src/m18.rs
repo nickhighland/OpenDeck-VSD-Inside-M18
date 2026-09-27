@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::future::Future;
 use std::sync::{Arc, LazyLock};
 use std::time::Duration;
@@ -142,6 +142,7 @@ pub enum DeviceCommand {
 		expected: u32,
 	},
 	SetBrightness(u8),
+	SetLedBrightness(u8),
 	SetLedColors(LedPalette),
 }
 
@@ -161,7 +162,9 @@ struct Session {
 
 static SESSIONS: LazyLock<RwLock<HashMap<String, Arc<Session>>>> = LazyLock::new(|| RwLock::new(HashMap::new()));
 static CONNECTING: LazyLock<RwLock<HashMap<String, ()>>> = LazyLock::new(|| RwLock::new(HashMap::new()));
-static LED_PALETTES: LazyLock<RwLock<HashMap<String, LedPalette>>> = LazyLock::new(|| RwLock::new(HashMap::new()));
+/// Devices whose current page has an LED Colors key. Its colors win over the
+/// LED color from Settings until the page changes.
+static LED_OVERRIDES: LazyLock<RwLock<HashSet<String>>> = LazyLock::new(|| RwLock::new(HashSet::new()));
 static DEVICE_BRIGHTNESS: LazyLock<RwLock<HashMap<String, u8>>> = LazyLock::new(|| RwLock::new(HashMap::new()));
 static RECONNECT_BACKOFF: LazyLock<Mutex<HashMap<String, Backoff>>> = LazyLock::new(|| Mutex::new(HashMap::new()));
 
@@ -384,6 +387,7 @@ async fn run_session(candidate: CandidateDevice) -> Result<(), anyhow::Error> {
 	let output_device = device.clone();
 	let mut output_task = tokio::spawn(async move { device_output_task(output_device, receiver, output_token).await });
 
+	end_led_override(&id).await;
 	if let Err(error) = crate::events::inbound::devices::register_device("", PayloadEvent { payload: info }).await {
 		token.cancel();
 		let _ = output_task.await;
@@ -392,7 +396,7 @@ async fn run_session(candidate: CandidateDevice) -> Result<(), anyhow::Error> {
 		let _ = timeout(DEVICE_IO_TIMEOUT, device.shutdown()).await;
 		return Err(error);
 	}
-	let _ = restore_led_colors(&id).await;
+	let _ = apply_led_settings(&id).await;
 	log::info!("VSD Inside M18 device {id} is ready");
 
 	let input_token = token.clone();
@@ -622,6 +626,9 @@ async fn device_output_task(device: Arc<Device>, mut receiver: mpsc::Receiver<De
 			OutputAction::Command(Some(DeviceCommand::SetLedColors(colors))) => with_deadline("Setting LED colors", DEVICE_IO_TIMEOUT, device.set_led_colors(&colors))
 				.await
 				.map(|_| OutputStep::Continue),
+			OutputAction::Command(Some(DeviceCommand::SetLedBrightness(brightness))) => with_deadline("Setting LED brightness", DEVICE_IO_TIMEOUT, device.set_led_brightness(brightness))
+				.await
+				.map(|_| OutputStep::Continue),
 			OutputAction::Command(None) => return Ok(()),
 			OutputAction::Flush => with_deadline("Updating key images", DEVICE_IO_TIMEOUT, device.flush()).await.map(|_| OutputStep::ClearFlush),
 			OutputAction::KeepAlive => with_deadline("Keep-alive", DEVICE_IO_TIMEOUT, device.keep_alive()).await.map(|_| OutputStep::Continue),
@@ -716,9 +723,10 @@ fn adjusted_brightness(current: u8, adjustment: i8) -> u8 {
 	(i16::from(current) + i16::from(adjustment)).clamp(0, 100) as u8
 }
 
+/// Show an LED Colors key's colors. They stay until the page changes.
 pub async fn set_led_colors(device: &str, colors: LedPalette) -> Result<(), anyhow::Error> {
 	if is_m18(device) {
-		LED_PALETTES.write().await.insert(device.to_owned(), colors);
+		LED_OVERRIDES.write().await.insert(device.to_owned());
 		send(device, DeviceCommand::SetLedColors(colors)).await?;
 	}
 	Ok(())
@@ -732,11 +740,49 @@ pub async fn apply_led_action(instance: &crate::shared::ActionInstance) -> Resul
 	set_led_colors(&instance.context.device, palette).await
 }
 
-pub async fn restore_led_colors(device: &str) -> Result<(), anyhow::Error> {
-	if let Some(colors) = LED_PALETTES.read().await.get(device).copied() {
-		send(device, DeviceCommand::SetLedColors(colors)).await?;
+/// Every LED in the color chosen in Settings.
+fn settings_led_palette() -> LedPalette {
+	let color = crate::store::current_settings().led_color.clone();
+	let hex = color.trim().trim_start_matches('#');
+	let channel = |index: usize| hex.get(index..index + 2).and_then(|value| u8::from_str_radix(value, 16).ok());
+	let color = match (hex.len(), channel(0), channel(2), channel(4)) {
+		(6, Some(red), Some(green), Some(blue)) => [red, green, blue],
+		_ => DEFAULT_LED_COLOR,
+	};
+	[color; LED_COUNT]
+}
+
+/// The page is changing, so its LED Colors key no longer applies.
+pub async fn end_led_override(device: &str) {
+	LED_OVERRIDES.write().await.remove(device);
+}
+
+/// Show the LED color from Settings, unless an LED Colors key on the current
+/// page sets the LEDs.
+pub async fn show_settings_leds(device: &str) -> Result<(), anyhow::Error> {
+	if is_m18(device) && !LED_OVERRIDES.read().await.contains(device) {
+		send(device, DeviceCommand::SetLedColors(settings_led_palette())).await?;
 	}
 	Ok(())
+}
+
+pub async fn set_led_brightness(device: &str, brightness: u8) -> Result<(), anyhow::Error> {
+	if is_m18(device) {
+		send(device, DeviceCommand::SetLedBrightness(brightness.min(100))).await?;
+	}
+	Ok(())
+}
+
+/// LED brightness and color from Settings for a device that just connected.
+/// Its first page's LED Colors key, if any, has already set the colors.
+async fn apply_led_settings(device: &str) -> Result<(), anyhow::Error> {
+	let brightness = if crate::device_sleep::is_sleeping(device) {
+		0
+	} else {
+		crate::store::current_settings().led_brightness
+	};
+	set_led_brightness(device, brightness).await?;
+	show_settings_leds(device).await
 }
 
 #[cfg(test)]

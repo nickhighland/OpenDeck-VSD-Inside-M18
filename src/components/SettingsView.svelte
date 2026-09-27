@@ -17,7 +17,7 @@
 	import { inputPermission, inputPermissionDialog } from "$lib/permissions";
 	import { LANGUAGES, settings } from "$lib/settings";
 	import { PRODUCT_NAME } from "$lib/singletons";
-	import { attempt, toast } from "$lib/toast";
+	import { attempt, errorText, toast } from "$lib/toast";
 
 	import { invoke } from "@tauri-apps/api/core";
 	import { ask, message } from "@tauri-apps/plugin-dialog";
@@ -90,6 +90,22 @@
 	}
 
 	const rotations = [0, 90, 180, 270];
+
+	type Release = { current: string; latest: string; newer: boolean; url: string; notes: string };
+	let checkingUpdates = false;
+	let updateCheck: { release?: Release; error?: string } | null = null;
+	async function checkForUpdates() {
+		checkingUpdates = true;
+		try {
+			updateCheck = { release: await invoke<Release>("check_for_updates") };
+		} catch (error) {
+			updateCheck = { error: errorText(error) };
+		} finally {
+			checkingUpdates = false;
+		}
+	}
+	// The first is the M18's usual deep red.
+	const ledPresets = ["#780000", "#ff2020", "#ff7a00", "#ffd000", "#20e060", "#00d0ff", "#2f6bff", "#9a5cff", "#ff40b0", "#ffffff"];
 </script>
 
 <button class="btn btn-ghost" on:click={() => (showPopup = true)} title={$t("settings.button")}>
@@ -143,13 +159,28 @@
 							</div>
 							<input type="checkbox" class="switch" bind:checked={$settings.background} />
 						</label>
-						<label class="setting">
+						<div class="setting">
 							<div>
 								<p class="setting-title">Check for updates</p>
-								<p class="hint">Look for new releases of {PRODUCT_NAME} on GitHub at startup.</p>
+								<p class="hint">
+									At startup, look for new releases of {PRODUCT_NAME} in its GitHub repository (nickhighland/OpenDeck-VSD-Inside-M18), and for updates to plugins you installed. Plugins that come with the app update with it.
+								</p>
+								{#if updateCheck?.release?.newer}
+									<p class="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-ink">
+										Version {updateCheck.release.latest} is available. You have {updateCheck.release.current}.
+										<button class="btn btn-sm btn-primary" on:click={() => attempt("Could not open the release page", () => invoke("open_url", { url: updateCheck?.release?.url }))}>Download</button>
+									</p>
+								{:else if updateCheck?.release}
+									<p class="mt-1.5 text-xs text-success">You have the latest version, {updateCheck.release.current}.</p>
+								{:else if updateCheck?.error}
+									<p class="mt-1.5 text-xs text-danger">Could not check for updates: {updateCheck.error}</p>
+								{/if}
 							</div>
-							<input type="checkbox" class="switch" bind:checked={$settings.updatecheck} />
-						</label>
+							<div class="flex shrink-0 items-center gap-3">
+								<button class="btn btn-sm" on:click={checkForUpdates} disabled={checkingUpdates}>{checkingUpdates ? "Checking…" : "Check now"}</button>
+								<input type="checkbox" class="switch" bind:checked={$settings.updatecheck} aria-label="Check for updates at startup" />
+							</div>
+						</div>
 						{#if keystrokes !== null}
 							<div class="setting">
 								<div>
@@ -180,6 +211,48 @@
 								<span class="text-xs text-ink-muted tabular-nums">{$settings.brightness}%</span>
 							</div>
 							<input type="range" min="0" max="100" class="range" style={`--range-fill: ${$settings.brightness}%`} bind:value={$settings.brightness} aria-label={$t("settings.brightness")} />
+						</div>
+						<div class="setting flex-col items-stretch">
+							<div class="flex items-center justify-between">
+								<p class="setting-title">App icon size</p>
+								<span class="text-xs text-ink-muted tabular-nums">{$settings.app_icon_scale}%</span>
+							</div>
+							<input
+								type="range"
+								min="50"
+								max="125"
+								class="range"
+								style={`--range-fill: ${(($settings.app_icon_scale - 50) / 75) * 100}%`}
+								bind:value={$settings.app_icon_scale}
+								aria-label="App icon size"
+							/>
+							<p class="hint">How much of a key an app's icon fills on keys that open apps. Change one key's size with the − and + under its preview in the Appearance tab.</p>
+						</div>
+						<div class="setting">
+							<div>
+								<p class="setting-title">LED color</p>
+								<p class="hint">The color of the M18's LEDs. A page with an LED Colors key shows that key's colors instead.</p>
+							</div>
+							<div class="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
+								{#each ledPresets as preset}
+									<button
+										class="led-swatch"
+										style={`--swatch: ${preset}`}
+										aria-pressed={$settings.led_color.toLowerCase() === preset}
+										aria-label={`LED color ${preset}`}
+										on:click={() => $settings && ($settings.led_color = preset)}
+									></button>
+								{/each}
+								<input type="color" class="led-picker" bind:value={$settings.led_color} aria-label="Custom LED color" title="Custom color" />
+							</div>
+						</div>
+						<div class="setting flex-col items-stretch">
+							<div class="flex items-center justify-between">
+								<p class="setting-title">LED brightness</p>
+								<span class="text-xs text-ink-muted tabular-nums">{$settings.led_brightness === 0 ? "Off" : `${$settings.led_brightness}%`}</span>
+							</div>
+							<input type="range" min="0" max="100" class="range" style={`--range-fill: ${$settings.led_brightness}%`} bind:value={$settings.led_brightness} aria-label="LED brightness" />
+							<p class="hint">0 turns the LEDs off. They also go dark while the M18's screen is off.</p>
 						</div>
 						<div class="setting">
 							<div>
@@ -297,6 +370,37 @@
 </Popup>
 
 <style>
+	.led-swatch {
+		width: 1.25rem;
+		height: 1.25rem;
+		border-radius: 999px;
+		background: var(--swatch);
+		box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.18);
+		transition: transform 120ms ease;
+	}
+	.led-swatch:hover {
+		transform: scale(1.12);
+	}
+	.led-swatch[aria-pressed="true"] {
+		outline: 2px solid var(--color-accent);
+		outline-offset: 2px;
+	}
+	.led-picker {
+		width: 1.6rem;
+		height: 1.6rem;
+		padding: 0;
+		border: 1px solid var(--color-line-strong);
+		border-radius: 0.45rem;
+		background: none;
+		overflow: hidden;
+	}
+	.led-picker::-webkit-color-swatch-wrapper {
+		padding: 0;
+	}
+	.led-picker::-webkit-color-swatch {
+		border: none;
+		border-radius: 0.4rem;
+	}
 	.settings-list {
 		display: flex;
 		flex-direction: column;

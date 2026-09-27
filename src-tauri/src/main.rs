@@ -16,6 +16,7 @@ mod power_events;
 mod shared;
 mod soundboard;
 mod store;
+mod updates;
 mod vsd_actions;
 mod vsd_import;
 mod zip_extract;
@@ -39,7 +40,6 @@ use tauri_plugin_log::{Target, TargetKind};
 
 static APP_HANDLE: OnceLock<AppHandle> = OnceLock::new();
 const SAVE_PROBE: Duration = Duration::from_secs(30);
-const RELEASES_REPOSITORY: &str = "nickhighland/OpenDeck-VSD-Inside-M18";
 
 fn show_window(app: &AppHandle) -> Result<(), tauri::Error> {
 	#[cfg(target_os = "macos")]
@@ -115,6 +115,7 @@ async fn main() {
 			m18_actions::get_mouse_position,
 			m18_actions::get_action_icon,
 			m18_actions::get_input_permission,
+			updates::check_for_updates,
 			soundboard::get_audio_output_devices,
 			frontend::property_inspector::make_info,
 			frontend::property_inspector::switch_property_inspector,
@@ -272,44 +273,10 @@ The release notes on GitHub list what is new.
 				let _ = app.deep_link().register_all();
 			}
 
-			async fn update() -> Result<(), anyhow::Error> {
-				// Releases of this M18 fork, not upstream OpenDeck: upstream builds do
-				// not contain the built-in M18 driver.
-				let res = reqwest::Client::new()
-					.get(format!("https://api.github.com/repos/{RELEASES_REPOSITORY}/releases/latest"))
-					.header("Accept", "application/vnd.github+json")
-					.header("User-Agent", "OpenDeck-VSD-M18")
-					.timeout(Duration::from_secs(20))
-					.send()
-					.await?
-					.error_for_status()?
-					.json::<serde_json::Value>()
-					.await?;
-				let tag_name = res
-					.get("tag_name")
-					.and_then(serde_json::Value::as_str)
-					.ok_or_else(|| anyhow::anyhow!("the latest release has no tag"))?;
-				// Releases are tagged "tv2.15.0" by the publish workflow; accept "v2.15.0" too.
-				let latest = semver::Version::parse(tag_name.trim_start_matches("tv").trim_start_matches('v'))?;
-				if semver::Version::parse(built_info::PKG_VERSION)? < latest {
-					let app = APP_HANDLE.get().ok_or_else(|| anyhow::anyhow!("the application is not initialised"))?;
-					app.dialog()
-						.message(format!(
-							"A new version of {PRODUCT_NAME}, {}, is available.\nUpdate description:\n\n{}",
-							tag_name,
-							res.get("body").and_then(serde_json::Value::as_str).unwrap_or("No description").trim()
-						))
-						.title(format!("{PRODUCT_NAME} update available"))
-						.show(|_| ());
-				}
-
-				Ok(())
-			}
-
 			if settings.value.updatecheck {
 				tokio::spawn(async {
-					if let Err(error) = update().await {
-						log::warn!("Failed to update application: {error}");
+					if let Err(error) = updates::notify_if_newer().await {
+						log::warn!("Failed to check for updates: {error:#}");
 					}
 				});
 			}
