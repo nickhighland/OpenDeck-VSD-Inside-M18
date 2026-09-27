@@ -53,6 +53,21 @@
 	</branding>
 
 	<releases>
+		<release version="2.15.0" date="2026-09-27">
+			<url type="details">https://github.com/nickhighland/OpenDeck-VSD-Inside-M18/releases/tag/tv2.15.0</url>
+			<description>
+				<ul>
+					<li>Harden the M18 runtime and replace the screensaver with computer-state sleep</li>
+					<li>Add M18 page management and route page switches through the core</li>
+					<li>Organize the action library and give every action its own key artwork</li>
+					<li>Redesign the editor interface</li>
+					<li>Keep keys dragged to another page from reappearing</li>
+					<li>List each library group in a curated order</li>
+					<li>Show each launched app's own icon on its key</li>
+					<li>Fix the update check for this fork's release tags</li>
+				</ul>
+			</description>
+		</release>
 		<release version="2.14.0" date="2026-07-29">
 			<url type="details">https://github.com/nekename/OpenDeck/releases/tag/v2.14.0</url>
 			<description>
