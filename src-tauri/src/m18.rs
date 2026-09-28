@@ -310,6 +310,18 @@ async fn watcher_task() {
 	}
 }
 
+/// Forget a device's session, so the next scan can connect it again. Safe to
+/// call more than once.
+async fn end_session(id: &str) {
+	if let Some(session) = SESSIONS.write().await.remove(id) {
+		// Stops the session's tasks if they are still running.
+		session.token.cancel();
+	}
+	let _ = crate::events::inbound::devices::deregister_device("", PayloadEvent { payload: id.to_owned() }).await;
+	DEVICE_BRIGHTNESS.write().await.remove(id);
+	end_led_override(id).await;
+}
+
 async fn connect_candidate(candidate: CandidateDevice) {
 	let id = candidate.id.clone();
 	// A panic anywhere in the session must not leave the device marked as
@@ -317,7 +329,12 @@ async fn connect_candidate(candidate: CandidateDevice) {
 	let result = tokio::spawn(run_session(candidate)).await;
 	let outcome = match result {
 		Ok(outcome) => outcome,
-		Err(error) => Err(anyhow::anyhow!("session task panicked: {error}")),
+		Err(error) => {
+			// The session's own cleanup did not run: without this, the device
+			// would look connected and never be reconnected.
+			end_session(&id).await;
+			Err(anyhow::anyhow!("session task panicked: {error}"))
+		}
 	};
 	match outcome {
 		Ok(()) => {
@@ -409,19 +426,29 @@ async fn run_session(candidate: CandidateDevice) -> Result<(), anyhow::Error> {
 	let input_device = device.clone();
 	let mut input_task = tokio::spawn(async move { device_input_task(id.clone(), input_device, input_token).await });
 
-	tokio::select! {
-		result = &mut output_task => log_task_result("output", result),
-		result = &mut input_task => log_task_result("input", result),
-		_ = token.cancelled() => {},
-	}
+	let (output_done, input_done) = tokio::select! {
+		result = &mut output_task => {
+			log_task_result("output", result);
+			(true, false)
+		}
+		result = &mut input_task => {
+			log_task_result("input", result);
+			(false, true)
+		}
+		_ = token.cancelled() => (false, false),
+	};
 	token.cancel();
-	let _ = output_task.await;
+	// A task whose result `select!` already took must not be awaited again:
+	// tokio panics when a finished JoinHandle is polled a second time.
+	if !output_done {
+		let _ = output_task.await;
+	}
 	input_task.abort();
-	let _ = input_task.await;
+	if !input_done {
+		let _ = input_task.await;
+	}
 
-	let _ = crate::events::inbound::devices::deregister_device("", PayloadEvent { payload: candidate.id.clone() }).await;
-	SESSIONS.write().await.remove(&candidate.id);
-	DEVICE_BRIGHTNESS.write().await.remove(&candidate.id);
+	end_session(&candidate.id).await;
 	let _ = timeout(DEVICE_IO_TIMEOUT, device.shutdown()).await;
 	log::info!("VSD Inside M18 device {} disconnected", candidate.id);
 	Ok(())
