@@ -21,6 +21,8 @@ The M18 screen follows the computer's state: it stays on while the computer is i
 
 **Settings › M18 Display** sets the color and brightness of the M18's 24 RGB LEDs, which go dark while the M18 sleeps. The built-in **M18 LED Colors** action sets individual LED colors for the page it is on; it does not depend on a hardware plugin process.
 
+A **Run Command** key, and any Hotkey Switch entry set to **Command**, runs a shell command in the background. Unlike keystrokes, which macOS sends to the lock screen, commands also work while the Mac is locked; for example, `m1ddc set input 17` switches a monitor to HDMI 1. Homebrew's folders are on the command's `PATH`.
+
 Native M18 actions are grouped into Apps & Hotkeys, Device Controls, Page Navigation, and System Controls. Search covers action names, localized labels, tooltips, identifiers, plugin IDs, and category names.
 
 ## VSD Craft migration

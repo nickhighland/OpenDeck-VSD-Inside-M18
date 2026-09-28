@@ -78,6 +78,7 @@ const FACES: Record<string, Face> = {
 	"emoji-viewer": { group: "system", icon: "Smiley" },
 	focus: { group: "system", icon: "BellSlash" },
 	notifications: { group: "system", icon: "Bell" },
+	"run-command": { group: "system", icon: "TerminalWindow" },
 	// Display & power
 	"brightness-up": { group: "display", icon: "Sun" },
 	"brightness-down": { group: "display", icon: "SunDim" },

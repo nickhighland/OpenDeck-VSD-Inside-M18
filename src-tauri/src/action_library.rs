@@ -289,6 +289,13 @@ pub const LIBRARY: &[Entry] = &[
 		"Open Notification settings",
 		"notifications",
 	),
+	listed(
+		native::RUN_COMMAND_UUID,
+		System,
+		"Run Command",
+		"Run a shell command, such as one that switches monitor inputs; works while the Mac is locked",
+		"run-command",
+	),
 	hidden("com.hotspot.streamdock.touchbar.siri", System, "Siri (VSD Craft)", "Open Siri", "siri"),
 	hidden(
 		"com.hotspot.streamdock.touchbar.dispatchcenter",
@@ -751,7 +758,7 @@ mod tests {
 			.flat_map(|(_, category)| &category.actions)
 			.filter(|action| action.visible_in_action_list)
 			.count();
-		assert_eq!(listed, 79, "the curated library lists every working action once");
+		assert_eq!(listed, 80, "the curated library lists every working action once");
 	}
 
 	#[test]
@@ -822,7 +829,9 @@ mod tests {
 	#[ignore = "writes the editor preview fixture; run explicitly"]
 	fn export_preview_library() {
 		let path = std::env::var("OPENDECK_PREVIEW_LIBRARY").expect("set OPENDECK_PREVIEW_LIBRARY to the output path");
-		std::fs::write(path, serde_json::to_string_pretty(&categories()).unwrap() + "\n").unwrap();
+		// Sorted, so that exporting again only changes what changed.
+		let sorted: std::collections::BTreeMap<_, _> = categories().into_iter().collect();
+		std::fs::write(path, serde_json::to_string_pretty(&sorted).unwrap() + "\n").unwrap();
 	}
 
 	#[test]

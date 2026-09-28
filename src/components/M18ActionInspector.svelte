@@ -12,11 +12,13 @@
 	import Plus from "phosphor-svelte/lib/Plus";
 	import Trash from "phosphor-svelte/lib/Trash";
 	import Warning from "phosphor-svelte/lib/Warning";
+	import CommandField from "./CommandField.svelte";
 	import KeyFace from "./KeyFace.svelte";
 	import ShortcutRecorder from "./ShortcutRecorder.svelte";
 
 	import { COMING_SOON } from "$lib/actionLibrary";
 	import { isDefaultArtwork } from "$lib/appIcons";
+	import { presetLabel } from "$lib/commands";
 	import { actionIndex } from "$lib/catalog";
 	import { pageLabel, pageSets } from "$lib/pages";
 	import { resizeImage } from "$lib/rendererHelper";
@@ -56,6 +58,7 @@
 	$: isSuperHotkeys = uuid == "opendeck.m18.super-hotkeys";
 	$: isHotkeySwitch = uuid == "opendeck.m18.hotkey-switch" || uuid == "com.hotspot.streamdock.system.hotkeySwitch";
 	$: isSuperHotkeySwitch = uuid == "opendeck.m18.super-hotkey-switch";
+	$: isRunCommand = uuid == "opendeck.m18.run-command";
 	$: isPageGoto = uuid == "opendeck.m18.page-goto";
 	$: isVsdHotkey = uuid == "com.hotspot.streamdock.system.hotkey";
 	$: isVsdSuperHotkey = uuid == "com.hotspot.streamdock.system.super.hotkey";
@@ -218,15 +221,29 @@
 		return key.replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/^./, (letter) => letter.toUpperCase());
 	}
 
-	$: hotkeyList = (Array.isArray(settings.hotkeys) ? settings.hotkeys : []) as { down: string; up: string; display?: string }[];
-	function hotkeys(): { down: string; up: string; display?: string }[] {
+	// A switch entry sends a shortcut, or runs a command when it has one.
+	type SwitchEntry = { down: string; up: string; display?: string; command?: string };
+	$: hotkeyList = (Array.isArray(settings.hotkeys) ? settings.hotkeys : []) as SwitchEntry[];
+	function hotkeys(): SwitchEntry[] {
 		return hotkeyList;
 	}
 
-	function setHotkey(index: number, patch: { down?: string; up?: string; display?: string }) {
+	function setHotkey(index: number, patch: Partial<SwitchEntry>) {
 		const next = hotkeys().map((hotkey) => ({ ...hotkey }));
 		next[index] = { ...next[index], ...patch };
 		update({ hotkeys: next });
+	}
+
+	function setEntryRunsCommand(index: number, runsCommand: boolean) {
+		const next = hotkeys().map((hotkey) => ({ ...hotkey }));
+		if (runsCommand) next[index] = { ...next[index], command: next[index].command ?? "" };
+		else delete next[index].command;
+		update({ hotkeys: next });
+	}
+
+	function entryLabel(entry: SwitchEntry): string {
+		if (entry.command !== undefined) return entry.command.trim() ? ` · ${presetLabel(entry.command) ?? entry.command.trim()}` : "";
+		return entry.down ? ` · ${describeSequenceText(entry.down) || "custom"}` : "";
 	}
 
 	function addHotkey() {
@@ -349,8 +366,18 @@
 			<Info size="16" class="mt-px shrink-0" />
 			<span>VSD Craft sends Super Hotkeys as a hardware keyboard. This app sends them as software input, which works in almost every app.</span>
 		</div>
+	{:else if isRunCommand}
+		<div class="field">
+			<span class="label">Command</span>
+			<CommandField value={textValue(settings, ["command"])} on:change={({ detail }) => update({ command: detail })} />
+			<p class="hint">
+				Runs in the background with /bin/sh when the key is pressed, so it also works while the Mac is locked. Tools installed with Homebrew, such as m1ddc, are found automatically. Use Test above to try it.
+			</p>
+		</div>
 	{:else if isHotkeySwitch || isSuperHotkeySwitch}
-		<p class="hint">Each press sends one shortcut and moves on to the next. The key shows the image and title of the shortcut that the next press sends.</p>
+		<p class="hint">
+			Each press sends one shortcut, or runs one command, and moves on to the next. The key shows the image and title of the one the next press uses. Commands run in the background, so they also work while the Mac is locked.
+		</p>
 		<div class="flex flex-col gap-2">
 			{#each hotkeyList as hotkey, index}
 				{@const state = instance.states[index]}
@@ -375,7 +402,15 @@
 						{/if}
 					</div>
 					<div class="flex min-w-0 flex-1 flex-col gap-2">
-						<ShortcutRecorder value={hotkey.down ?? ""} display={hotkey.display ?? ""} label={`Shortcut ${index + 1}`} on:change={({ detail }) => setHotkey(index, { down: detail.down, display: detail.display })} />
+						<div class="segmented self-start" role="group" aria-label={`What shortcut ${index + 1} does`}>
+							<button aria-pressed={hotkey.command === undefined} on:click={() => setEntryRunsCommand(index, false)}>Shortcut</button>
+							<button aria-pressed={hotkey.command !== undefined} on:click={() => setEntryRunsCommand(index, true)}>Command</button>
+						</div>
+						{#if hotkey.command !== undefined}
+							<CommandField value={hotkey.command} label={`Command ${index + 1}`} on:change={({ detail }) => setHotkey(index, { command: detail })} />
+						{:else}
+							<ShortcutRecorder value={hotkey.down ?? ""} display={hotkey.display ?? ""} label={`Shortcut ${index + 1}`} on:change={({ detail }) => setHotkey(index, { down: detail.down, display: detail.display })} />
+						{/if}
 						<input
 							class="input"
 							value={state?.text ?? ""}
@@ -407,7 +442,7 @@
 			<label class="flex items-center gap-2 text-xs text-ink-muted">
 				Next press sends
 				<select class="select h-7 min-h-0 w-auto py-0" value={settings.index ?? 0} on:change={(event) => update({ index: Number(event.currentTarget.value) })}>
-					{#each hotkeyList as hotkey, index}<option value={index}>{index + 1}{hotkey.down ? ` · ${describeSequenceText(hotkey.down) || "custom"}` : ""}</option>{/each}
+					{#each hotkeyList as hotkey, index}<option value={index}>{index + 1}{entryLabel(hotkey)}</option>{/each}
 				</select>
 			</label>
 		</div>

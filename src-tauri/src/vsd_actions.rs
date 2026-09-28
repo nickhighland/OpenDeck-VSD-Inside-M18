@@ -465,6 +465,9 @@ pub async fn key_down(instance: &crate::shared::ActionInstance) -> Result<(), an
 		return turn_page(instance).await;
 	}
 	if is_hotkey_switch(uuid) {
+		if let Some(command) = crate::m18_actions::switch_command(instance) {
+			return crate::m18_actions::run_command(Some(command)).await;
+		}
 		let Some(input) = configured_input(instance) else { return Ok(()) };
 		crate::m18_actions::execute_input(Some(input)).await?;
 	} else if uuid.eq_ignore_ascii_case("com.hotspot.streamdock.system.super.hotkey") {
@@ -482,14 +485,16 @@ pub async fn key_up(instance: &crate::shared::ActionInstance) -> Result<bool, an
 		return Err(anyhow::anyhow!("{} is not available yet", instance.action.name));
 	}
 	if is_hotkey_switch(&uuid) {
-		if let Some(input) = instance
-			.settings
-			.get("hotkeys")
-			.and_then(Value::as_array)
-			.and_then(|hotkeys| hotkeys.get(instance.current_state as usize))
-			.and_then(|hotkey| hotkey.get("up"))
-			.and_then(Value::as_str)
-			.filter(|input| !input.trim().is_empty())
+		// A command ran on the press; a shortcut may release keys now.
+		if crate::m18_actions::switch_command(instance).is_none()
+			&& let Some(input) = instance
+				.settings
+				.get("hotkeys")
+				.and_then(Value::as_array)
+				.and_then(|hotkeys| hotkeys.get(instance.current_state as usize))
+				.and_then(|hotkey| hotkey.get("up"))
+				.and_then(Value::as_str)
+				.filter(|input| !input.trim().is_empty())
 		{
 			crate::m18_actions::execute_input(Some(input.to_owned())).await?;
 		}

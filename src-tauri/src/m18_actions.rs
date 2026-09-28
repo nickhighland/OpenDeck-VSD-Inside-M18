@@ -44,6 +44,7 @@ pub const PAGE_INDICATOR_UUID: &str = "opendeck.m18.page-indicator";
 /// Import-only marker for VSD actions whose behavior has not been ported.
 /// It is deliberately excluded from the selectable action catalog.
 pub const UNSUPPORTED_VSD_UUID: &str = "opendeck.m18.unsupported-vsd-action";
+pub const RUN_COMMAND_UUID: &str = "opendeck.m18.run-command";
 
 static ENIGO: OnceLock<Mutex<Option<Enigo>>> = OnceLock::new();
 static ICON_LOOKUPS: OnceLock<Mutex<HashMap<String, IconLookup>>> = OnceLock::new();
@@ -81,6 +82,7 @@ pub fn is_native_action(uuid: &str) -> bool {
 			| PAGE_GOTO_UUID
 			| PAGE_INDICATOR_UUID
 			| UNSUPPORTED_VSD_UUID
+			| RUN_COMMAND_UUID
 	) || (crate::vsd_actions::is_vsd_action(uuid) && !crate::vsd_actions::is_composite_action(uuid))
 }
 
@@ -94,6 +96,7 @@ pub fn default_settings(uuid: &str) -> Value {
 		SUPER_HOTKEYS_UUID => serde_json::json!({ "down": "", "up": "" }),
 		HOTKEY_SWITCH_UUID | SUPER_HOTKEY_SWITCH_UUID => serde_json::json!({ "hotkeys": [{ "down": "", "up": "" }, { "down": "", "up": "" }], "index": 0 }),
 		PAGE_GOTO_UUID => serde_json::json!({ "page": "", "pageIndex": 0, "showPageNumber": true }),
+		RUN_COMMAND_UUID => serde_json::json!({ "command": "" }),
 		_ => crate::vsd_actions::default_settings(uuid),
 	}
 }
@@ -467,6 +470,45 @@ mod tests {
 		assert_eq!(hex_colour("red"), None);
 	}
 
+	#[cfg(not(windows))]
+	#[tokio::test]
+	async fn commands_run_and_report_failure() {
+		assert!(run_command(Some("true".to_owned())).await.is_ok());
+		assert!(run_command(Some("exit 3".to_owned())).await.is_err(), "a failing command is reported on the key");
+		assert!(run_command(Some("   ".to_owned())).await.is_ok(), "an empty command does nothing");
+		assert!(run_command(None).await.is_ok());
+		// Homebrew's folders are on the PATH even for an app started from the Dock.
+		assert!(run_command(Some(r#"case ":$PATH:" in *:/opt/homebrew/bin:*) exit 0;; *) exit 1;; esac"#.to_owned())).await.is_ok());
+	}
+
+	#[test]
+	fn switch_entries_can_run_a_command_instead_of_a_shortcut() {
+		let categories = crate::action_library::categories();
+		let action = categories
+			.values()
+			.flat_map(|category| category.actions.iter())
+			.find(|action| action.uuid == SUPER_HOTKEY_SWITCH_UUID)
+			.cloned()
+			.unwrap();
+		let mut instance = ActionInstance {
+			action,
+			context: crate::shared::ActionContext {
+				device: "18-TEST".to_owned(),
+				profile: "Default".to_owned(),
+				controller: "Keypad".to_owned(),
+				position: 0,
+				index: 0,
+			},
+			states: Vec::new(),
+			current_state: 0,
+			settings: serde_json::json!({ "hotkeys": [{ "down": "[r(79)]", "up": "" }, { "command": "m1ddc set input 17" }], "index": 0 }),
+			children: None,
+		};
+		assert_eq!(switch_command(&instance), None, "the first entry is a shortcut");
+		instance.current_state = 1;
+		assert_eq!(switch_command(&instance).as_deref(), Some("m1ddc set input 17"));
+	}
+
 	/// Needs a macOS desktop session: cargo test finds_app_icons -- --ignored
 	#[cfg(target_os = "macos")]
 	#[test]
@@ -740,11 +782,62 @@ async fn turn_page(instance: &ActionInstance) -> Result<(), anyhow::Error> {
 	}
 }
 
+/// Run a shell command as a key's action. Commands run in the background, so
+/// they also work while the Mac is locked, unlike keystrokes, which macOS
+/// sends to the lock screen. A command still running after a few seconds is
+/// left to finish on its own.
+pub(crate) async fn run_command(command: Option<String>) -> Result<(), anyhow::Error> {
+	let Some(command) = command.filter(|command| !command.trim().is_empty()) else {
+		return Ok(());
+	};
+	#[cfg(windows)]
+	let mut child = tokio::process::Command::new("cmd").arg("/C").raw_arg(&command).stdin(std::process::Stdio::null()).spawn()?;
+	#[cfg(not(windows))]
+	let mut child = {
+		// Apps started from the Dock or at login do not get the shell's PATH;
+		// add the usual places for command-line tools, such as Homebrew's.
+		let path = std::env::var("PATH").unwrap_or_else(|_| "/usr/bin:/bin:/usr/sbin:/sbin".to_owned());
+		tokio::process::Command::new("/bin/sh")
+			.arg("-c")
+			.arg(&command)
+			.env("PATH", format!("/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:{path}"))
+			.stdin(std::process::Stdio::null())
+			.stdout(std::process::Stdio::null())
+			.stderr(std::process::Stdio::null())
+			.spawn()?
+	};
+	match tokio::time::timeout(std::time::Duration::from_secs(5), child.wait()).await {
+		Ok(status) => {
+			let status = status?;
+			if status.success() { Ok(()) } else { Err(anyhow::anyhow!("the command exited with {status}")) }
+		}
+		Err(_) => Ok(()),
+	}
+}
+
+/// The command of a switch's current entry, when it runs a command rather
+/// than a shortcut.
+pub(crate) fn switch_command(instance: &ActionInstance) -> Option<String> {
+	instance
+		.settings
+		.get("hotkeys")
+		.and_then(Value::as_array)
+		.and_then(|hotkeys| hotkeys.get(instance.current_state as usize))
+		.and_then(|hotkey| hotkey.get("command"))
+		.and_then(Value::as_str)
+		.filter(|command| !command.trim().is_empty())
+		.map(str::to_owned)
+}
+
 pub async fn key_down(instance: &ActionInstance) -> Result<(), anyhow::Error> {
 	match instance.action.uuid.as_str() {
 		PAGE_PREVIOUS_UUID | PAGE_NEXT_UUID | PAGE_GOTO_UUID => turn_page(instance).await,
+		RUN_COMMAND_UUID => run_command(string_setting(&instance.settings, "command")).await,
 		SUPER_HOTKEYS_UUID => execute_input(string_setting(&instance.settings, "down")).await,
 		HOTKEY_SWITCH_UUID | SUPER_HOTKEY_SWITCH_UUID => {
+			if let Some(command) = switch_command(instance) {
+				return run_command(Some(command)).await;
+			}
 			let input = instance
 				.settings
 				.get("hotkeys")
@@ -768,16 +861,20 @@ pub async fn key_up(instance: &ActionInstance) -> Result<bool, anyhow::Error> {
 			execute_input(string_setting(&instance.settings, "up")).await?;
 			Ok(false)
 		}
+		RUN_COMMAND_UUID => Ok(false),
 		HOTKEY_SWITCH_UUID | SUPER_HOTKEY_SWITCH_UUID => {
-			let input = instance
-				.settings
-				.get("hotkeys")
-				.and_then(Value::as_array)
-				.and_then(|hotkeys| hotkeys.get(instance.current_state as usize))
-				.and_then(|hotkey| hotkey.get("up"))
-				.and_then(Value::as_str)
-				.map(str::to_owned);
-			execute_input(input).await?;
+			// A command ran on the press; a shortcut may release keys now.
+			if switch_command(instance).is_none() {
+				let input = instance
+					.settings
+					.get("hotkeys")
+					.and_then(Value::as_array)
+					.and_then(|hotkeys| hotkeys.get(instance.current_state as usize))
+					.and_then(|hotkey| hotkey.get("up"))
+					.and_then(Value::as_str)
+					.map(str::to_owned);
+				execute_input(input).await?;
+			}
 			Ok(true)
 		}
 		OPEN_APPS_UUID => {
