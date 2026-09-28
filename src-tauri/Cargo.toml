@@ -1,6 +1,6 @@
 [package]
 name = "opendeck-vsd-m18"
-version = "2.15.5"
+version = "2.15.6"
 description = "Stable control software for the VSD Inside M18"
 authors = ["Aman Khanna (nekename)"]
 license = "GPL-3.0-or-later"
