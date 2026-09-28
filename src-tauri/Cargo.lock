@@ -3823,7 +3823,7 @@ dependencies = [
 
 [[package]]
 name = "opendeck-vsd-m18"
-version = "2.15.3"
+version = "2.15.4"
 dependencies = [
  "active-win-pos-rs",
  "anyhow",
