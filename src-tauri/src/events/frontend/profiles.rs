@@ -82,7 +82,7 @@ pub async fn select_profile(device: &str, id: &str) -> Result<(), anyhow::Error>
 		// all appear in one update, instead of the screen going blank and
 		// filling in over several.
 		let positions: Vec<u8> = new_profile.keys.iter().enumerate().filter(|(_, key)| key.is_some()).map(|(position, _)| position as u8).collect();
-		let _ = crate::events::outbound::devices::begin_page(device, positions).await;
+		let _ = crate::events::outbound::devices::begin_page(device, id, positions).await;
 	}
 	// An LED Colors key on the new page sets the LEDs as it appears;
 	// otherwise they return to the color from Settings.
@@ -109,6 +109,19 @@ pub async fn select_profile(device: &str, id: &str) -> Result<(), anyhow::Error>
 pub async fn delete_profile(device: String, profile: String) {
 	let mut profile_stores = PROFILE_STORES.write().await;
 	profile_stores.delete_profile(&device, &profile);
+	drop(profile_stores);
+	crate::key_images::forget(&device, Some(&profile), None).await;
+}
+
+/// A page's keys without showing it, so the editor can draw them ahead of a
+/// page turn.
+#[command]
+pub async fn get_profile(device: String, profile: String) -> Result<Option<crate::shared::Profile>, Error> {
+	let mut locks = acquire_locks_mut().await;
+	let Some(device_info) = DEVICES.get(&device).map(|entry| entry.value().clone()) else {
+		return Ok(None);
+	};
+	Ok(Some(locks.profile_stores.get_profile_store_mut(&device_info, &profile).await?.value.clone()))
 }
 
 #[command]

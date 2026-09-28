@@ -3,7 +3,9 @@
 	import type { Profile } from "$lib/Profile";
 
 	import { t } from "$lib/i18n";
-	import { loadPageSet, redrawEpoch, setPageSet, type M18PageSet } from "$lib/pages";
+	import { refreshSavedPages } from "$lib/keyImages";
+	import { loadPageSet, pageSets, redrawEpoch, setPageSet, type M18PageSet } from "$lib/pages";
+	import { settings } from "$lib/settings";
 	import { profileManager } from "$lib/singletons";
 
 	import { invoke } from "@tauri-apps/api/core";
@@ -36,7 +38,11 @@
 					const profile: Profile = await invoke("get_selected_profile", { device: id });
 					selectedProfiles[id] = profile;
 					await invoke("set_selected_profile", { device: id, id: profile.id });
-					if (id.startsWith("18-")) await loadPageSet(id);
+					if (id.startsWith("18-")) {
+						await loadPageSet(id);
+						// Prepare every page's images so page turns are instant.
+						refreshSavedPages(id, 3000);
+					}
 				})().catch((error) => console.warn(`Failed to load device ${id}`, error));
 			}
 		}
@@ -44,6 +50,14 @@
 
 	export function reloadProfiles() {
 		registered = [];
+	}
+
+	// Rotation and app icon size change every key's image on every page.
+	let drawnWith = "";
+	$: {
+		const current = `${$settings?.rotation}:${$settings?.app_icon_scale}`;
+		if ($settings && drawnWith && current !== drawnWith) Object.keys(devices).forEach((device) => refreshSavedPages(device));
+		if ($settings) drawnWith = current;
 	}
 
 	onMount(() => {
@@ -55,12 +69,18 @@
 				// Page switches from M18 keys, app-based switching, and plugins are
 				// performed by the core; follow them here for every device.
 				listen<{ device: string; pageSet: M18PageSet }>("m18_pages_changed", ({ payload }) => {
+					// Adding, removing, renaming, or reordering pages changes what
+					// other pages show (page numbers, new pages); a page turn alone
+					// does not.
+					const pagesBefore = JSON.stringify($pageSets[payload.device]?.pages ?? []);
 					setPageSet(payload.device, payload.pageSet);
+					if (JSON.stringify(payload.pageSet.pages) !== pagesBefore) refreshSavedPages(payload.device);
 					void refreshProfile(payload.device);
 				}),
 				listen("rerender_images", async () => {
 					await Promise.all(Object.keys(devices).map(refreshProfile));
 					redrawEpoch.update((epoch) => epoch + 1);
+					Object.keys(devices).forEach((device) => refreshSavedPages(device));
 				}),
 				// Only non-M18 devices still switch profiles through the editor.
 				listen<{ device: string; profile: string }>("switch_profile", async ({ payload }) => {

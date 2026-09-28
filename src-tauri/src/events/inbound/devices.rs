@@ -28,7 +28,7 @@ pub async fn register_device(uuid: &str, mut event: PayloadEvent<crate::shared::
 		let profile = locks.profile_stores.get_profile_store(&DEVICES.get(&event.payload.id).unwrap(), &selected_profile)?;
 		// The first page appears in one update once the editor has drawn it.
 		let positions: Vec<u8> = profile.value.keys.iter().enumerate().filter(|(_, key)| key.is_some()).map(|(position, _)| position as u8).collect();
-		let _ = crate::events::outbound::devices::begin_page(&event.payload.id, positions).await;
+		let _ = crate::events::outbound::devices::begin_page(&event.payload.id, &selected_profile, positions).await;
 		for instance in profile
 			.value
 			.keys

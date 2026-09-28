@@ -45,6 +45,11 @@ pub async fn set_settings(_app: AppHandle, settings: crate::store::Settings) -> 
 	{
 		log::warn!("Failed to apply M18 brightness: {error:#}");
 	}
+	// Saved key images are drawn at the old rotation and icon size; the
+	// editor draws them again.
+	if previous.rotation != settings.rotation || previous.app_icon_scale != settings.app_icon_scale {
+		crate::key_images::forget_all().await;
+	}
 	if previous.led_brightness != settings.led_brightness
 		&& let Err(error) = crate::events::outbound::devices::set_led_brightness(settings.led_brightness).await
 	{
@@ -213,6 +218,7 @@ pub async fn restore_config_directory(app: AppHandle) -> Result<(), Error> {
 		return Err(anyhow::Error::from(error).into());
 	}
 	let _ = std::fs::remove_dir_all(backup_dir);
+	crate::key_images::forget_all().await;
 
 	app.restart();
 }

@@ -95,6 +95,7 @@ pub async fn replace(device: &str, pages: Vec<M18Page>) -> Result<M18PageSet, an
 	store.value.selected = previous_profile.and_then(|profile| store.value.pages.iter().position(|page| page.profile == profile)).unwrap_or(0);
 	store.value.folder_history.clear();
 	store.save()?;
+	crate::key_images::forget(device, None, None).await;
 	Ok(store.value)
 }
 

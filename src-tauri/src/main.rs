@@ -6,6 +6,7 @@ mod application_watcher;
 mod device_sleep;
 mod encoder_layouts;
 mod events;
+mod key_images;
 mod m18;
 mod m18_actions;
 mod m18_pages;
@@ -101,6 +102,7 @@ async fn main() {
 			frontend::instances::trigger_virtual_press,
 			frontend::profiles::get_profiles,
 			frontend::profiles::get_selected_profile,
+			frontend::profiles::get_profile,
 			frontend::profiles::set_selected_profile,
 			frontend::profiles::delete_profile,
 			frontend::profiles::rename_profile,

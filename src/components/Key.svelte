@@ -14,7 +14,8 @@
 	import { isFlowParent } from "$lib/actionLibrary";
 	import { resolveState } from "$lib/appIcons";
 	import { actionIndex } from "$lib/catalog";
-	import { pageNumber, pageSets, redrawEpoch } from "$lib/pages";
+	import { displayState } from "$lib/keyImages";
+	import { pageSets, redrawEpoch } from "$lib/pages";
 	import { contextKey, copiedItem, inspectedInstance, inspectedParentAction, inspectorTab, openContextMenu } from "$lib/propertyInspector";
 	import { CanvasLock, getImage, renderImage } from "$lib/rendererHelper";
 	import { settings } from "$lib/settings";
@@ -64,21 +65,7 @@
 	$: displayName = slot ? (libraryEntry && (slot.action.plugin === "" || slot.action.plugin === "opendeck") ? libraryEntry.action.name : slot.action.name) : "";
 
 	let state: ActionState | undefined;
-	$: {
-		if (!slot) {
-			state = undefined;
-		} else {
-			const currentState = slot.states[slot.current_state];
-			const numberOverlay = { show: true, alignment: "middle" as const, size: 22, colour: "#ffffff", stroke_colour: "#000000", stroke_size: 2 };
-			if (currentState && slot.action.uuid === "opendeck.m18.page-goto" && slot.settings?.showPageNumber !== false && !currentState.text.trim()) {
-				state = { ...currentState, ...numberOverlay, text: String(Number(slot.settings?.pageIndex ?? 0) + 1) };
-			} else if (currentState && slot.action.uuid === "opendeck.m18.page-indicator") {
-				state = { ...currentState, ...numberOverlay, text: String(pageNumber($pageSets[context?.device ?? ""], context?.profile)) };
-			} else {
-				state = currentState;
-			}
-		}
-	}
+	$: state = slot ? displayState(slot, $pageSets[context?.device ?? ""], context?.profile) : undefined;
 
 	let showAlert: boolean = false;
 	let showOk: boolean = false;

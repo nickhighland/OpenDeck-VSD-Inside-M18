@@ -346,17 +346,28 @@ fn hex_colour(colour: &str) -> Option<Rgb<u8>> {
 	(hex.len() == 6 || hex.len() == 8).then_some(Rgb([blend(channel(0)?), blend(channel(2)?), blend(channel(4)?)]))
 }
 
-/// Lay out an app icon the way the editor does (on the key's background
-/// colour, raised above a bottom title), so the editor's redraw, which adds
-/// the title, does not visibly move or resize it on the M18.
-fn app_icon_face(icon: &str, state: Option<&ActionState>, scale: u32) -> Option<String> {
+/// How much of the key an app icon covers, in percent: the size from
+/// Settings, or a share of it when a title runs along the bottom.
+fn app_icon_size(state: Option<&ActionState>) -> u32 {
+	let scale = app_icon_scale();
+	if state.is_some_and(shows_bottom_title) {
+		(scale * TITLED_APP_ICON_SHARE + 50) / 100
+	} else {
+		scale
+	}
+}
+
+/// Lay out a key's image the way the editor does: at `automatic` percent of
+/// the key times the key's own image scale, on its background colour, and
+/// raised above a bottom title when it is smaller than the key. The editor's
+/// redraw, which adds the title, then leaves the image where it is.
+fn key_face(icon: &str, state: Option<&ActionState>, automatic: u32) -> Option<String> {
 	const SIZE: u32 = 144;
 	let bytes = base64::engine::general_purpose::STANDARD.decode(icon.split_once(',')?.1).ok()?;
 	let decoded = image::load_from_memory(&bytes).ok()?;
 	let title = state.filter(|state| shows_bottom_title(state));
 	// The key's own image scale applies on top of the automatic one.
 	let chosen = state.map_or(100, |state| if state.image_scale == 0 { 100 } else { state.image_scale.max(10) as u32 });
-	let automatic = if title.is_some() { (scale * TITLED_APP_ICON_SHARE + 50) / 100 } else { scale };
 	let percent = (automatic * chosen + 50) / 100;
 	let side = (SIZE * percent / 100).max(1);
 	let x = (SIZE as i64 - side as i64) / 2;
@@ -421,11 +432,11 @@ mod tests {
 
 		// Without a title the icon is centred, as large as Settings says.
 		let plain = ActionState { show: false, ..Default::default() };
-		let face = decode(app_icon_face(&icon, Some(&plain), 84).unwrap());
+		let face = decode(key_face(&icon, Some(&plain), 84).unwrap());
 		assert_eq!(face.dimensions(), (144, 144));
 		assert!(red(face.get_pixel(72, 72)) && red(face.get_pixel(72, 128)));
 		assert!(black(face.get_pixel(3, 3)) && black(face.get_pixel(72, 140)));
-		let full = decode(app_icon_face(&icon, Some(&plain), 100).unwrap());
+		let full = decode(key_face(&icon, Some(&plain), 100).unwrap());
 		assert!(red(full.get_pixel(2, 2)) && red(full.get_pixel(141, 141)), "at 100% the icon fills the key");
 
 		// A bottom title gets the lower part of the key to itself.
@@ -436,10 +447,19 @@ mod tests {
 			background_colour: "#1e40af".to_owned(),
 			..Default::default()
 		};
-		let face = decode(app_icon_face(&icon, Some(&titled), 84).unwrap());
+		let face = decode(key_face(&icon, Some(&titled), 67).unwrap());
 		assert!(red(face.get_pixel(72, 40)));
 		let below = face.get_pixel(72, 122);
 		assert!(below[2] > 140 && below[0] < 70, "the title area keeps the key's background colour");
+
+		// A chosen image zoomed out to half the key keeps a margin all round.
+		let zoomed = ActionState {
+			show: false,
+			image_scale: 50,
+			..Default::default()
+		};
+		let face = decode(key_face(&icon, Some(&zoomed), 100).unwrap());
+		assert!(red(face.get_pixel(72, 72)) && black(face.get_pixel(20, 20)) && black(face.get_pixel(124, 124)));
 
 		assert_eq!(hex_colour("#00ff00"), Some(Rgb([0, 255, 0])));
 		assert_eq!(hex_colour("#ff000080"), Some(Rgb([128, 0, 0])));
@@ -528,9 +548,10 @@ pub async fn render(instance: &ActionInstance) -> Result<(), anyhow::Error> {
 		&& let Some(icon) = cached_action_icon(&instance.action.uuid, &instance.settings)
 	{
 		// A launching key shows its app's icon until the user picks an image.
-		app_icon_face(&icon, current, app_icon_scale()).or(Some(icon))
+		key_face(&icon, current, app_icon_size(current)).or(Some(icon))
 	} else {
-		state_image(instance)
+		// A chosen image is shown zoomed and on its background as in the editor.
+		state_image(instance).map(|image| key_face(&image, current, 100).unwrap_or(image))
 	};
 	// Nothing the core can draw: the editor renders this key, so leave the LCD
 	// untouched instead of blanking it.

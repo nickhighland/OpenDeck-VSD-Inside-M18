@@ -282,6 +282,7 @@ pub async fn move_instance(source: Context, destination: Context, retain: bool) 
 		if source.profile != destination.profile {
 			let device = crate::store::profiles::device_info(&source.device)?;
 			locks.profile_stores.get_profile_store_mut(&device, &source.profile).await?.save()?;
+			crate::key_images::forget(&source.device, Some(&source.profile), Some(source.position)).await;
 		}
 	}
 
@@ -544,11 +545,9 @@ pub async fn set_m18_led_palette(context: ActionContext, colors: Vec<String>) ->
 
 #[command]
 pub async fn update_image(context: Context, image: Option<String>) {
-	if Some(&context.profile) != crate::store::profiles::DEVICE_STORES.write().await.get_selected_profile(&context.device).ok().as_ref() {
-		return;
-	}
-
-	if let Err(error) = crate::events::outbound::devices::update_editor_image(context, image).await {
+	// Images of other pages are saved for when those pages are shown.
+	let shown = Some(&context.profile) == crate::store::profiles::DEVICE_STORES.write().await.get_selected_profile(&context.device).ok().as_ref();
+	if let Err(error) = crate::events::outbound::devices::update_editor_image(context, image, shown).await {
 		log::warn!("Failed to update device image: {}", error);
 	}
 }
