@@ -723,8 +723,26 @@ async fn system_command(uuid: &str) -> Result<(), anyhow::Error> {
 	}
 }
 
+/// Page keys turn the page as soon as they are pressed, as VSD Craft does,
+/// instead of waiting for the release. The release that follows happens on
+/// the new page and is ignored (see `keypad::key_up`).
+async fn turn_page(instance: &ActionInstance) -> Result<(), anyhow::Error> {
+	let device = &instance.context.device;
+	match instance.action.uuid.as_str() {
+		PAGE_PREVIOUS_UUID => crate::m18_pages::switch_to(device, None, None, -1).await,
+		PAGE_NEXT_UUID => crate::m18_pages::switch_to(device, None, None, 1).await,
+		PAGE_GOTO_UUID => {
+			let target = string_setting(&instance.settings, "page");
+			let index = instance.settings.get("pageIndex").and_then(Value::as_u64).map(|value| value as usize);
+			crate::m18_pages::switch_to(device, target.as_deref(), index, 0).await
+		}
+		_ => Ok(()),
+	}
+}
+
 pub async fn key_down(instance: &ActionInstance) -> Result<(), anyhow::Error> {
 	match instance.action.uuid.as_str() {
+		PAGE_PREVIOUS_UUID | PAGE_NEXT_UUID | PAGE_GOTO_UUID => turn_page(instance).await,
 		SUPER_HOTKEYS_UUID => execute_input(string_setting(&instance.settings, "down")).await,
 		HOTKEY_SWITCH_UUID | SUPER_HOTKEY_SWITCH_UUID => {
 			let input = instance
@@ -783,20 +801,8 @@ pub async fn key_up(instance: &ActionInstance) -> Result<bool, anyhow::Error> {
 			system_command(&instance.action.uuid).await?;
 			Ok(false)
 		}
-		PAGE_PREVIOUS_UUID => {
-			crate::m18_pages::switch_to(&instance.context.device, None, None, -1).await?;
-			Ok(false)
-		}
-		PAGE_NEXT_UUID => {
-			crate::m18_pages::switch_to(&instance.context.device, None, None, 1).await?;
-			Ok(false)
-		}
-		PAGE_GOTO_UUID => {
-			let target = string_setting(&instance.settings, "page");
-			let index = instance.settings.get("pageIndex").and_then(Value::as_u64).map(|value| value as usize);
-			crate::m18_pages::switch_to(&instance.context.device, target.as_deref(), index, 0).await?;
-			Ok(false)
-		}
+		// The page turned when the key was pressed.
+		PAGE_PREVIOUS_UUID | PAGE_NEXT_UUID | PAGE_GOTO_UUID => Ok(false),
 		_ if crate::vsd_actions::is_vsd_action(&instance.action.uuid) => crate::vsd_actions::key_up(instance).await,
 		UNSUPPORTED_VSD_UUID => Err(anyhow::anyhow!(
 			"The imported VSD Craft action \"{}\" is not supported yet",

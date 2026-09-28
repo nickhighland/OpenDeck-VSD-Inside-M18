@@ -425,8 +425,45 @@ async fn system_action(uuid: &str, settings: &Value) -> Result<bool, anyhow::Err
 	Ok(false)
 }
 
+/// VSD Craft's page and folder keys, which turn the page as soon as they are
+/// pressed. The release that follows happens on the new page and is ignored.
+fn turns_page(uuid: &str) -> bool {
+	let uuid = uuid.to_ascii_lowercase();
+	uuid.starts_with("com.hotspot.streamdock.page.")
+		|| matches!(
+			uuid.as_str(),
+			"com.hotspot.streamdock.profile.backtoparent" | "com.hotspot.streamdock.profile.openchild" | "com.hotspot.streamdock.profile.rotate"
+		)
+}
+
+async fn turn_page(instance: &crate::shared::ActionInstance) -> Result<(), anyhow::Error> {
+	let device = &instance.context.device;
+	let target = || text_setting(&instance.settings, &["profile", "ProfileUUID", "target"]);
+	match instance.action.uuid.to_ascii_lowercase().as_str() {
+		"com.hotspot.streamdock.page.previous" => crate::m18_pages::switch_to(device, None, None, -1).await,
+		"com.hotspot.streamdock.page.next" => crate::m18_pages::switch_to(device, None, None, 1).await,
+		"com.hotspot.streamdock.page.goto" => {
+			let index = number_setting(&instance.settings, &["PageIndex", "pageIndex", "page"]).unwrap_or(0).saturating_sub(1).max(0) as usize;
+			crate::m18_pages::switch_to(device, None, Some(index), 0).await
+		}
+		"com.hotspot.streamdock.profile.backtoparent" => crate::m18_pages::go_back(device).await,
+		"com.hotspot.streamdock.profile.openchild" => match target() {
+			Some(target) => crate::m18_pages::open_folder(device, target).await,
+			None => Ok(()),
+		},
+		"com.hotspot.streamdock.profile.rotate" => match target() {
+			Some(target) => crate::m18_pages::switch_to(device, Some(target), None, 0).await,
+			None => crate::m18_pages::switch_to(device, None, None, 1).await,
+		},
+		_ => Ok(()),
+	}
+}
+
 pub async fn key_down(instance: &crate::shared::ActionInstance) -> Result<(), anyhow::Error> {
 	let uuid = instance.action.uuid.as_str();
+	if turns_page(uuid) {
+		return turn_page(instance).await;
+	}
 	if is_hotkey_switch(uuid) {
 		let Some(input) = configured_input(instance) else { return Ok(()) };
 		crate::m18_actions::execute_input(Some(input)).await?;
@@ -564,34 +601,8 @@ pub async fn key_up(instance: &crate::shared::ActionInstance) -> Result<bool, an
 	if system_action(&uuid, &instance.settings).await? {
 		return Ok(false);
 	}
-	if uuid.starts_with("com.hotspot.streamdock.page.") {
-		match uuid.as_str() {
-			"com.hotspot.streamdock.page.previous" => crate::m18_pages::switch_to(&instance.context.device, None, None, -1).await?,
-			"com.hotspot.streamdock.page.next" => crate::m18_pages::switch_to(&instance.context.device, None, None, 1).await?,
-			"com.hotspot.streamdock.page.goto" => {
-				let index = number_setting(&instance.settings, &["PageIndex", "pageIndex", "page"]).unwrap_or(0).saturating_sub(1).max(0) as usize;
-				crate::m18_pages::switch_to(&instance.context.device, None, Some(index), 0).await?;
-			}
-			_ => {}
-		}
-		return Ok(false);
-	}
-	if uuid == "com.hotspot.streamdock.profile.backtoparent" {
-		crate::m18_pages::go_back(&instance.context.device).await?;
-		return Ok(false);
-	}
-	if uuid == "com.hotspot.streamdock.profile.openchild" {
-		if let Some(target) = text_setting(&instance.settings, &["profile", "ProfileUUID", "target"]) {
-			crate::m18_pages::open_folder(&instance.context.device, target).await?;
-		}
-		return Ok(false);
-	}
-	if uuid == "com.hotspot.streamdock.profile.rotate" {
-		if let Some(target) = text_setting(&instance.settings, &["profile", "ProfileUUID", "target"]) {
-			crate::m18_pages::switch_to(&instance.context.device, Some(target), None, 0).await?;
-		} else {
-			crate::m18_pages::switch_to(&instance.context.device, None, None, 1).await?;
-		}
+	// The page turned when the key was pressed.
+	if turns_page(&uuid) {
 		return Ok(false);
 	}
 	if uuid == "com.mirabox.streamdock.emoji.emoji" || uuid == "com.mirabox.streamdock.emoji.emoji_send" {
