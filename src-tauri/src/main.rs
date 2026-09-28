@@ -90,6 +90,7 @@ async fn main() {
 			frontend::set_application_profiles,
 			frontend::get_fonts,
 			frontend::instances::create_instance,
+			frontend::instances::create_child_instance,
 			frontend::instances::move_instance,
 			frontend::instances::swap_m18_instances,
 			frontend::instances::remove_instance,

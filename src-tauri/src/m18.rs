@@ -31,6 +31,29 @@ pub const KEY_COUNT: usize = ROW_COUNT * COL_COUNT;
 pub const LCD_KEY_COUNT: u8 = 15;
 pub const LED_COUNT: usize = 24;
 
+/// Where a page-turn timing sample began. These labels make the output log
+/// useful when comparing a physical page key with a page-tab click.
+#[derive(Clone, Copy, Debug)]
+pub enum PageTurnOrigin {
+	HardwareButton,
+	PageTab,
+	Folder,
+	Connect,
+	Other,
+}
+
+impl PageTurnOrigin {
+	pub(crate) fn label(self) -> &'static str {
+		match self {
+			Self::HardwareButton => "hardware-button",
+			Self::PageTab => "page-tab",
+			Self::Folder => "folder",
+			Self::Connect => "connect",
+			Self::Other => "other",
+		}
+	}
+}
+
 const QUERY: DeviceQuery = DeviceQuery::new(65440, 1, VSDINSIDE_VID, VSDINSIDE_M18_PID);
 const IMAGE_FORMAT: ImageFormat = ImageFormat {
 	mode: ImageMode::JPEG,
@@ -61,14 +84,14 @@ const MAX_RECONNECT_BACKOFF: Duration = Duration::from_secs(60);
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum ButtonEvent {
-	Down(u8),
+	Down(u8, Instant),
 	Up(u8),
 }
 
 impl ButtonEvent {
 	fn position(self) -> u8 {
 		match self {
-			ButtonEvent::Down(position) | ButtonEvent::Up(position) => position,
+			ButtonEvent::Down(position, _) | ButtonEvent::Up(position) => position,
 		}
 	}
 }
@@ -107,7 +130,13 @@ impl ButtonSession {
 		}
 
 		*current = pressed;
-		Ok(Some(if pressed { ButtonEvent::Down(position) } else { ButtonEvent::Up(position) }))
+		Ok(Some(if pressed {
+			// Keep the timestamp from the HID report so page-turn logs include
+			// input dispatch and action lookup, not just the profile switch.
+			ButtonEvent::Down(position, Instant::now())
+		} else {
+			ButtonEvent::Up(position)
+		}))
 	}
 }
 
@@ -146,6 +175,8 @@ pub enum DeviceCommand {
 	/// key that will get an image.
 	BeginPage {
 		expected: u32,
+		requested_at: Instant,
+		origin: PageTurnOrigin,
 	},
 	SetBrightness(u8),
 	SetLedBrightness(u8),
@@ -515,7 +546,7 @@ async fn key_worker(device: String, position: u8, mut events: mpsc::UnboundedRec
 			payload: PressPayload { device: device.clone(), position },
 		};
 		let (phase, result) = match event {
-			ButtonEvent::Down(_) => ("press", crate::events::inbound::devices::key_down(payload).await),
+			ButtonEvent::Down(_, requested_at) => ("press", crate::events::inbound::devices::key_down_at(payload, requested_at).await),
 			ButtonEvent::Up(_) => ("release", crate::events::inbound::devices::key_up(payload).await),
 		};
 		if let Err(error) = result {
@@ -531,9 +562,11 @@ enum OutputAction {
 	KeepAlive,
 }
 
-/// The longest a page turn waits for keys that have no saved image yet
-/// before showing what it has.
-const PAGE_TURN_LIMIT: Duration = Duration::from_millis(800);
+/// A complete page is normally ready from the finished-image cache. This is a
+/// watchdog for a renderer/plugin that has not supplied every image yet; it
+/// does not commit a partial page. The old 800 ms limit could show a blank or
+/// mixed page and then let late images trickle onto the panel.
+const PAGE_TURN_WARN_AFTER: Duration = Duration::from_millis(250);
 /// Once every key has its image, a short pause catches any last redraws.
 const PAGE_TURN_SETTLE: Duration = Duration::from_millis(30);
 
@@ -542,6 +575,9 @@ const PAGE_TURN_SETTLE: Duration = Duration::from_millis(30);
 /// one filling in over several updates.
 struct PageTurn {
 	started: Instant,
+	queued: Instant,
+	origin: PageTurnOrigin,
+	warned: bool,
 	/// Keys on the new page that get an image.
 	expected: u32,
 	/// Keys that have the editor's finished image.
@@ -552,23 +588,37 @@ struct PageTurn {
 }
 
 impl PageTurn {
-	fn new(expected: u32) -> Self {
-		let now = Instant::now();
+	fn new(expected: u32, requested_at: Instant, origin: PageTurnOrigin) -> Self {
+		let queued = Instant::now();
 		Self {
-			started: now,
+			started: requested_at,
+			queued,
+			origin,
+			warned: false,
 			expected,
 			finished: 0,
 			drawn: 0,
-			last_image: now,
+			last_image: queued,
 		}
 	}
 
-	fn show_at(&self) -> Instant {
-		let limit = self.started + PAGE_TURN_LIMIT;
-		if self.expected & !self.finished == 0 {
-			(self.last_image + PAGE_TURN_SETTLE).min(limit)
+	fn ready(&self) -> bool {
+		self.expected & !self.finished == 0
+	}
+
+	fn commit_mask(&self) -> u32 {
+		self.finished & self.expected
+	}
+
+	fn show_at(&self) -> Option<Instant> {
+		if self.ready() {
+			Some((self.last_image + PAGE_TURN_SETTLE).min(self.queued + PAGE_TURN_WARN_AFTER))
+		} else if self.warned {
+			// Commands still wake the output worker. It should not spin while a
+			// broken renderer is leaving one key unfinished.
+			None
 		} else {
-			limit
+			Some(self.queued + PAGE_TURN_WARN_AFTER)
 		}
 	}
 }
@@ -594,11 +644,12 @@ async fn device_output_task(device: Arc<Device>, mut receiver: mpsc::Receiver<De
 	loop {
 		let far = Instant::now() + Duration::from_secs(24 * 60 * 60);
 		let flush_at = flush_deadline.unwrap_or(far);
-		let page_at = page_turn.as_ref().map_or(far, PageTurn::show_at);
+		let page_wake = page_turn.as_ref().and_then(PageTurn::show_at);
+		let page_at = page_wake.unwrap_or(far);
 		let action = tokio::select! {
 			biased;
 			_ = token.cancelled() => return Ok(()),
-			_ = sleep_until(page_at), if page_turn.is_some() => OutputAction::FinishPage,
+			_ = sleep_until(page_at), if page_wake.is_some() => OutputAction::FinishPage,
 			_ = sleep_until(flush_at), if flush_deadline.is_some() => OutputAction::Flush,
 			command = receiver.recv() => OutputAction::Command(command),
 			_ = keepalive.tick() => OutputAction::KeepAlive,
@@ -641,39 +692,65 @@ async fn device_output_task(device: Arc<Device>, mut receiver: mpsc::Receiver<De
 				}
 				None => Ok(OutputStep::Continue),
 			},
-			OutputAction::Command(Some(DeviceCommand::BeginPage { expected })) => {
+			OutputAction::Command(Some(DeviceCommand::BeginPage { expected, requested_at, origin })) => {
 				// A quick second page turn starts over; nothing is shown in between.
-				page_turn = Some(PageTurn::new(expected));
+				page_turn = Some(PageTurn::new(expected, requested_at, origin));
 				Ok(OutputStep::ClearFlush)
 			}
 			OutputAction::FinishPage => {
-				let Some(turn) = page_turn.take() else { continue };
-				shown_once = true;
-				let drawn = turn.drawn;
-				for position in (0..LCD_KEY_COUNT).filter(|position| drawn & (1u32 << position) == 0) {
-					written[position as usize] = ShownImage::default();
-				}
-				let show = async {
-					if drawn == 0 {
-						return device.clear_all_button_images().await;
-					}
-					// Keys that are empty on the new page are cleared in the same
-					// update that shows the others.
+				let Some(mut turn) = page_turn.take() else { continue };
+				if !turn.ready() {
+					turn.warned = true;
+					log::warn!(
+						"M18 page turn still waiting after {} ms ({} of {} finished; {} of {} images prepared; origin={}); retaining the current device page",
+						turn.started.elapsed().as_millis(),
+						turn.commit_mask().count_ones(),
+						turn.expected.count_ones(),
+						(turn.drawn & turn.expected).count_ones(),
+						turn.expected.count_ones(),
+						turn.origin.label(),
+					);
+					page_turn = Some(turn);
+					Ok(OutputStep::Continue)
+				} else {
+					shown_once = true;
+					// Only finished images are committed. This keeps a quick editor
+					// preview from becoming a late partial page if the watchdog fires.
+					let drawn = turn.commit_mask();
 					for position in (0..LCD_KEY_COUNT).filter(|position| drawn & (1u32 << position) == 0) {
-						if let Some(device_position) = device_key(position) {
-							device.clear_button_image(device_position).await?;
-						}
+						written[position as usize] = ShownImage::default();
 					}
-					device.flush().await
-				};
-				let result = with_deadline("Showing a page", DEVICE_IO_TIMEOUT, show).await;
-				log::info!(
-					"M18 page shown after {} ms, with {} of {} keys finished",
-					turn.started.elapsed().as_millis(),
-					(turn.finished & turn.expected).count_ones(),
-					turn.expected.count_ones()
-				);
-				result.map(|_| OutputStep::ClearFlush)
+					let show = async {
+						if drawn == 0 {
+							return device.clear_all_button_images().await;
+						}
+						// Keys that are empty on the new page are cleared in the same
+						// update that shows the others.
+						for position in (0..LCD_KEY_COUNT).filter(|position| drawn & (1u32 << position) == 0) {
+							if let Some(device_position) = device_key(position) {
+								device.clear_button_image(device_position).await?;
+							}
+						}
+						device.flush().await
+					};
+					let flush_started = Instant::now();
+					let result = with_deadline("Showing a page", DEVICE_IO_TIMEOUT, show).await;
+					let flushed_at = Instant::now();
+					log::info!(
+						"M18 page shown after {} ms (queue {} ms, prepare {} ms, flush {} ms), with {} of {} keys finished ({} of {} images prepared; warned={}; origin={})",
+						flushed_at.duration_since(turn.started).as_millis(),
+						turn.queued.duration_since(turn.started).as_millis(),
+						flush_started.duration_since(turn.queued).as_millis(),
+						flushed_at.duration_since(flush_started).as_millis(),
+						turn.commit_mask().count_ones(),
+						turn.expected.count_ones(),
+						(turn.drawn & turn.expected).count_ones(),
+						turn.expected.count_ones(),
+						turn.warned,
+						turn.origin.label(),
+					);
+					result.map(|_| OutputStep::ClearFlush)
+				}
 			}
 			OutputAction::Command(Some(DeviceCommand::SetBrightness(brightness))) => with_deadline("Setting brightness", DEVICE_IO_TIMEOUT, device.set_brightness(brightness))
 				.await
@@ -845,17 +922,24 @@ pub async fn editor_image(device: &str, profile: &str, position: u8, image: Opti
 /// keys with an action; every other key is cleared at the same moment. Keys
 /// whose finished image was saved earlier are ready at once, so a page the
 /// editor has drawn before appears straight away.
-pub async fn begin_page(device: &str, profile: &str, positions: impl IntoIterator<Item = u8>) -> Result<(), anyhow::Error> {
+pub async fn begin_page(device: &str, profile: &str, positions: impl IntoIterator<Item = u8>, requested_at: Option<Instant>, origin: PageTurnOrigin) -> Result<(), anyhow::Error> {
 	if !is_m18(device) {
 		return Ok(());
 	}
 	let positions: Vec<u8> = positions.into_iter().filter(|position| device_key(*position).is_some()).collect();
 	let expected = positions.iter().fold(0u32, |mask, position| mask | 1 << position);
-	send(device, DeviceCommand::BeginPage { expected }).await?;
-	for position in positions {
-		if let Some(image) = crate::key_images::saved(device, profile, position).await {
-			send(device, DeviceCommand::ShowImage { position, image }).await?;
-		}
+	let requested_at = requested_at.unwrap_or_else(Instant::now);
+	let cached = crate::key_images::saved_many(device, profile, positions).await;
+	log::info!(
+		"M18 page turn requested: profile={profile}, {} of {} finished images cached, origin={}, cache_lookup_ms={}",
+		cached.len(),
+		expected.count_ones(),
+		origin.label(),
+		requested_at.elapsed().as_millis(),
+	);
+	send(device, DeviceCommand::BeginPage { expected, requested_at, origin }).await?;
+	for (position, image) in cached {
+		send(device, DeviceCommand::ShowImage { position, image }).await?;
 	}
 	Ok(())
 }
@@ -952,6 +1036,10 @@ async fn apply_led_settings(device: &str) -> Result<(), anyhow::Error> {
 mod tests {
 	use super::*;
 
+	fn page_turn(expected: u32) -> PageTurn {
+		PageTurn::new(expected, Instant::now(), PageTurnOrigin::Other)
+	}
+
 	fn report(input: u8, state: u8) -> [u8; 11] {
 		let mut report = [0; 11];
 		report[..3].copy_from_slice(&[65, 67, 75]);
@@ -969,7 +1057,7 @@ mod tests {
 
 		// During a page turn nothing is shown yet. A finished image completes
 		// its key; the core's quick image only marks it drawn.
-		let mut turning = Some(PageTurn::new(0b11));
+		let mut turning = Some(page_turn(0b11));
 		assert!(matches!(image_step(&mut turning, 0, false, true), OutputStep::Continue));
 		assert!(matches!(image_step(&mut turning, 1, true, false), OutputStep::Continue));
 		let turn = turning.unwrap();
@@ -996,32 +1084,47 @@ mod tests {
 	}
 
 	#[test]
-	fn a_page_turn_waits_for_the_editors_images_but_not_forever() {
+	fn a_page_turn_waits_for_finished_images_and_never_commits_a_partial_page() {
 		// Keys 0 and 3 get images on the new page.
-		let mut turn = PageTurn::new(0b1001);
-		assert_eq!(turn.show_at(), turn.started + PAGE_TURN_LIMIT, "nothing is ready yet");
+		let mut turn = page_turn(0b1001);
+		assert_eq!(turn.show_at(), Some(turn.queued + PAGE_TURN_WARN_AFTER), "the watchdog is only a warning");
 
 		// The core's quick preview does not finish a key; the editor's image does.
 		turn.drawn |= 0b1001;
-		assert_eq!(turn.show_at(), turn.started + PAGE_TURN_LIMIT);
+		assert_eq!(turn.commit_mask(), 0, "quick previews cannot be committed as a page");
 		turn.finished |= 0b0001;
-		assert_eq!(turn.show_at(), turn.started + PAGE_TURN_LIMIT, "key 3 is still missing");
+		assert_eq!(turn.show_at(), Some(turn.queued + PAGE_TURN_WARN_AFTER), "key 3 is still missing");
+		assert_eq!(turn.commit_mask(), 0b0001);
 
 		turn.finished |= 0b1000;
-		turn.last_image = turn.started + Duration::from_millis(120);
-		assert_eq!(turn.show_at(), turn.last_image + PAGE_TURN_SETTLE, "shown right after the last image");
+		turn.last_image = turn.queued + Duration::from_millis(120);
+		assert_eq!(turn.show_at(), Some(turn.last_image + PAGE_TURN_SETTLE), "shown right after the last image");
+
+		// If the watchdog already logged, it stops polling but a later finished
+		// image still wakes the page and allows a complete commit.
+		let mut warned = page_turn(0b1);
+		warned.warned = true;
+		assert_eq!(warned.show_at(), None);
+		warned.finished = 0b1;
+		assert!(warned.show_at().is_some());
+
+		// A quick image and a finished image on an unexpected position cannot
+		// leak into the page's commit mask.
+		turn.drawn |= 1 << 7;
+		turn.finished |= 1 << 7;
+		assert_eq!(turn.commit_mask(), 0b1001);
 
 		// An empty page is shown straight away.
-		let empty = PageTurn::new(0);
-		assert_eq!(empty.show_at(), empty.last_image + PAGE_TURN_SETTLE);
+		let empty = page_turn(0);
+		assert_eq!(empty.show_at(), Some(empty.last_image + PAGE_TURN_SETTLE));
 	}
 
 	#[test]
 	fn maps_m18_bottom_buttons_after_lcd_keys() {
 		let mut session = ButtonSession::new();
-		assert_eq!(session.process_report(&report(BTN_LEFT, 1)).unwrap(), Some(ButtonEvent::Down(15)));
-		assert_eq!(session.process_report(&report(BTN_MIDDLE, 1)).unwrap(), Some(ButtonEvent::Down(16)));
-		assert_eq!(session.process_report(&report(BTN_RIGHT, 1)).unwrap(), Some(ButtonEvent::Down(17)));
+		assert!(matches!(session.process_report(&report(BTN_LEFT, 1)).unwrap(), Some(ButtonEvent::Down(15, _))));
+		assert!(matches!(session.process_report(&report(BTN_MIDDLE, 1)).unwrap(), Some(ButtonEvent::Down(16, _))));
+		assert!(matches!(session.process_report(&report(BTN_RIGHT, 1)).unwrap(), Some(ButtonEvent::Down(17, _))));
 	}
 
 	#[test]

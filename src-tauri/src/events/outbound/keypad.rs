@@ -10,6 +10,7 @@ use std::{future::Future, pin::Pin};
 
 use dashmap::DashMap;
 use serde::Serialize;
+use tokio::time::Instant;
 
 static KEY_DOWN_TARGETS: LazyLock<DashMap<(String, u8), Context>> = LazyLock::new(DashMap::new);
 
@@ -174,7 +175,7 @@ fn report_action_failure(instance: &crate::shared::ActionInstance, phase: &str, 
 	show_alert(&instance.context);
 }
 
-pub async fn key_down(device: &str, key: u8) -> Result<(), anyhow::Error> {
+pub async fn key_down_at(device: &str, key: u8, requested_at: Instant) -> Result<(), anyhow::Error> {
 	let mut locks = acquire_locks_mut().await;
 	let selected_profile = locks.device_stores.get_selected_profile(device)?;
 	let context = Context {
@@ -199,7 +200,7 @@ pub async fn key_down(device: &str, key: u8) -> Result<(), anyhow::Error> {
 	if crate::m18_actions::is_native_action(&instance.action.uuid) {
 		let native_instance = instance.clone();
 		drop(locks);
-		if let Err(error) = crate::m18_actions::key_down(&native_instance).await {
+		if let Err(error) = crate::m18_actions::key_down_at(&native_instance, requested_at).await {
 			report_action_failure(&native_instance, "press", &error);
 		}
 		return Ok(());

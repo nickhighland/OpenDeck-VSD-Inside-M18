@@ -9,7 +9,7 @@ use crate::store::{NotProfile, Store};
 
 use serde::{Deserialize, Serialize};
 use tauri::{Emitter, command};
-use tokio::sync::Mutex;
+use tokio::{sync::Mutex, time::Instant};
 
 /// Serialises every read-modify-write of a page set. Page changes arrive from
 /// M18 keys (one worker per key), the editor, and the application watcher at
@@ -122,11 +122,19 @@ fn emit(device: &str, page_set: &M18PageSet) {
 	}
 }
 
-async fn show_profile(device: &str, profile: &str) -> Result<(), anyhow::Error> {
-	crate::events::frontend::profiles::select_profile(device, profile).await
+async fn show_profile(device: &str, profile: &str, requested_at: Instant, origin: crate::m18::PageTurnOrigin) -> Result<(), anyhow::Error> {
+	crate::events::frontend::profiles::select_profile_for_page(device, profile, requested_at, origin).await
 }
 
 pub async fn switch_to(device: &str, target: Option<&str>, index: Option<usize>, delta: isize) -> Result<(), anyhow::Error> {
+	switch_to_with_origin(device, target, index, delta, crate::m18::PageTurnOrigin::Other).await
+}
+
+pub async fn switch_to_with_origin(device: &str, target: Option<&str>, index: Option<usize>, delta: isize, origin: crate::m18::PageTurnOrigin) -> Result<(), anyhow::Error> {
+	switch_to_with_origin_at(device, target, index, delta, origin, Instant::now()).await
+}
+
+pub async fn switch_to_with_origin_at(device: &str, target: Option<&str>, index: Option<usize>, delta: isize, origin: crate::m18::PageTurnOrigin, requested_at: Instant) -> Result<(), anyhow::Error> {
 	let _guard = PAGE_LOCK.lock().await;
 	let mut store = load(device)?;
 	let current = store.value.selected;
@@ -141,7 +149,8 @@ pub async fn switch_to(device: &str, target: Option<&str>, index: Option<usize>,
 
 	let page = store.value.pages.get(destination).cloned().ok_or_else(|| anyhow::anyhow!("M18 page set is empty"))?;
 	if destination != current {
-		show_profile(device, &page.profile).await?;
+		log::info!("M18 page switch requested: origin={}, target_profile={}", origin.label(), page.profile);
+		show_profile(device, &page.profile, requested_at, origin).await?;
 	}
 	store.value.selected = destination;
 	store.save()?;
@@ -156,11 +165,11 @@ pub async fn switch_to_profile(device: &str, profile: &str) -> Result<(), anyhow
 		return switch_to(device, Some(profile), None, 0).await;
 	}
 	let _guard = PAGE_LOCK.lock().await;
-	show_profile(device, profile).await
+	show_profile(device, profile, Instant::now(), crate::m18::PageTurnOrigin::Other).await
 }
 
 /// Enter an imported folder target, remembering the current page for Go back.
-pub async fn open_folder(device: &str, target: &str) -> Result<(), anyhow::Error> {
+pub async fn open_folder_at(device: &str, target: &str, requested_at: Instant) -> Result<(), anyhow::Error> {
 	let _guard = PAGE_LOCK.lock().await;
 	let mut store = load(device)?;
 	let Some(destination) = store.value.pages.iter().position(|page| page.id == target || page.profile == target) else {
@@ -173,7 +182,7 @@ pub async fn open_folder(device: &str, target: &str) -> Result<(), anyhow::Error
 	}
 	push_folder_history(&mut store.value.folder_history, current, destination);
 	let page = store.value.pages[destination].clone();
-	show_profile(device, &page.profile).await?;
+	show_profile(device, &page.profile, requested_at, crate::m18::PageTurnOrigin::Folder).await?;
 	store.value.selected = destination;
 	store.save()?;
 	emit(device, &store.value);
@@ -181,14 +190,14 @@ pub async fn open_folder(device: &str, target: &str) -> Result<(), anyhow::Error
 }
 
 /// Return to the page that opened the current folder, if there is one.
-pub async fn go_back(device: &str) -> Result<(), anyhow::Error> {
+pub async fn go_back_at(device: &str, requested_at: Instant) -> Result<(), anyhow::Error> {
 	let _guard = PAGE_LOCK.lock().await;
 	let mut store = load(device)?;
 	let Some(destination) = pop_folder_history(&mut store.value.folder_history, store.value.pages.len()) else {
 		return Ok(());
 	};
 	let page = store.value.pages[destination].clone();
-	show_profile(device, &page.profile).await?;
+	show_profile(device, &page.profile, requested_at, crate::m18::PageTurnOrigin::Folder).await?;
 	store.value.selected = destination;
 	store.save()?;
 	emit(device, &store.value);
@@ -210,6 +219,7 @@ fn clean_page_name(name: &str) -> String {
 
 /// Add an empty page after the last one and show it.
 pub async fn add_page(device: &str) -> Result<M18PageSet, anyhow::Error> {
+	let requested_at = Instant::now();
 	let _guard = PAGE_LOCK.lock().await;
 	let device_info = crate::store::profiles::device_info(device).map_err(|_| anyhow::anyhow!("Connect the M18 to add a page"))?;
 	let mut store = load(device)?;
@@ -225,7 +235,7 @@ pub async fn add_page(device: &str) -> Result<M18PageSet, anyhow::Error> {
 		profile: profile.clone(),
 	});
 	let destination = store.value.pages.len() - 1;
-	show_profile(device, &profile).await?;
+	show_profile(device, &profile, requested_at, crate::m18::PageTurnOrigin::Other).await?;
 	store.value.selected = destination;
 	store.value.folder_history.clear();
 	store.save()?;
@@ -282,6 +292,7 @@ pub async fn duplicate_page(device: &str, index: usize) -> Result<M18PageSet, an
 
 /// Remove a page and delete its keys. The last page cannot be removed.
 pub async fn delete_page(device: &str, index: usize) -> Result<M18PageSet, anyhow::Error> {
+	let requested_at = Instant::now();
 	let _guard = PAGE_LOCK.lock().await;
 	let mut store = load(device)?;
 	if store.value.pages.len() <= 1 {
@@ -292,7 +303,7 @@ pub async fn delete_page(device: &str, index: usize) -> Result<M18PageSet, anyho
 		// Show a neighbouring page before this one disappears.
 		let fallback = if index + 1 < store.value.pages.len() { index + 1 } else { index - 1 };
 		let fallback_profile = store.value.pages[fallback].profile.clone();
-		show_profile(device, &fallback_profile).await?;
+		show_profile(device, &fallback_profile, requested_at, crate::m18::PageTurnOrigin::Other).await?;
 		fallback_profile
 	} else {
 		store.value.pages[store.value.selected].profile.clone()
@@ -336,12 +347,12 @@ pub fn get_m18_pages(device: String) -> Result<M18PageSet, crate::events::fronte
 
 #[command]
 pub async fn switch_m18_page(device: String, page: String) -> Result<(), crate::events::frontend::Error> {
-	switch_to(&device, Some(&page), None, 0).await.map_err(Into::into)
+	switch_to_with_origin(&device, Some(&page), None, 0, crate::m18::PageTurnOrigin::PageTab).await.map_err(Into::into)
 }
 
 #[command]
 pub async fn switch_m18_page_index(device: String, index: usize) -> Result<(), crate::events::frontend::Error> {
-	switch_to(&device, None, Some(index), 0).await.map_err(Into::into)
+	switch_to_with_origin(&device, None, Some(index), 0, crate::m18::PageTurnOrigin::PageTab).await.map_err(Into::into)
 }
 
 #[command]

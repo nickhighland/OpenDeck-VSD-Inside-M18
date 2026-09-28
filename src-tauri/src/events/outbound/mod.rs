@@ -54,7 +54,7 @@ impl GenericInstancePayload {
 			coordinates,
 			controller: instance.context.controller.clone(),
 			state: instance.current_state,
-			isInMultiAction: instance.context.index != 0,
+			isInMultiAction: !instance.context.is_root(),
 		}
 	}
 }

@@ -18,6 +18,7 @@ use std::fs;
 use std::path::Path;
 use std::process::Command;
 use std::sync::{Arc, Mutex, OnceLock, PoisonError};
+use tokio::time::Instant;
 
 pub const OPEN_APPS_UUID: &str = "opendeck.m18.open-apps";
 pub const SUPER_HOTKEYS_UUID: &str = "opendeck.m18.super-hotkeys";
@@ -497,6 +498,7 @@ mod tests {
 				profile: "Default".to_owned(),
 				controller: "Keypad".to_owned(),
 				position: 0,
+				path: vec![],
 				index: 0,
 			},
 			states: Vec::new(),
@@ -768,15 +770,15 @@ async fn system_command(uuid: &str) -> Result<(), anyhow::Error> {
 /// Page keys turn the page as soon as they are pressed, as VSD Craft does,
 /// instead of waiting for the release. The release that follows happens on
 /// the new page and is ignored (see `keypad::key_up`).
-async fn turn_page(instance: &ActionInstance) -> Result<(), anyhow::Error> {
+async fn turn_page(instance: &ActionInstance, requested_at: Instant) -> Result<(), anyhow::Error> {
 	let device = &instance.context.device;
 	match instance.action.uuid.as_str() {
-		PAGE_PREVIOUS_UUID => crate::m18_pages::switch_to(device, None, None, -1).await,
-		PAGE_NEXT_UUID => crate::m18_pages::switch_to(device, None, None, 1).await,
+		PAGE_PREVIOUS_UUID => crate::m18_pages::switch_to_with_origin_at(device, None, None, -1, crate::m18::PageTurnOrigin::HardwareButton, requested_at).await,
+		PAGE_NEXT_UUID => crate::m18_pages::switch_to_with_origin_at(device, None, None, 1, crate::m18::PageTurnOrigin::HardwareButton, requested_at).await,
 		PAGE_GOTO_UUID => {
 			let target = string_setting(&instance.settings, "page");
 			let index = instance.settings.get("pageIndex").and_then(Value::as_u64).map(|value| value as usize);
-			crate::m18_pages::switch_to(device, target.as_deref(), index, 0).await
+			crate::m18_pages::switch_to_with_origin_at(device, target.as_deref(), index, 0, crate::m18::PageTurnOrigin::HardwareButton, requested_at).await
 		}
 		_ => Ok(()),
 	}
@@ -830,8 +832,12 @@ pub(crate) fn switch_command(instance: &ActionInstance) -> Option<String> {
 }
 
 pub async fn key_down(instance: &ActionInstance) -> Result<(), anyhow::Error> {
+	key_down_at(instance, Instant::now()).await
+}
+
+pub async fn key_down_at(instance: &ActionInstance, requested_at: Instant) -> Result<(), anyhow::Error> {
 	match instance.action.uuid.as_str() {
-		PAGE_PREVIOUS_UUID | PAGE_NEXT_UUID | PAGE_GOTO_UUID => turn_page(instance).await,
+		PAGE_PREVIOUS_UUID | PAGE_NEXT_UUID | PAGE_GOTO_UUID => turn_page(instance, requested_at).await,
 		RUN_COMMAND_UUID => run_command(string_setting(&instance.settings, "command")).await,
 		SUPER_HOTKEYS_UUID => execute_input(string_setting(&instance.settings, "down")).await,
 		HOTKEY_SWITCH_UUID | SUPER_HOTKEY_SWITCH_UUID => {
@@ -848,7 +854,7 @@ pub async fn key_down(instance: &ActionInstance) -> Result<(), anyhow::Error> {
 				.map(str::to_owned);
 			execute_input(input).await
 		}
-		_ if crate::vsd_actions::is_vsd_action(&instance.action.uuid) => crate::vsd_actions::key_down(instance).await,
+		_ if crate::vsd_actions::is_vsd_action(&instance.action.uuid) => crate::vsd_actions::key_down_at(instance, requested_at).await,
 		_ => Ok(()),
 	}
 }

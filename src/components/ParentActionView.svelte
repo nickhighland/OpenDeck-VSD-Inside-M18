@@ -9,17 +9,19 @@
 	import Trash from "phosphor-svelte/lib/Trash";
 	import Key from "./Key.svelte";
 
-	import { isBuiltIn } from "$lib/actionLibrary";
+	import { isBuiltIn, isFlowParent } from "$lib/actionLibrary";
 	import { actionIndex } from "$lib/catalog";
 	import { t } from "$lib/i18n";
-	import { copiedItem, inspectedInstance, inspectedParentAction } from "$lib/propertyInspector";
+	import { actionContextString, findInstance, parseActionContext, removeInstance as removeNestedInstance, copiedItem, inspectedInstance, inspectedParentAction } from "$lib/propertyInspector";
 	import { attempt, toast } from "$lib/toast";
 
 	import { invoke } from "@tauri-apps/api/core";
 
 	export let profile: Profile;
 
-	$: parent = profile.keys[$inspectedParentAction!.position]!;
+	$: parentContext = typeof $inspectedParentAction === "string" ? $inspectedParentAction : actionContextString($inspectedParentAction!);
+	$: parsedParent = parseActionContext(parentContext);
+	$: parent = findInstance(profile, parentContext)!;
 	$: children = parent?.children ?? [];
 	$: parentUuid = parent?.action.uuid ?? "";
 	$: isMultiAction = parentUuid == "opendeck.multiaction";
@@ -27,8 +29,9 @@
 	$: parentHelp = isMultiAction
 		? "One press runs every step below, top to bottom, with the waits in between."
 		: "Each press runs one step and then moves to the next, looping back to the first. The highlighted step runs next.";
-	$: position = $inspectedParentAction!.position;
+	$: position = parsedParent.position;
 	$: slotName = position >= 15 ? `Button ${position - 14}` : `Key ${position + 1}`;
+	let history: string[] = [];
 
 	function stepName(instance: ActionInstance): string {
 		const entry = $actionIndex.get(instance.action.uuid);
@@ -45,11 +48,11 @@
 	}
 
 	export async function addAction(action: Action) {
-		if (!action.supported_in_multi_actions) {
-			toast("error", `${action.name} can't be a step`, "Flows and LED colors cannot be placed inside another flow.");
+		if (!action.supported_in_multi_actions && !isFlowParent(action.uuid)) {
+			toast("error", `${action.name} can't be a step`, "This action is not supported inside a flow.");
 			return;
 		}
-		const response = await attempt("Could not add the step", () => invoke<ActionInstance | null>("create_instance", { context: $inspectedParentAction, action }));
+		const response = await attempt("Could not add the step", () => invoke<ActionInstance | null>("create_child_instance", { parentContext, action }));
 		if (response) profile.keys[position] = response;
 	}
 
@@ -65,33 +68,53 @@
 	}
 
 	async function removeInstance(index: number) {
-		const removed = await attempt("Could not remove the step", () => invoke("remove_instance", { context: children[index].context }));
+		const context = children[index].context;
+		const removed = await attempt("Could not remove the step", () => invoke("remove_instance", { context }));
 		if (removed === undefined) return;
-		const next = [...children];
-		next.splice(index, 1);
-		parent.children = next;
+		removeNestedInstance(profile, context);
 		if (index == 0) {
-			parent.settings.delays?.splice(0, 1);
+			parent.settings?.delays?.splice(0, 1);
 		} else {
-			parent.settings.delays?.splice(index - 1, 1);
+			parent.settings?.delays?.splice(index - 1, 1);
+		}
+		if (isFlowParent(parent.action.uuid) && parent.action.uuid !== "opendeck.multiaction") {
+			const remaining = parent.children?.length ?? 0;
+			parent.current_state = Math.min(parent.current_state, Math.max(0, remaining - 1));
+			parent.states = parent.states.slice(0, Math.max(1, remaining));
 		}
 		profile = profile;
-		if ($inspectedInstance === children[index]?.context) $inspectedInstance = null;
+		if ($inspectedInstance === context) $inspectedInstance = null;
 	}
 
 	async function setDelay(index: number, event: Event) {
 		const target = event.currentTarget as HTMLInputElement;
 		const value = Math.max(0, Math.min(300000, parseInt(target.value) || 0));
-		const settings = await attempt("Could not save the wait", () => invoke<any>("set_child_delay", { parentContext: parent.context, index, delayMs: value }));
+		const settings = await attempt("Could not save the wait", () => invoke<any>("set_child_delay", { parentContext, index, delayMs: value }));
 		if (settings) {
 			parent.settings = settings;
 			profile = profile;
 		}
 	}
 
+	function openChild(instance: ActionInstance) {
+		if (isFlowParent(instance.action.uuid)) {
+			history = [...history, parentContext];
+			$inspectedParentAction = instance.context;
+			$inspectedInstance = null;
+		} else {
+			$inspectedInstance = instance.context;
+		}
+	}
+
 	function close() {
-		$inspectedParentAction = null;
-		$inspectedInstance = null;
+		const previous = history.pop();
+		if (previous) {
+			history = history;
+			$inspectedParentAction = previous;
+		} else {
+			$inspectedParentAction = null;
+			$inspectedInstance = null;
+		}
 	}
 </script>
 
@@ -103,7 +126,7 @@
 
 <div class="flex min-h-0 flex-1 flex-col">
 	<div class="flex shrink-0 items-center gap-3 border-b border-line px-5 py-3">
-		<button class="btn btn-sm" on:click={close}><ArrowLeft size="13" weight="bold" /> Back to M18</button>
+		<button class="btn btn-sm" on:click={close}><ArrowLeft size="13" weight="bold" /> {history.length ? "Back to flow" : "Back to M18"}</button>
 		<div class="min-w-0 flex-1">
 			<h1 class="text-[15px] font-semibold text-ink">{parentTitle} <span class="font-normal text-ink-faint">on {slotName}</span></h1>
 			<p class="truncate text-xs text-ink-muted">{parentHelp}</p>
@@ -118,12 +141,12 @@
 				<!-- svelte-ignore a11y-no-noninteractive-tabindex a11y-no-noninteractive-element-interactions a11y-click-events-have-key-events -->
 				<div
 					class="card group flex items-center gap-3 p-2.5 pr-3 transition-colors hover:border-line-strong"
-					class:ring-2={$inspectedInstance === instance.context}
+					class:ring-2={$inspectedInstance === instance.context || (isFlowParent(instance.action.uuid) && $inspectedParentAction === instance.context)}
 					class:ring-accent={$inspectedInstance === instance.context}
 					class:border-accent={isNext}
-					on:click|stopPropagation={() => ($inspectedInstance = instance.context)}
+					on:click|stopPropagation={() => openChild(instance)}
 					on:keydown={(event) => {
-						if (event.key == "Enter") $inspectedInstance = instance.context;
+						if (event.key == "Enter") openChild(instance);
 						else if (event.key == "Delete" || event.key == "Backspace") removeInstance(index);
 					}}
 					role="listitem"
@@ -135,7 +158,7 @@
 					</div>
 					<div class="min-w-0 flex-1">
 						<p class="truncate text-[13px] font-medium text-ink">{stepName(instance)}</p>
-						<p class="truncate text-[11.5px] text-ink-faint">{isNext ? "Runs on the next press" : $actionIndex.get(instance.action.uuid)?.action.tooltip ?? instance.action.tooltip}</p>
+						<p class="truncate text-[11.5px] text-ink-faint">{isFlowParent(instance.action.uuid) ? "Open nested steps" : isNext ? "Runs on the next press" : $actionIndex.get(instance.action.uuid)?.action.tooltip ?? instance.action.tooltip}</p>
 					</div>
 					<button class="btn btn-ghost btn-icon btn-sm opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100" on:click|stopPropagation={() => removeInstance(index)} aria-label={$t("parent_action_view.remove", { name: stepName(instance) })}>
 						<Trash size="14" />

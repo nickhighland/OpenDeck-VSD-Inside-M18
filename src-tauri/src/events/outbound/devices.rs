@@ -7,6 +7,7 @@ use base64::Engine;
 use image::ImageFormat;
 use serde::Serialize;
 use std::io::Cursor;
+use tokio::time::Instant;
 
 #[derive(Serialize)]
 #[allow(non_snake_case)]
@@ -57,8 +58,8 @@ pub async fn update_editor_image(context: crate::shared::Context, image: Option<
 }
 
 /// Show another page's keys together once they are ready.
-pub async fn begin_page(device: &str, profile: &str, positions: impl IntoIterator<Item = u8>) -> Result<(), anyhow::Error> {
-	crate::m18::begin_page(device, profile, positions).await
+pub async fn begin_page(device: &str, profile: &str, positions: impl IntoIterator<Item = u8>, requested_at: Option<Instant>, origin: crate::m18::PageTurnOrigin) -> Result<(), anyhow::Error> {
+	crate::m18::begin_page(device, profile, positions, requested_at, origin).await
 }
 
 async fn send_image(context: crate::shared::Context, image: Option<String>) -> Result<(), anyhow::Error> {

@@ -11,6 +11,20 @@ use anyhow::{Context, anyhow};
 use serde::{Deserialize, Serialize};
 use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 
+fn find_instance<'a>(instance: &'a ActionInstance, context: &crate::shared::ActionContext) -> Option<&'a ActionInstance> {
+	if instance.context == *context {
+		return Some(instance);
+	}
+	instance.children.as_ref()?.iter().find_map(|child| find_instance(child, context))
+}
+
+fn find_instance_mut<'a>(instance: &'a mut ActionInstance, context: &crate::shared::ActionContext) -> Option<&'a mut ActionInstance> {
+	if instance.context == *context {
+		return Some(instance);
+	}
+	instance.children.as_mut()?.iter_mut().find_map(|child| find_instance_mut(child, context))
+}
+
 pub struct ProfileStores {
 	stores: HashMap<String, Store<Profile>>,
 }
@@ -59,14 +73,20 @@ impl ProfileStores {
 					|| instance.action.plugin == "opendeck"
 					|| (plugins_dir.join(&instance.action.plugin).exists() && (!registered.contains(&instance.action.plugin) || actions.iter().any(|v| v.uuid == instance.action.uuid)))
 			};
+			fn prune(instance: &mut ActionInstance, keep: &impl Fn(&ActionInstance) -> bool) -> bool {
+				if !keep(instance) {
+					return false;
+				}
+				if let Some(children) = &mut instance.children {
+					children.retain_mut(|child| prune(child, keep));
+				}
+				true
+			}
 			for slot in store.value.keys.iter_mut().chain(store.value.sliders.iter_mut()).chain(store.value.infobars.iter_mut()) {
 				if let Some(instance) = slot {
-					if !keep_instance(instance) {
+					if !prune(instance, &keep_instance) {
 						*slot = None;
 					} else {
-						if let Some(children) = &mut instance.children {
-							children.retain_mut(|child| keep_instance(child));
-						}
 						crate::action_library::refresh_default_artwork(instance);
 					}
 				}
@@ -178,18 +198,21 @@ impl ProfileStores {
 	}
 
 	pub fn all_from_plugin(&self, plugin: &str) -> Vec<crate::shared::ActionContext> {
+		fn collect(instance: &crate::shared::ActionInstance, plugin: &str, all: &mut Vec<crate::shared::ActionContext>) {
+			if instance.action.plugin == plugin {
+				all.push(instance.context.clone());
+			}
+			if let Some(children) = &instance.children {
+				for child in children {
+					collect(child, plugin, all);
+				}
+			}
+		}
+
 		let mut all = vec![];
 		for store in self.stores.values() {
 			for instance in store.value.keys.iter().chain(&store.value.sliders).chain(&store.value.infobars).flatten() {
-				if instance.action.plugin == plugin {
-					all.push(instance.context.clone());
-				} else if let Some(children) = &instance.children {
-					for child in children {
-						if child.action.plugin == plugin {
-							all.push(child.context.clone());
-						}
-					}
-				}
+				collect(instance, plugin, &mut all);
 			}
 		}
 		all
@@ -358,34 +381,54 @@ pub async fn get_slot_mut<'a>(context: &crate::shared::Context, locks: &'a mut L
 
 pub async fn get_instance<'a>(context: &crate::shared::ActionContext, locks: &'a Locks<'_>) -> Result<Option<&'a crate::shared::ActionInstance>, anyhow::Error> {
 	let slot = get_slot(&(context.into()), locks).await?;
-	if let Some(instance) = slot {
-		if instance.context == *context {
-			return Ok(Some(instance));
-		} else if let Some(children) = &instance.children {
-			for child in children {
-				if child.context == *context {
-					return Ok(Some(child));
-				}
-			}
-		}
-	}
-	Ok(None)
+	Ok(slot.as_ref().and_then(|instance| find_instance(instance, context)))
 }
 
 pub async fn get_instance_mut<'a>(context: &crate::shared::ActionContext, locks: &'a mut LocksMut<'_>) -> Result<Option<&'a mut crate::shared::ActionInstance>, anyhow::Error> {
 	let slot = get_slot_mut(&(context.into()), locks).await?;
-	if let Some(instance) = slot {
-		if instance.context == *context {
-			return Ok(Some(instance));
-		} else if let Some(children) = &mut instance.children {
-			for child in children {
-				if child.context == *context {
-					return Ok(Some(child));
-				}
-			}
+	Ok(slot.as_mut().and_then(|instance| find_instance_mut(instance, context)))
+}
+
+#[cfg(test)]
+mod nested_lookup_tests {
+	use super::*;
+
+	fn action(uuid: &str) -> crate::shared::Action {
+		serde_json::from_value(serde_json::json!({ "name": uuid, "uuid": uuid, "states": [{}] })).unwrap()
+	}
+
+	fn instance(context: crate::shared::ActionContext, uuid: &str) -> ActionInstance {
+		ActionInstance {
+			action: action(uuid),
+			context,
+			states: vec![Default::default()],
+			current_state: 0,
+			settings: serde_json::json!({}),
+			children: None,
 		}
 	}
-	Ok(None)
+
+	#[test]
+	fn lookup_and_mutation_recurse_through_nested_composites() {
+		let base = crate::shared::Context {
+			device: "18-test".to_owned(),
+			profile: "Default".to_owned(),
+			controller: "Keypad".to_owned(),
+			position: 0,
+		};
+		let root = crate::shared::ActionContext::from_context(base, 0);
+		let first = root.child(1);
+		let nested = first.child(2);
+		let leaf = nested.child(1);
+		let mut composite = instance(root, "opendeck.multiaction");
+		let mut nested_instance = instance(first, "opendeck.multiaction");
+		nested_instance.children = Some(vec![instance(leaf.clone(), "test.leaf")]);
+		composite.children = Some(vec![nested_instance]);
+
+		assert_eq!(find_instance(&composite, &leaf).unwrap().action.uuid, "test.leaf");
+		find_instance_mut(&mut composite, &leaf).unwrap().settings["edited"] = true.into();
+		assert_eq!(find_instance(&composite, &leaf).unwrap().settings["edited"], true);
+	}
 }
 
 pub async fn mark_profile_stale(device_id: &str, locks: &mut LocksMut<'_>) -> Result<(), anyhow::Error> {

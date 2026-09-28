@@ -37,25 +37,43 @@ export function displayState(slot: ActionInstance, pageSet: M18PageSet | undefin
  * whole page at once instead of waiting for the editor to draw it. (The page
  * on the M18 is drawn by its keys in the editor anyway.)
  */
+async function drawPage(device: string, page: M18PageSet["pages"][number], pageSet: M18PageSet): Promise<number> {
+	const profile = await invoke<Profile | null>("get_profile", { device, profile: page.profile }).catch(() => null);
+	const jobs = (profile?.keys ?? []).entries();
+	const keys = [...jobs].filter(([position, slot]) => slot && position < LCD_KEYS) as [number, ActionInstance][];
+	await Promise.all(
+		keys.map(async ([position, slot]) => {
+			const shown = displayState(slot, pageSet, page.profile);
+			if (!shown) return;
+			const { state } = await resolveState(slot, shown);
+			const context: Context = { device, profile: page.profile, controller: "Keypad", position };
+			// `active` sends the finished image to the core. Waiting for the IPC
+			// call makes the cache barrier real instead of merely scheduling work.
+			await renderImage(null, context, state, slot.action.states[slot.current_state]?.image ?? slot.action.icon, false, false, true, true, false, get(settings)?.rotation, true);
+		}),
+	);
+	return keys.length;
+}
+
 async function drawOtherPages(device: string) {
 	const pageSet = get(pageSets)[device];
 	if (!pageSet) return;
 	const shownProfile = pageSet.pages[pageSet.selected]?.profile;
-	for (const page of pageSet.pages) {
-		if (page.profile === shownProfile) continue;
-		const profile = await invoke<Profile | null>("get_profile", { device, profile: page.profile }).catch(() => null);
-		for (const [position, slot] of (profile?.keys ?? []).entries()) {
-			if (!slot || position >= LCD_KEYS) continue;
-			const shown = displayState(slot, pageSet, page.profile);
-			if (!shown) continue;
-			const { state } = await resolveState(slot, shown);
-			const context: Context = { device, profile: page.profile, controller: "Keypad", position };
-			// `active` sends the finished image to the core.
-			await renderImage(null, context, state, slot.action.states[slot.current_state]?.image ?? slot.action.icon, false, false, true, true, false, get(settings)?.rotation);
-			// Leave room for the editor's own work between keys.
-			await new Promise((resolve) => setTimeout(resolve, 15));
-		}
-	}
+	const started = performance.now();
+	const pages = pageSet.pages.filter((page) => page.profile !== shownProfile);
+	const counts = await Promise.all(pages.map((page) => drawPage(device, page, pageSet)));
+	console.debug(`[M18 timing] warmed ${counts.reduce((total, count) => total + count, 0)} inactive-page images across ${pages.length} page(s) in ${(performance.now() - started).toFixed(1)} ms`);
+}
+
+/** Warm one target page immediately, useful when a user clicks its tab before the background pass finishes. */
+export async function warmPage(device: string, profile: string): Promise<void> {
+	if (!device.startsWith("18-")) return;
+	const pageSet = get(pageSets)[device];
+	const page = pageSet?.pages.find((candidate) => candidate.profile === profile);
+	if (!page || !pageSet) return;
+	const started = performance.now();
+	const count = await drawPage(device, page, pageSet);
+	console.debug(`[M18 timing] warmed target page ${profile}: ${count} image(s) in ${(performance.now() - started).toFixed(1)} ms`);
 }
 
 const scheduled = new Map<string, ReturnType<typeof setTimeout>>();
@@ -67,7 +85,7 @@ const again = new Set<string>();
  * connects, when pages are added, removed, or reordered, and when settings
  * that change every key (rotation, app icon size) change.
  */
-export function refreshSavedPages(device: string, delay = 1500) {
+export function refreshSavedPages(device: string, delay = 0) {
 	if (!device.startsWith("18-")) return;
 	clearTimeout(scheduled.get(device));
 	scheduled.set(

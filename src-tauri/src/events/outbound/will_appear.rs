@@ -11,7 +11,14 @@ struct AppearEvent {
 	payload: GenericInstancePayload,
 }
 
+fn is_composite(instance: &ActionInstance) -> bool {
+	matches!(instance.action.uuid.as_str(), "opendeck.multiaction" | "opendeck.toggleaction" | "opendeck.carouselaction")
+}
+
 pub async fn will_appear(instance: &ActionInstance) -> Result<(), anyhow::Error> {
+	if is_composite(instance) {
+		return Ok(());
+	}
 	if crate::m18::is_led_action(&instance.action.uuid) {
 		crate::m18::apply_led_action(instance).await?;
 		return Ok(());
@@ -38,6 +45,9 @@ pub async fn will_appear(instance: &ActionInstance) -> Result<(), anyhow::Error>
 }
 
 pub async fn will_disappear(instance: &ActionInstance, clear_on_device: bool) -> Result<(), anyhow::Error> {
+	if is_composite(instance) {
+		return Ok(());
+	}
 	if crate::m18::is_led_action(&instance.action.uuid) {
 		if clear_on_device {
 			crate::events::outbound::devices::update_image((&instance.context).into(), None).await?;

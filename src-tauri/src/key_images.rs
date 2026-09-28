@@ -67,6 +67,18 @@ pub async fn saved(device: &str, profile: &str, position: u8) -> Option<Arc<Vec<
 	Some(image)
 }
 
+/// Load several keys for a page in parallel. Page turns are serialized by the
+/// output worker, but cache misses are independent disk reads and must not
+/// make the page-start path wait on them one at a time.
+pub async fn saved_many(device: &str, profile: &str, positions: impl IntoIterator<Item = u8>) -> Vec<(u8, Arc<Vec<u8>>)> {
+	let reads = positions
+		.into_iter()
+		.map(|position| async move { saved(device, profile, position).await.map(|image| (position, image)) });
+	let mut images = futures::future::join_all(reads).await.into_iter().flatten().collect::<Vec<_>>();
+	images.sort_unstable_by_key(|(position, _)| *position);
+	images
+}
+
 /// Drop saved images: of one key, of a whole page (`position` is `None`), or
 /// of every page of a device (`profile` is `None`).
 pub async fn forget(device: &str, profile: Option<&str>, position: Option<u8>) {

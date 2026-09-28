@@ -40,8 +40,10 @@
 					await invoke("set_selected_profile", { device: id, id: profile.id });
 					if (id.startsWith("18-")) {
 						await loadPageSet(id);
-						// Prepare every page's images so page turns are instant.
-						refreshSavedPages(id, 3000);
+						// Prepare every inactive page immediately. The page-turn barrier
+						// can then use finished images instead of waiting for the webview
+						// to mount the target page after the switch.
+						refreshSavedPages(id);
 					}
 				})().catch((error) => console.warn(`Failed to load device ${id}`, error));
 			}
@@ -72,9 +74,10 @@
 					// Adding, removing, renaming, or reordering pages changes what
 					// other pages show (page numbers, new pages); a page turn alone
 					// does not.
-					const pagesBefore = JSON.stringify($pageSets[payload.device]?.pages ?? []);
 					setPageSet(payload.device, payload.pageSet);
-					if (JSON.stringify(payload.pageSet.pages) !== pagesBefore) refreshSavedPages(payload.device);
+					// A turn also makes the former page inactive; keep it warm for
+					// the next turn. Page-set edits use the same path.
+					refreshSavedPages(payload.device);
 					void refreshProfile(payload.device);
 				}),
 				listen("rerender_images", async () => {

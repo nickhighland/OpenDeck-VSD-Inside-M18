@@ -14,6 +14,7 @@
 
 	import { inspectedInstance } from "$lib/propertyInspector";
 	import { pageLabel, pageSets, setPageSet, type M18PageSet } from "$lib/pages";
+	import { warmPage } from "$lib/keyImages";
 	import { attempt, toast } from "$lib/toast";
 
 	import { invoke } from "@tauri-apps/api/core";
@@ -44,9 +45,15 @@
 	async function select(index: number) {
 		if (index == selectedPage) return;
 		$inspectedInstance = null;
+		const target = pageSet.pages[index]?.profile;
+		const started = performance.now();
+		console.debug(`[M18 timing] page-tab ${index + 1} clicked`);
+		if (target) void warmPage(device.id, target).catch((error) => console.debug("Failed to warm target M18 page", error));
 		await run("Could not switch pages", async () => {
 			await invoke("switch_m18_page_index", { device: device.id, index });
+			console.debug(`[M18 timing] page-tab ${index + 1} backend returned in ${(performance.now() - started).toFixed(1)} ms`);
 			await refreshProfile();
+			console.debug(`[M18 timing] page-tab ${index + 1} editor refreshed in ${(performance.now() - started).toFixed(1)} ms`);
 		});
 	}
 

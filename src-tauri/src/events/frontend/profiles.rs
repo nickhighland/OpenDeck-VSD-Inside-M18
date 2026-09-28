@@ -26,11 +26,13 @@ pub async fn get_selected_profile(device: String) -> Result<crate::shared::Profi
 
 /// Instances that receive appear/disappear events for a slot: composite
 /// parents (Multi Action, Cycle, Carousel) are drawn by the editor, and only
-/// their children belong to plugins.
-fn event_targets(instance: &crate::shared::ActionInstance) -> Vec<&crate::shared::ActionInstance> {
-	match instance.children.as_ref() {
-		Some(children) if matches!(instance.action.uuid.as_str(), "opendeck.multiaction" | "opendeck.toggleaction" | "opendeck.carouselaction") => children.iter().collect(),
-		_ => vec![instance],
+/// their leaf children belong to plugins. Recurse so nested VSD Craft flows
+/// register every executable child.
+pub fn event_targets(instance: &crate::shared::ActionInstance) -> Vec<&crate::shared::ActionInstance> {
+	if matches!(instance.action.uuid.as_str(), "opendeck.multiaction" | "opendeck.toggleaction" | "opendeck.carouselaction") {
+		instance.children.iter().flatten().flat_map(event_targets).collect()
+	} else {
+		vec![instance]
 	}
 }
 
@@ -47,6 +49,17 @@ pub async fn set_selected_profile(device: String, id: String) -> Result<(), Erro
 /// not touched here: page navigation calls this while holding the page lock.
 #[allow(clippy::flat_map_identity)]
 pub async fn select_profile(device: &str, id: &str) -> Result<(), anyhow::Error> {
+	select_profile_inner(device, id, None).await
+}
+
+/// Select a page profile while retaining the timestamp and origin of the
+/// request. This lets the M18 output log measure the complete path from a
+/// hardware/page-tab request to the final device flush.
+pub async fn select_profile_for_page(device: &str, id: &str, requested_at: tokio::time::Instant, origin: crate::m18::PageTurnOrigin) -> Result<(), anyhow::Error> {
+	select_profile_inner(device, id, Some((requested_at, origin))).await
+}
+
+async fn select_profile_inner(device: &str, id: &str, page_trace: Option<(tokio::time::Instant, crate::m18::PageTurnOrigin)>) -> Result<(), anyhow::Error> {
 	let mut locks = acquire_locks_mut().await;
 	// Clone the device info instead of holding a registry guard across awaits.
 	let device_info = DEVICES.get(device).map(|entry| entry.value().clone()).ok_or_else(|| anyhow::anyhow!("device {device} not found"))?;
@@ -82,7 +95,14 @@ pub async fn select_profile(device: &str, id: &str) -> Result<(), anyhow::Error>
 		// all appear in one update, instead of the screen going blank and
 		// filling in over several.
 		let positions: Vec<u8> = new_profile.keys.iter().enumerate().filter(|(_, key)| key.is_some()).map(|(position, _)| position as u8).collect();
-		let _ = crate::events::outbound::devices::begin_page(device, id, positions).await;
+		let _ = crate::events::outbound::devices::begin_page(
+			device,
+			id,
+			positions,
+			page_trace.map(|(started, _)| started),
+			page_trace.map_or(crate::m18::PageTurnOrigin::Other, |(_, origin)| origin),
+		)
+		.await;
 	}
 	// An LED Colors key on the new page sets the LEDs as it appears;
 	// otherwise they return to the color from Settings.

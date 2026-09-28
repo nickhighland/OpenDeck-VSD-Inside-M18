@@ -11,6 +11,7 @@ use serde_json::{Value, json};
 use std::process::Command;
 use std::sync::LazyLock;
 use tauri::Emitter;
+use tokio::time::Instant;
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct VsdActionDefinition {
@@ -436,33 +437,33 @@ fn turns_page(uuid: &str) -> bool {
 		)
 }
 
-async fn turn_page(instance: &crate::shared::ActionInstance) -> Result<(), anyhow::Error> {
+async fn turn_page(instance: &crate::shared::ActionInstance, requested_at: Instant) -> Result<(), anyhow::Error> {
 	let device = &instance.context.device;
 	let target = || text_setting(&instance.settings, &["profile", "ProfileUUID", "target"]);
 	match instance.action.uuid.to_ascii_lowercase().as_str() {
-		"com.hotspot.streamdock.page.previous" => crate::m18_pages::switch_to(device, None, None, -1).await,
-		"com.hotspot.streamdock.page.next" => crate::m18_pages::switch_to(device, None, None, 1).await,
+		"com.hotspot.streamdock.page.previous" => crate::m18_pages::switch_to_with_origin_at(device, None, None, -1, crate::m18::PageTurnOrigin::HardwareButton, requested_at).await,
+		"com.hotspot.streamdock.page.next" => crate::m18_pages::switch_to_with_origin_at(device, None, None, 1, crate::m18::PageTurnOrigin::HardwareButton, requested_at).await,
 		"com.hotspot.streamdock.page.goto" => {
 			let index = number_setting(&instance.settings, &["PageIndex", "pageIndex", "page"]).unwrap_or(0).saturating_sub(1).max(0) as usize;
-			crate::m18_pages::switch_to(device, None, Some(index), 0).await
+			crate::m18_pages::switch_to_with_origin_at(device, None, Some(index), 0, crate::m18::PageTurnOrigin::HardwareButton, requested_at).await
 		}
-		"com.hotspot.streamdock.profile.backtoparent" => crate::m18_pages::go_back(device).await,
+		"com.hotspot.streamdock.profile.backtoparent" => crate::m18_pages::go_back_at(device, requested_at).await,
 		"com.hotspot.streamdock.profile.openchild" => match target() {
-			Some(target) => crate::m18_pages::open_folder(device, target).await,
+			Some(target) => crate::m18_pages::open_folder_at(device, target, requested_at).await,
 			None => Ok(()),
 		},
 		"com.hotspot.streamdock.profile.rotate" => match target() {
-			Some(target) => crate::m18_pages::switch_to(device, Some(target), None, 0).await,
-			None => crate::m18_pages::switch_to(device, None, None, 1).await,
+			Some(target) => crate::m18_pages::switch_to_with_origin_at(device, Some(target), None, 0, crate::m18::PageTurnOrigin::HardwareButton, requested_at).await,
+			None => crate::m18_pages::switch_to_with_origin_at(device, None, None, 1, crate::m18::PageTurnOrigin::HardwareButton, requested_at).await,
 		},
 		_ => Ok(()),
 	}
 }
 
-pub async fn key_down(instance: &crate::shared::ActionInstance) -> Result<(), anyhow::Error> {
+pub async fn key_down_at(instance: &crate::shared::ActionInstance, requested_at: Instant) -> Result<(), anyhow::Error> {
 	let uuid = instance.action.uuid.as_str();
 	if turns_page(uuid) {
-		return turn_page(instance).await;
+		return turn_page(instance, requested_at).await;
 	}
 	if is_hotkey_switch(uuid) {
 		if let Some(command) = crate::m18_actions::switch_command(instance) {

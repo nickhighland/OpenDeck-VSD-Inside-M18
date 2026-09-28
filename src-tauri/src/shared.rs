@@ -355,18 +355,26 @@ pub struct Context {
 }
 
 /// Information about the slot and index an instance is located in.
-#[derive(Clone, PartialEq, Eq, Hash, serde_with::SerializeDisplay, serde_with::DeserializeFromStr)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, serde_with::SerializeDisplay, serde_with::DeserializeFromStr)]
 pub struct ActionContext {
 	pub device: String,
 	pub profile: String,
 	pub controller: String,
 	pub position: u8,
+	/// Child indices above the immediate slot. The final `index` remains the
+	/// instance's index within its parent, so existing five-segment contexts
+	/// remain valid while nested composites get an unambiguous path.
+	pub path: Vec<u16>,
 	pub index: u16,
 }
 
 impl std::fmt::Display for ActionContext {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		write!(f, "{}.{}.{}.{}.{}", self.device, self.profile, self.controller, self.position, self.index)
+		write!(f, "{}.{}.{}.{}", self.device, self.profile, self.controller, self.position)?;
+		for index in &self.path {
+			write!(f, ".{index}")?;
+		}
+		write!(f, ".{}", self.index)
 	}
 }
 
@@ -381,12 +389,14 @@ impl std::str::FromStr for ActionContext {
 		let profile = segments[1].to_owned();
 		let controller = segments[2].to_owned();
 		let position = u8::from_str(segments[3])?;
-		let index = u16::from_str(segments[4])?;
+		let mut indices = segments[4..].iter().map(|segment| u16::from_str(segment)).collect::<Result<Vec<_>, _>>()?;
+		let index = indices.pop().ok_or_else(|| anyhow::anyhow!("missing action index"))?;
 		Ok(Self {
 			device,
 			profile,
 			controller,
 			position,
+			path: indices,
 			index,
 		})
 	}
@@ -399,8 +409,68 @@ impl ActionContext {
 			profile: context.profile,
 			controller: context.controller,
 			position: context.position,
+			path: vec![],
 			index,
 		}
+	}
+
+	/// Build a context for a child of this instance. The root instance keeps
+	/// the historical index-only representation; deeper descendants append
+	/// each ancestor's index to the path.
+	pub fn child(&self, index: u16) -> Self {
+		let mut path = self.path.clone();
+		if self.index != 0 {
+			path.push(self.index);
+		}
+		Self {
+			device: self.device.clone(),
+			profile: self.profile.clone(),
+			controller: self.controller.clone(),
+			position: self.position,
+			path,
+			index,
+		}
+	}
+
+	/// Keep this instance's hierarchy while moving it to another physical
+	/// slot.
+	pub fn at_context(&self, context: Context) -> Self {
+		Self {
+			device: context.device,
+			profile: context.profile,
+			controller: context.controller,
+			position: context.position,
+			path: self.path.clone(),
+			index: self.index,
+		}
+	}
+
+	/// The parent context, if this is not the root instance in a slot.
+	pub fn parent(&self) -> Option<Self> {
+		if self.index == 0 && self.path.is_empty() {
+			return None;
+		}
+		let mut path = self.path.clone();
+		let index = path.pop().unwrap_or(0);
+		Some(Self {
+			device: self.device.clone(),
+			profile: self.profile.clone(),
+			controller: self.controller.clone(),
+			position: self.position,
+			path,
+			index,
+		})
+	}
+
+	pub fn is_root(&self) -> bool {
+		self.index == 0 && self.path.is_empty()
+	}
+
+	/// Directory-safe context used for per-instance artwork on disk.
+	pub fn storage_key(&self) -> String {
+		let mut indices = self.path.iter().map(u16::to_string).collect::<Vec<_>>();
+		indices.push(self.index.to_string());
+		format!("{}.{}.{}", self.controller, self.position, indices.join("."))
 	}
 }
 
@@ -418,6 +488,54 @@ impl From<ActionContext> for Context {
 impl From<&ActionContext> for Context {
 	fn from(value: &ActionContext) -> Self {
 		Self::from(value.clone())
+	}
+}
+
+#[cfg(test)]
+mod action_context_tests {
+	use super::*;
+
+	#[test]
+	fn nested_contexts_round_trip_without_changing_legacy_contexts() {
+		let root = ActionContext::from_context(
+			Context {
+				device: "18-test".to_owned(),
+				profile: "Default".to_owned(),
+				controller: "Keypad".to_owned(),
+				position: 4,
+			},
+			0,
+		);
+		let first = root.child(1);
+		let nested = first.child(2);
+
+		assert_eq!(root.to_string(), "18-test.Default.Keypad.4.0");
+		assert_eq!(first.to_string(), "18-test.Default.Keypad.4.1");
+		assert_eq!(nested.to_string(), "18-test.Default.Keypad.4.1.2");
+		assert_eq!(nested.to_string().parse::<ActionContext>().unwrap(), nested);
+		assert_eq!(nested.parent().unwrap(), first);
+		assert_eq!(nested.parent().unwrap().parent().unwrap(), root);
+	}
+
+	#[test]
+	fn nested_context_keeps_its_path_when_moved() {
+		let source = ActionContext::from_context(
+			Context {
+				device: "18-test".to_owned(),
+				profile: "Default".to_owned(),
+				controller: "Keypad".to_owned(),
+				position: 4,
+			},
+			0,
+		)
+		.child(1)
+		.child(2);
+		let moved = source.at_context(Context {
+			position: 8,
+			..Context::from(source.clone())
+		});
+		assert_eq!(moved.to_string(), "18-test.Default.Keypad.8.1.2");
+		assert_eq!(moved.storage_key(), "Keypad.8.1.2");
 	}
 }
 

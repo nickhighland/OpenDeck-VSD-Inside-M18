@@ -4,6 +4,7 @@ use crate::shared::DEVICES;
 use crate::store::profiles::get_device_profiles;
 
 use serde::Deserialize;
+use tokio::time::Instant;
 
 pub async fn register_device(uuid: &str, mut event: PayloadEvent<crate::shared::DeviceInfo>) -> Result<(), anyhow::Error> {
 	if uuid.is_empty() {
@@ -28,7 +29,7 @@ pub async fn register_device(uuid: &str, mut event: PayloadEvent<crate::shared::
 		let profile = locks.profile_stores.get_profile_store(&DEVICES.get(&event.payload.id).unwrap(), &selected_profile)?;
 		// The first page appears in one update once the editor has drawn it.
 		let positions: Vec<u8> = profile.value.keys.iter().enumerate().filter(|(_, key)| key.is_some()).map(|(position, _)| position as u8).collect();
-		let _ = crate::events::outbound::devices::begin_page(&event.payload.id, &selected_profile, positions).await;
+		let _ = crate::events::outbound::devices::begin_page(&event.payload.id, &selected_profile, positions, None, crate::m18::PageTurnOrigin::Connect).await;
 		for instance in profile
 			.value
 			.keys
@@ -37,7 +38,9 @@ pub async fn register_device(uuid: &str, mut event: PayloadEvent<crate::shared::
 			.chain(profile.value.sliders.iter().flatten())
 			.chain(profile.value.infobars.iter().flatten())
 		{
-			let _ = crate::events::outbound::will_appear::will_appear(instance).await;
+			for target in crate::events::frontend::profiles::event_targets(instance) {
+				let _ = crate::events::outbound::will_appear::will_appear(target).await;
+			}
 		}
 		// The editor draws keys with their titles and built-in artwork; after
 		// a reconnect it must draw them again even if nothing else changed.
@@ -73,7 +76,9 @@ pub async fn deregister_device(uuid: &str, event: PayloadEvent<String>) -> Resul
 			.chain(profile.value.sliders.iter().flatten())
 			.chain(profile.value.infobars.iter().flatten())
 		{
-			let _ = crate::events::outbound::will_appear::will_disappear(instance, false).await;
+			for target in crate::events::frontend::profiles::event_targets(instance) {
+				let _ = crate::events::outbound::will_appear::will_disappear(target, false).await;
+			}
 		}
 
 		// Flush any pending profile writes before removing the device.
@@ -107,11 +112,18 @@ pub struct PressPayload {
 }
 
 pub async fn key_down(event: PayloadEvent<PressPayload>) -> Result<(), anyhow::Error> {
+	key_down_at(event, Instant::now()).await
+}
+
+/// Process a physical M18 press while preserving the HID-read timestamp for
+/// page-turn latency instrumentation. Plugin-originated key events use the
+/// wrapper above and start their trace when they enter the core.
+pub async fn key_down_at(event: PayloadEvent<PressPayload>, requested_at: Instant) -> Result<(), anyhow::Error> {
 	// A press that only wakes the display must not also run the key's action.
 	if crate::device_sleep::note_key_down(&event.payload.device, event.payload.position).await {
 		return Ok(());
 	}
-	crate::events::outbound::keypad::key_down(&event.payload.device, event.payload.position).await
+	crate::events::outbound::keypad::key_down_at(&event.payload.device, event.payload.position, requested_at).await
 }
 
 pub async fn key_up(event: PayloadEvent<PressPayload>) -> Result<(), anyhow::Error> {

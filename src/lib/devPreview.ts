@@ -167,18 +167,31 @@ let settings = {
 
 function parseContext(context: string) {
 	const parts = context.split(".");
-	const index = Number(parts.pop());
-	const position = Number(parts.pop());
-	const controller = parts.pop()!;
-	const device = parts.shift()!;
-	return { device, profile: parts.join("."), controller, position, index };
+	const indices = parts.slice(4).map(Number);
+	return {
+		device: parts[0]!,
+		profile: parts[1]!,
+		controller: parts[2]!,
+		position: Number(parts[3]),
+		indices,
+		index: indices[indices.length - 1] ?? 0,
+		root: indices.length === 1 && indices[0] === 0,
+	};
 }
 
 function findInstance(context: string): ActionInstance | undefined {
-	const { profile: id, position, index } = parseContext(context);
+	const { profile: id, position } = parseContext(context);
 	const slot = profile(id).keys[position];
 	if (!slot) return undefined;
-	return index === 0 ? slot : slot.children?.find((child) => child.context === context);
+	function find(instance: ActionInstance): ActionInstance | undefined {
+		if (instance.context === context) return instance;
+		for (const child of instance.children ?? []) {
+			const match = find(child);
+			if (match) return match;
+		}
+		return undefined;
+	}
+	return find(slot);
 }
 
 function switchTo(index: number) {
@@ -261,11 +274,33 @@ async function handle(command: string, args: any): Promise<unknown> {
 			target.keys[context.position] = instance(context.profile, context.position, action.uuid);
 			return structuredClone(target.keys[context.position]);
 		}
+		case "create_child_instance": {
+			const parent = findInstance(args.parentContext);
+			if (!parent?.children) return null;
+			const child = {
+				...instance(parent.context.split(".")[1], parseContext(parent.context).position, args.action.uuid),
+				context: `${parent.context}.${parent.children.length + 1}`,
+				children: ["opendeck.multiaction", "opendeck.toggleaction", "opendeck.carouselaction"].includes(args.action.uuid) ? [] : null,
+			};
+			parent.children.push(child);
+			return structuredClone(profile(parseContext(parent.context).profile).keys[parseContext(parent.context).position]);
+		}
 		case "remove_instance": {
-			const { profile: id, position, index } = parseContext(args.context);
+			const { profile: id, position, root } = parseContext(args.context);
 			const slot = profile(id).keys[position];
-			if (index === 0) profile(id).keys[position] = null;
-			else if (slot?.children) slot.children = slot.children.filter((child) => child.context !== args.context);
+			if (root) profile(id).keys[position] = null;
+			else {
+				function remove(instance: ActionInstance): boolean {
+					if (!instance.children) return false;
+					const index = instance.children.findIndex((child) => child.context === args.context);
+					if (index >= 0) {
+						instance.children.splice(index, 1);
+						return true;
+					}
+					return instance.children.some(remove);
+				}
+			if (slot) remove(slot);
+			}
 			return null;
 		}
 		case "move_instance": {

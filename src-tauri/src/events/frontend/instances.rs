@@ -12,6 +12,96 @@ pub struct SwapResult {
 	pub destination: ActionInstance,
 }
 
+fn default_settings(action: &Action) -> serde_json::Value {
+	if crate::m18::is_led_action(&action.uuid) {
+		crate::m18::default_led_settings()
+	} else if crate::m18_actions::is_native_action(&action.uuid) {
+		crate::m18_actions::default_settings(&action.uuid)
+	} else {
+		serde_json::Value::Object(serde_json::Map::new())
+	}
+}
+
+fn is_composite(action: &Action) -> bool {
+	matches!(action.uuid.as_str(), "opendeck.multiaction" | "opendeck.toggleaction" | "opendeck.carouselaction")
+}
+
+fn lifecycle_targets(instance: &ActionInstance, targets: &mut Vec<ActionInstance>) {
+	if is_composite(&instance.action) {
+		for child in instance.children.iter().flatten() {
+			lifecycle_targets(child, targets);
+		}
+	} else {
+		targets.push(instance.clone());
+	}
+}
+
+fn instance_contexts(instance: &ActionInstance, contexts: &mut Vec<ActionContext>) {
+	contexts.push(instance.context.clone());
+	for child in instance.children.iter().flatten() {
+		instance_contexts(child, contexts);
+	}
+}
+
+fn next_child_index(children: &[ActionInstance]) -> u16 {
+	children.iter().map(|child| child.context.index).max().unwrap_or(0).saturating_add(1)
+}
+
+async fn append_child_instance(app: AppHandle, mut action: Action, parent_context: ActionContext) -> Result<Option<ActionInstance>, Error> {
+	if !action.controllers.contains(&parent_context.controller) {
+		return Ok(None);
+	}
+	if parent_context.is_root() && parent_context.controller == "Encoder" {
+		let _ = crate::shared::initialise_encoder_layout(&mut action, None);
+	}
+
+	let mut locks = acquire_locks_mut().await;
+	let Some(parent) = get_instance_mut(&parent_context, &mut locks).await? else {
+		return Ok(None);
+	};
+	let Some(children) = parent.children.as_mut() else {
+		return Ok(None);
+	};
+	let index = next_child_index(children);
+	let instance = ActionInstance {
+		action: action.clone(),
+		context: parent.context.child(index),
+		states: action.states.clone(),
+		current_state: 0,
+		settings: default_settings(&action),
+		children: is_composite(&action).then(Vec::new),
+	};
+	children.push(instance.clone());
+
+	let parent_context = parent.context.clone();
+	let update_parent = matches!(parent.action.uuid.as_str(), "opendeck.toggleaction" | "opendeck.carouselaction") && parent.states.len() < children.len();
+	if update_parent {
+		parent.states.push(crate::shared::ActionState {
+			image: parent.action.icon.clone(),
+			..Default::default()
+		});
+	}
+
+	if update_parent {
+		let _ = update_state(&app, parent_context.clone(), &mut locks).await;
+	}
+	save_profile_now(&parent_context.device, &mut locks).await?;
+	drop(locks);
+	let _ = crate::events::outbound::will_appear::will_appear(&instance).await;
+
+	let locks = acquire_locks().await;
+	let slot = get_slot(&(&parent_context).into(), &locks).await?.clone();
+	Ok(slot)
+}
+
+/// Add an action below any composite instance, including a nested composite.
+/// The old `create_instance` command intentionally keeps its slot-oriented
+/// API for drag/drop callers that place an action on an empty physical key.
+#[command]
+pub async fn create_child_instance(app: AppHandle, action: Action, parent_context: ActionContext) -> Result<Option<ActionInstance>, Error> {
+	append_child_instance(app, action, parent_context).await
+}
+
 #[command]
 pub async fn create_instance(app: AppHandle, mut action: Action, context: Context) -> Result<Option<ActionInstance>, Error> {
 	if !action.controllers.contains(&context.controller) {
@@ -24,28 +114,19 @@ pub async fn create_instance(app: AppHandle, mut action: Action, context: Contex
 
 	let mut locks = acquire_locks_mut().await;
 	let slot = get_slot_mut(&context, &mut locks).await?;
-	let default_settings = if crate::m18::is_led_action(&action.uuid) {
-		crate::m18::default_led_settings()
-	} else if crate::m18_actions::is_native_action(&action.uuid) {
-		crate::m18_actions::default_settings(&action.uuid)
-	} else {
-		serde_json::Value::Object(serde_json::Map::new())
-	};
+	let default_settings = default_settings(&action);
 
 	if let Some(parent) = slot {
 		let Some(children) = &mut parent.children else { return Ok(None) };
-		let index = match children.last() {
-			None => 1,
-			Some(instance) => instance.context.index + 1,
-		};
+		let index = next_child_index(children);
 
 		let instance = ActionInstance {
 			action: action.clone(),
-			context: ActionContext::from_context(context.clone(), index),
+			context: parent.context.child(index),
 			states: action.states.clone(),
 			current_state: 0,
 			settings: default_settings.clone(),
-			children: None,
+			children: is_composite(&action).then(Vec::new),
 		};
 		children.push(instance.clone());
 
@@ -93,9 +174,7 @@ fn instance_images_dir(context: &ActionContext) -> std::path::PathBuf {
 }
 
 fn instance_images_dir_at(root: &std::path::Path, context: &ActionContext) -> std::path::PathBuf {
-	root.join(&context.device)
-		.join(&context.profile)
-		.join(format!("{}.{}.{}", context.controller, context.position, context.index))
+	root.join(&context.device).join(&context.profile).join(context.storage_key())
 }
 
 fn copy_swap_image(image: &mut String, old_dir: &std::path::Path, new_dir: &std::path::Path, nonce: &str) -> Result<(), anyhow::Error> {
@@ -111,7 +190,7 @@ fn copy_swap_image(image: &mut String, old_dir: &std::path::Path, new_dir: &std:
 fn copy_instance_to_swap_position(instance: &ActionInstance, destination: &Context, nonce: &str, image_root: &std::path::Path) -> Result<ActionInstance, anyhow::Error> {
 	let mut moved = instance.clone();
 	let old_dir = instance_images_dir_at(image_root, &instance.context);
-	let next_context = ActionContext::from_context(destination.clone(), instance.context.index);
+	let next_context = instance.context.at_context(destination.clone());
 	let new_dir = instance_images_dir_at(image_root, &next_context);
 	copy_swap_image(&mut moved.action.icon, &old_dir, &new_dir, nonce)?;
 	for state in &mut moved.action.states {
@@ -155,14 +234,22 @@ pub async fn swap_m18_instances(source: Context, destination: Context) -> Result
 	let moved_to_destination = copy_instance_to_swap_position(&original_source, &destination, &nonce, &image_root)?;
 	let moved_to_source = copy_instance_to_swap_position(&original_destination, &source, &nonce, &image_root)?;
 
-	let _ = crate::events::outbound::will_appear::will_disappear(&original_source, true).await;
-	let _ = crate::events::outbound::will_appear::will_disappear(&original_destination, true).await;
+	let mut old_targets = Vec::new();
+	lifecycle_targets(&original_source, &mut old_targets);
+	lifecycle_targets(&original_destination, &mut old_targets);
+	for target in old_targets {
+		let _ = crate::events::outbound::will_appear::will_disappear(&target, true).await;
+	}
 	*get_slot_mut(&source, &mut locks).await? = Some(moved_to_source.clone());
 	*get_slot_mut(&destination, &mut locks).await? = Some(moved_to_destination.clone());
 	save_profile_now(&source.device, &mut locks).await?;
 	drop(locks);
-	let _ = crate::events::outbound::will_appear::will_appear(&moved_to_source).await;
-	let _ = crate::events::outbound::will_appear::will_appear(&moved_to_destination).await;
+	let mut new_targets = Vec::new();
+	lifecycle_targets(&moved_to_source, &mut new_targets);
+	lifecycle_targets(&moved_to_destination, &mut new_targets);
+	for target in new_targets {
+		let _ = crate::events::outbound::will_appear::will_appear(&target).await;
+	}
 	Ok(SwapResult {
 		source: moved_to_source,
 		destination: moved_to_destination,
@@ -271,11 +358,16 @@ pub async fn move_instance(source: Context, destination: Context, retain: bool) 
 	*get_slot_mut(&destination, &mut locks).await? = Some(moved.clone());
 
 	if !retain {
-		let _ = crate::events::outbound::will_appear::will_disappear(&original, source.profile == destination.profile).await;
-		for child in original.children.iter().flatten() {
-			let _ = remove_dir_all(instance_images_dir(&child.context)).await;
+		let mut old_targets = Vec::new();
+		lifecycle_targets(&original, &mut old_targets);
+		for target in old_targets {
+			let _ = crate::events::outbound::will_appear::will_disappear(&target, source.profile == destination.profile).await;
 		}
-		let _ = remove_dir_all(instance_images_dir(&original.context)).await;
+		let mut old_contexts = Vec::new();
+		instance_contexts(&original, &mut old_contexts);
+		for context in old_contexts {
+			let _ = remove_dir_all(instance_images_dir(&context)).await;
+		}
 		*get_slot_mut(&source, &mut locks).await? = None;
 		// A key moved in from another page: that page is not the selected
 		// profile, so it has to be saved explicitly or the key would reappear.
@@ -288,67 +380,85 @@ pub async fn move_instance(source: Context, destination: Context, retain: bool) 
 
 	save_profile_now(&destination.device, &mut locks).await?;
 	drop(locks);
-	let _ = crate::events::outbound::will_appear::will_appear(&moved).await;
+	let mut new_targets = Vec::new();
+	lifecycle_targets(&moved, &mut new_targets);
+	for target in new_targets {
+		let _ = crate::events::outbound::will_appear::will_appear(&target).await;
+	}
 
 	Ok(Some(moved))
 }
 
 #[command]
 pub async fn remove_instance(context: ActionContext) -> Result<(), Error> {
-	let mut locks = acquire_locks_mut().await;
-	let slot = get_slot_mut(&(&context).into(), &mut locks).await?;
-	let Some(instance) = slot else {
-		return Ok(());
-	};
-
-	if instance.context == context {
-		let _ = crate::events::outbound::will_appear::will_disappear(instance, true).await;
-		if let Some(children) = &instance.children {
-			for child in children {
-				let _ = crate::events::outbound::will_appear::will_disappear(child, true).await;
-				let _ = remove_dir_all(instance_images_dir(&child.context)).await;
-			}
+	fn remove_child(instance: &mut ActionInstance, target: &ActionContext) -> Option<(usize, ActionInstance)> {
+		let children = instance.children.as_mut()?;
+		if let Some(index) = children.iter().position(|child| child.context == *target) {
+			return Some((index, children.remove(index)));
 		}
-		let _ = remove_dir_all(instance_images_dir(&instance.context)).await;
-		*slot = None;
-	} else {
-		let Some(children) = instance.children.as_mut() else {
+		children.iter_mut().find_map(|child| remove_child(child, target))
+	}
+
+	let mut locks = acquire_locks_mut().await;
+	let (removed, parent_context, child_index) = {
+		let slot = get_slot_mut(&(&context).into(), &mut locks).await?;
+		let Some(instance) = slot else {
 			return Ok(());
 		};
-		for (index, child) in children.iter().enumerate() {
-			if child.context == context {
-				let _ = crate::events::outbound::will_appear::will_disappear(child, true).await;
-				let _ = remove_dir_all(instance_images_dir(&child.context)).await;
-				children.remove(index);
+		if instance.context == context {
+			(slot.take(), None, None)
+		} else {
+			let Some((index, removed)) = remove_child(instance, &context) else {
+				return Ok(());
+			};
+			(Some(removed), context.parent(), Some(index))
+		}
+	};
 
-				if instance.action.uuid == "opendeck.multiaction"
-					&& let Some(settings) = instance.settings.as_object_mut()
-					&& let Some(delays) = settings.get_mut("delays").and_then(|v| v.as_array_mut())
-				{
-					if index == 0 {
-						if !delays.is_empty() {
-							delays.remove(0);
-						}
-					} else if index - 1 < delays.len() {
-						delays.remove(index - 1);
+	if let (Some(parent_context), Some(index)) = (&parent_context, child_index) {
+		if let Some(parent) = get_instance_mut(parent_context, &mut locks).await? {
+			if parent.action.uuid == "opendeck.multiaction"
+				&& let Some(settings) = parent.settings.as_object_mut()
+				&& let Some(delays) = settings.get_mut("delays").and_then(|v| v.as_array_mut())
+			{
+				if index == 0 {
+					if !delays.is_empty() {
+						delays.remove(0);
 					}
+				} else if index - 1 < delays.len() {
+					delays.remove(index - 1);
 				}
-
-				break;
+			}
+			if matches!(parent.action.uuid.as_str(), "opendeck.toggleaction" | "opendeck.carouselaction") {
+				let children_len = parent.children.as_ref().map(Vec::len).unwrap_or(0);
+				if parent.current_state as usize >= children_len {
+					parent.current_state = children_len.saturating_sub(1) as u16;
+				}
+				if children_len == 0 {
+					parent.states.truncate(1);
+				} else {
+					parent.states.truncate(children_len);
+				}
 			}
 		}
-		if matches!(instance.action.uuid.as_str(), "opendeck.toggleaction" | "opendeck.carouselaction") {
-			if instance.current_state as usize >= children.len() {
-				instance.current_state = if children.is_empty() { 0 } else { children.len() as u16 - 1 };
-			}
-			if !children.is_empty() {
-				instance.states.pop();
-				let _ = update_state(crate::APP_HANDLE.get().unwrap(), instance.context.clone(), &mut locks).await;
-			}
-		}
+		let _ = update_state(crate::APP_HANDLE.get().unwrap(), parent_context.clone(), &mut locks).await;
 	}
 
 	save_profile_now(&context.device, &mut locks).await?;
+	drop(locks);
+
+	if let Some(removed) = removed {
+		let mut targets = Vec::new();
+		lifecycle_targets(&removed, &mut targets);
+		for target in targets {
+			let _ = crate::events::outbound::will_appear::will_disappear(&target, true).await;
+		}
+		let mut all = Vec::new();
+		instance_contexts(&removed, &mut all);
+		for context in all {
+			let _ = remove_dir_all(instance_images_dir(&context)).await;
+		}
+	}
 
 	Ok(())
 }
@@ -608,6 +718,7 @@ mod switch_tests {
 				profile: "Default".to_owned(),
 				controller: "Keypad".to_owned(),
 				position: 0,
+				path: vec![],
 				index: 0,
 			},
 			states: Vec::new(),

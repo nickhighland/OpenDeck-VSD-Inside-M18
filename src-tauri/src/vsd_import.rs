@@ -710,22 +710,6 @@ fn mapped_instance_at_depth(
 	unsupported: &mut Vec<String>,
 	depth: usize,
 ) -> ActionInstance {
-	if depth > 0 && crate::vsd_actions::is_composite_action(&action.uuid) {
-		if !unsupported.contains(&action.uuid) {
-			unsupported.push(action.uuid.clone());
-		}
-		let mut placeholder = fallback_action(crate::m18_actions::UNSUPPORTED_VSD_UUID, "Nested VSD Craft flow needs a nested editor", "");
-		placeholder.tooltip = "Nested VSD flows are preserved but inactive until nested action editing and addressing are supported".to_owned();
-		placeholder.visible_in_action_list = false;
-		return action_instance(
-			placeholder,
-			context,
-			json!({ "sourceName": action.name, "sourceUuid": action.uuid, "sourceSettings": action.settings, "sourceCompositeChildren": action.multi_action_data }),
-			&action.states,
-			base_dir,
-			action.state,
-		);
-	}
 	if depth >= 16 {
 		if !unsupported.contains(&action.uuid) {
 			unsupported.push(action.uuid.clone());
@@ -773,10 +757,7 @@ fn mapped_instance_at_depth(
 					placeholder.visible_in_action_list = false;
 					let mut child = action_instance(
 						placeholder,
-						ActionContext {
-							index: (index + 1).min(u16::MAX as usize) as u16,
-							..context.clone()
-						},
+						context.child((index + 1).min(u16::MAX as usize) as u16),
 						json!({ "sourceUuid": unknown_uuid, "sourceItem": raw_child }),
 						&[],
 						base_dir,
@@ -786,10 +767,7 @@ fn mapped_instance_at_depth(
 					children.push(child);
 					continue;
 				};
-				let child_context = ActionContext {
-					index: (index + 1).min(u16::MAX as usize) as u16,
-					..context.clone()
-				};
+				let child_context = context.child((index + 1).min(u16::MAX as usize) as u16);
 				let mut child = mapped_instance_at_depth(categories, &child_action, child_context, page_index, pages, base_dir, device_id, unsupported, depth + 1);
 				if !child_action.name.trim().is_empty() {
 					child.action.name = child_action.name.clone();
@@ -993,6 +971,7 @@ fn profile_from_page(categories: &HashMap<String, Category>, page: &PageSpec, pa
 			profile: page.profile_id.clone(),
 			controller: "Keypad".to_owned(),
 			position,
+			path: vec![],
 			index: 0,
 		};
 		keys[position as usize] = Some(mapped_instance(categories, action, context, page_index, pages, base_dir, device_id, unsupported));
@@ -1146,6 +1125,7 @@ mod tests {
 			profile: "Profile A".to_owned(),
 			controller: "Keypad".to_owned(),
 			position: 0,
+			path: vec![],
 			index: 0,
 		};
 		let instance = mapped_instance(&categories, &action, context, 0, &[], Path::new("."), "18-test", &mut vec![]);
@@ -1250,6 +1230,7 @@ mod tests {
 			profile: "Page 1".to_owned(),
 			controller: "Keypad".to_owned(),
 			position: 15,
+			path: vec![],
 			index: 0,
 		};
 		let mut unsupported = vec![];
@@ -1278,6 +1259,7 @@ mod tests {
 			profile: "Profile 2".to_owned(),
 			controller: "Keypad".to_owned(),
 			position: 0,
+			path: vec![],
 			index: 0,
 		};
 		let mut unsupported = vec![];
@@ -1326,6 +1308,7 @@ mod tests {
 			profile: "test".to_owned(),
 			controller: "Keypad".to_owned(),
 			position: 0,
+			path: vec![],
 			index: 0,
 		};
 		let mut unsupported = vec![];
@@ -1343,10 +1326,11 @@ mod tests {
 		assert_eq!(children[1].action.uuid, "com.hotspot.streamdock.multiactions.delay");
 		assert_eq!(children[0].context.index, 1);
 		assert_eq!(children[1].context.index, 2);
-		assert_eq!(children[2].action.uuid, crate::m18_actions::UNSUPPORTED_VSD_UUID);
-		assert_eq!(children[2].settings["sourceCompositeChildren"].as_array().unwrap().len(), 1);
+		assert_eq!(children[2].action.uuid, "opendeck.multiaction");
+		assert_eq!(children[2].children.as_ref().unwrap().len(), 1);
+		assert_eq!(children[2].children.as_ref().unwrap()[0].context.to_string(), "18-test.test.Keypad.0.3.1");
 		assert_eq!(children[2].context.index, 3);
-		assert_eq!(unsupported, vec!["com.hotspot.streamdock.multiactions.routine"]);
+		assert!(unsupported.is_empty());
 	}
 
 	#[test]
@@ -1393,6 +1377,7 @@ mod tests {
 				profile: "test".to_owned(),
 				controller: "Keypad".to_owned(),
 				position: 0,
+				path: vec![],
 				index: 0,
 			};
 			let instance = mapped_instance(&HashMap::new(), &action, context, 0, &[], Path::new("."), "18-test", &mut vec![]);
@@ -1420,6 +1405,7 @@ mod tests {
 			profile: "Profile A".to_owned(),
 			controller: "Keypad".to_owned(),
 			position: 17,
+			path: vec![],
 			index: 0,
 		};
 		let instance = mapped_instance(&categories, &action, context, 0, &[], Path::new("/tmp"), "device", &mut vec![]);
@@ -1443,6 +1429,7 @@ mod tests {
 			profile: "Profile A".to_owned(),
 			controller: "Keypad".to_owned(),
 			position: 0,
+			path: vec![],
 			index: 0,
 		};
 		let instance = mapped_instance(&categories, &brightness, brightness_context, 0, &[], Path::new("/tmp"), "device", &mut vec![]);
@@ -1486,6 +1473,7 @@ mod tests {
 			profile: "Profile A".to_owned(),
 			controller: "Keypad".to_owned(),
 			position: 0,
+			path: vec![],
 			index: 0,
 		};
 		let instance = mapped_instance(&categories, &action, context, 0, &pages, Path::new("/fixtures"), "18-test", &mut vec![]);

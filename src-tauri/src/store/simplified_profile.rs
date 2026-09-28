@@ -14,12 +14,17 @@ use serde::{Deserialize, Serialize};
 pub struct DiskActionContext {
 	pub controller: String,
 	pub position: u8,
+	pub path: Vec<u16>,
 	pub index: u16,
 }
 
 impl std::fmt::Display for DiskActionContext {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		write!(f, "{}.{}.{}", self.controller, self.position, self.index)
+		write!(f, "{}.{}", self.controller, self.position)?;
+		for index in &self.path {
+			write!(f, ".{index}")?;
+		}
+		write!(f, ".{}", self.index)
 	}
 }
 
@@ -28,7 +33,7 @@ impl std::str::FromStr for DiskActionContext {
 	fn from_str(s: &str) -> Result<Self, Self::Err> {
 		let segments: Vec<&str> = s.split('.').collect();
 		let offset = match segments.len() {
-			5 => 2,
+			5.. => 2,
 			3.. => 0,
 			// A malformed context in a hand-edited or damaged profile must be a
 			// parse error (the store then falls back to its backup), not a panic.
@@ -36,8 +41,34 @@ impl std::str::FromStr for DiskActionContext {
 		};
 		let controller = segments[offset].to_owned();
 		let position = u8::from_str(segments[1 + offset]).map_err(|error| format!("invalid position in `{s}`: {error}"))?;
-		let index = u16::from_str(segments[2 + offset]).map_err(|error| format!("invalid index in `{s}`: {error}"))?;
-		Ok(Self { controller, position, index })
+		let mut indices = segments[(2 + offset)..]
+			.iter()
+			.map(|segment| u16::from_str(segment).map_err(|error| format!("invalid index in `{s}`: {error}")))
+			.collect::<Result<Vec<_>, _>>()?;
+		let index = indices.pop().ok_or_else(|| format!("missing index in `{s}`"))?;
+		Ok(Self {
+			controller,
+			position,
+			path: indices,
+			index,
+		})
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::DiskActionContext;
+
+	#[test]
+	fn disk_context_round_trips_legacy_and_nested_paths() {
+		for (text, path, index) in [("Keypad.4.0", vec![], 0), ("Keypad.4.1", vec![], 1), ("Keypad.4.1.2", vec![1], 2)] {
+			let parsed = text.parse::<DiskActionContext>().unwrap();
+			assert_eq!(parsed.path, path);
+			assert_eq!(parsed.index, index);
+			assert_eq!(parsed.to_string(), text);
+		}
+		let parsed = "18-test.Default.Keypad.4.1.2".parse::<DiskActionContext>().unwrap();
+		assert_eq!(parsed.to_string(), "Keypad.4.1.2");
 	}
 }
 
@@ -46,6 +77,7 @@ impl From<ActionContext> for DiskActionContext {
 		Self {
 			controller: value.controller,
 			position: value.position,
+			path: value.path,
 			index: value.index,
 		}
 	}
@@ -58,6 +90,7 @@ impl DiskActionContext {
 			profile,
 			controller: self.controller,
 			position: self.position,
+			path: self.path,
 			index: self.index,
 		}
 	}

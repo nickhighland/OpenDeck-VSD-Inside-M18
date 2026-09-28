@@ -31,6 +31,7 @@ pub async fn dial_rotate(device: &str, index: u8, ticks: i16) -> Result<(), anyh
 		profile: selected_profile.to_owned(),
 		controller: "Encoder".to_owned(),
 		position: index,
+		path: vec![],
 		index: 0,
 	};
 	let Some(instance) = get_instance_mut(&context, &mut locks).await? else { return Ok(()) };
@@ -78,6 +79,7 @@ pub async fn dial_press(device: &str, event: &'static str, index: u8) -> Result<
 		profile: selected_profile.to_owned(),
 		controller: "Encoder".to_owned(),
 		position: index,
+		path: vec![],
 		index: 0,
 	};
 	let Some(instance) = get_instance_mut(&context, &mut locks).await? else { return Ok(()) };
@@ -127,6 +129,7 @@ pub async fn touch_tap(device: &str, index: u8, x: u16, y: u16, hold: bool) -> R
 		profile: selected_profile.to_owned(),
 		controller: "Encoder".to_owned(),
 		position: index,
+		path: vec![],
 		index: 0,
 	};
 	let Some(instance) = get_instance_mut(&context, &mut locks).await? else { return Ok(()) };

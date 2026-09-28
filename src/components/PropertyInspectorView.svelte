@@ -18,7 +18,7 @@
 	import { actionIndex, plugins } from "$lib/catalog";
 	import { t } from "$lib/i18n";
 	import { getWebserverUrl, getWebSocketPort } from "$lib/ports";
-	import { inspectedInstance, inspectedParentAction, inspectorTab } from "$lib/propertyInspector";
+	import { findInstance, parseActionContext, removeInstance, inspectedInstance, inspectedParentAction, inspectorTab } from "$lib/propertyInspector";
 	import { resolveState } from "$lib/appIcons";
 	import { getImage } from "$lib/rendererHelper";
 	import { attempt } from "$lib/toast";
@@ -37,11 +37,11 @@
 
 	async function iframeOnLoad(event: Event, instance: ActionInstance) {
 		const iframe = iframes[instance.context] ?? event.target;
-		const split = instance.context.split(".");
+		const parsedContext = parseActionContext(instance.context);
 
-		const position = parseInt(split[3]);
+		const position = parsedContext.position;
 		let coordinates: { row: number; column: number };
-		if (split[2] == "Encoder") {
+		if (parsedContext.controller == "Encoder") {
 			coordinates = { row: 0, column: position };
 		} else {
 			coordinates = { row: Math.floor(position / device.columns), column: position % device.columns };
@@ -61,13 +61,13 @@
 					JSON.stringify({
 						action: instance.action.uuid,
 						context: instance.context,
-						device: split[0],
+						device: parsedContext.device,
 						payload: {
 							settings: instance.settings,
 							coordinates,
-							controller: split[2],
+							controller: parsedContext.controller,
 							state: instance.current_state,
-							isInMultiAction: parseInt(split[4]) != 0,
+							isInMultiAction: !parsedContext.root,
 						},
 					}),
 				],
@@ -179,11 +179,14 @@
 	}
 
 	const nonNull = <T,>(o: T | null): o is T => o != null;
-	$: instances = profile.keys
-		.filter(nonNull)
-		.reduce((prev, current) => prev.concat(current.children ? [current, ...current.children] : current), [] as ActionInstance[])
-		.concat(profile.sliders.filter(nonNull))
-		.concat(profile.infobars.filter(nonNull));
+	function flatten(instance: ActionInstance, result: ActionInstance[]) {
+		result.push(instance);
+		for (const child of instance.children ?? []) flatten(child, result);
+	}
+	$: instances = [...profile.keys, ...profile.sliders, ...profile.infobars].filter(nonNull).reduce((all, instance) => {
+		flatten(instance, all);
+		return all;
+	}, [] as ActionInstance[]);
 
 	onMount(() => {
 		window.addEventListener("message", handleMessage);
@@ -208,7 +211,7 @@
 
 	// What the inspector is showing.
 	$: inspectedContext = typeof $inspectedInstance === "string" ? $inspectedInstance : null;
-	$: inspected = inspectedContext ? instances.find((instance) => instance.context === inspectedContext) : undefined;
+	$: inspected = inspectedContext ? findInstance(profile, inspectedContext) : undefined;
 	$: emptySlot = $inspectedInstance && typeof $inspectedInstance === "object" ? ($inspectedInstance as Context) : null;
 	$: slotInstance = emptySlot && emptySlot.device === device.id && emptySlot.profile === profile.id ? profile.keys[emptySlot.position] : null;
 
@@ -216,16 +219,7 @@
 		return position >= 15 ? `Button ${position - 14}` : `Key ${position + 1}`;
 	}
 
-	function parseContext(context: string) {
-		const parts = context.split(".");
-		const index = parseInt(parts.pop() ?? "0");
-		const position = parseInt(parts.pop() ?? "0");
-		const controller = parts.pop() ?? "Keypad";
-		const deviceId = parts.shift() ?? "";
-		return { device: deviceId, profile: parts.join("."), controller, position, index };
-	}
-
-	$: parsed = inspected ? parseContext(inspected.context) : null;
+	$: parsed = inspected ? parseActionContext(inspected.context) : null;
 	$: entry = inspected ? $actionIndex.get(inspected.action.uuid) : undefined;
 	$: builtIn = inspected ? isBuiltIn(inspected.action) : false;
 	$: title = inspected ? (entry && builtIn ? entry.action.name : inspected.action.name) : "";
@@ -256,7 +250,7 @@
 
 	async function testPress() {
 		if (!parsed) return;
-		const { index: _index, ...slot } = parsed;
+		const { indices: _indices, index: _index, root: _root, ...slot } = parsed;
 		await attempt("Could not run the key", () => invoke("trigger_virtual_press", { context: slot }));
 	}
 
@@ -265,12 +259,7 @@
 		const context = inspected.context;
 		const removed = await attempt("Could not clear the key", () => invoke("remove_instance", { context }));
 		if (removed === undefined) return;
-		if (parsed.index === 0) {
-			profile.keys[parsed.position] = null;
-		} else {
-			const parent = profile.keys[parsed.position];
-			if (parent?.children) parent.children = parent.children.filter((child) => child.context !== context);
-		}
+		removeInstance(profile, context);
 		profile = profile;
 		$inspectedInstance = null;
 	}
@@ -299,17 +288,17 @@
 					{#if group === COMING_SOON}<span class="badge text-warning">Not available yet</span>{/if}
 				</div>
 				<p class="truncate text-xs text-ink-faint">
-					{parsed.index > 0 ? `Step ${parsed.index} of the flow on ${slotLabel(parsed.position)}` : slotLabel(parsed.position)}{description ? ` · ${description}` : ""}
+					{!parsed.root ? `Step ${parsed.index} of the flow on ${slotLabel(parsed.position)}` : slotLabel(parsed.position)}{description ? ` · ${description}` : ""}
 				</p>
 			</div>
 			<div class="segmented shrink-0">
 				<button aria-pressed={$inspectorTab === "behavior"} on:click={() => ($inspectorTab = "behavior")}>Behavior</button>
 				<button aria-pressed={$inspectorTab === "appearance"} on:click={() => ($inspectorTab = "appearance")}>Appearance</button>
 			</div>
-			{#if parsed.index === 0}
+			{#if parsed.root}
 				<button class="btn btn-sm shrink-0" on:click={testPress} title="Run this key now (or double-click it)"><Play size="13" weight="fill" /> Test</button>
 			{/if}
-			<button class="btn btn-sm btn-danger btn-icon shrink-0" on:click={clearKey} title={parsed.index > 0 ? "Remove this step" : "Clear this key"} aria-label={parsed.index > 0 ? "Remove this step" : "Clear this key"}><Trash size="14" /></button>
+			<button class="btn btn-sm btn-danger btn-icon shrink-0" on:click={clearKey} title={!parsed.root ? "Remove this step" : "Clear this key"} aria-label={!parsed.root ? "Remove this step" : "Clear this key"}><Trash size="14" /></button>
 		</header>
 	{:else if slotInstance && isFlowParent(slotInstance.action.uuid)}
 		<div class="flex flex-1 items-center justify-center gap-4 px-6">

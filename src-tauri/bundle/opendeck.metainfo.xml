@@ -53,6 +53,15 @@
 	</branding>
 
 	<releases>
+		<release version="2.15.7" date="2026-09-28">
+			<url type="details">https://github.com/nickhighland/OpenDeck-VSD-Inside-M18/releases/tag/tv2.15.7</url>
+			<description>
+				<ul>
+					<li>Keep M18 page turns fast while committing complete pages</li>
+					<li>Add nested VSD Craft composite-action support</li>
+				</ul>
+			</description>
+		</release>
 		<release version="2.15.6" date="2026-09-28">
 			<url type="details">https://github.com/nickhighland/OpenDeck-VSD-Inside-M18/releases/tag/tv2.15.6</url>
 			<description>

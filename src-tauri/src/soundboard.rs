@@ -69,10 +69,7 @@ struct Playback {
 static PLAYBACKS: LazyLock<Mutex<HashMap<String, Vec<Playback>>>> = LazyLock::new(|| Mutex::new(HashMap::new()));
 
 fn playback_key(instance: &ActionInstance) -> String {
-	format!(
-		"{}:{}:{}:{}:{}",
-		instance.context.device, instance.context.profile, instance.context.controller, instance.context.position, instance.context.index
-	)
+	instance.context.to_string()
 }
 
 fn string_setting<'a>(settings: &'a Value, keys: &[&str]) -> Option<&'a str> {
