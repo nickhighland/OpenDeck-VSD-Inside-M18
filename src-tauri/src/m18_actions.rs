@@ -688,29 +688,22 @@ async fn open_application(settings: &Value) -> Result<(), anyhow::Error> {
 	}
 }
 
+/// Press one of the keyboard's own volume or brightness keys: instant, and
+/// with the system's on-screen indicator. Without the permission to send
+/// keystrokes, AppleScript still does the job, only more slowly (it starts a
+/// script interpreter on every press).
+async fn system_key(key: &str, fallback_script: &str) -> Result<(), anyhow::Error> {
+	if get_input_permission().await != Some(false) {
+		return execute_input(Some(format!("[k({key})]"))).await;
+	}
+	run_process("/usr/bin/osascript", vec!["-e".to_owned(), fallback_script.to_owned()]).await
+}
+
 async fn system_command(uuid: &str) -> Result<(), anyhow::Error> {
 	match uuid {
-		VOLUME_DOWN_UUID => {
-			run_process(
-				"/usr/bin/osascript",
-				vec!["-e".to_owned(), "set volume output volume ((output volume of (get volume settings)) - 6)".to_owned()],
-			)
-			.await
-		}
-		VOLUME_UP_UUID => {
-			run_process(
-				"/usr/bin/osascript",
-				vec!["-e".to_owned(), "set volume output volume ((output volume of (get volume settings)) + 6)".to_owned()],
-			)
-			.await
-		}
-		MUTE_UUID => {
-			run_process(
-				"/usr/bin/osascript",
-				vec!["-e".to_owned(), "set volume output muted (not (output muted of (get volume settings)))".to_owned()],
-			)
-			.await
-		}
+		VOLUME_DOWN_UUID => system_key("VolumeDown", "set volume output volume ((output volume of (get volume settings)) - 6)").await,
+		VOLUME_UP_UUID => system_key("VolumeUp", "set volume output volume ((output volume of (get volume settings)) + 6)").await,
+		MUTE_UUID => system_key("VolumeMute", "set volume output muted (not (output muted of (get volume settings)))").await,
 		SIRI_UUID => run_process("/usr/bin/open", vec!["-a".to_owned(), "Siri".to_owned()]).await,
 		// VSD Craft's "Dispatch Center" is a translation of 调度中心, which is
 		// macOS's Chinese name for Mission Control, not Control Center.
@@ -719,8 +712,8 @@ async fn system_command(uuid: &str) -> Result<(), anyhow::Error> {
 		LAUNCHPAD_UUID => run_process("/usr/bin/open", vec!["-a".to_owned(), "Launchpad".to_owned()]).await,
 		DESKTOP_SAVER_UUID => run_process("/usr/bin/open", vec!["-a".to_owned(), "ScreenSaverEngine".to_owned()]).await,
 		SLEEP_UUID => run_process("/usr/bin/pmset", vec!["displaysleepnow".to_owned()]).await,
-		SCREEN_BRIGHTNESS_UP_UUID => run_process("/usr/bin/osascript", vec!["-e".to_owned(), "tell application \"System Events\" to key code 144".to_owned()]).await,
-		SCREEN_BRIGHTNESS_DOWN_UUID => run_process("/usr/bin/osascript", vec!["-e".to_owned(), "tell application \"System Events\" to key code 145".to_owned()]).await,
+		SCREEN_BRIGHTNESS_UP_UUID => system_key("BrightnessUp", "tell application \"System Events\" to key code 144").await,
+		SCREEN_BRIGHTNESS_DOWN_UUID => system_key("BrightnessDown", "tell application \"System Events\" to key code 145").await,
 		// Real media keys, like the hardware keys: they control whichever player is
 		// active (Music, Spotify, a browser) and never launch Music unasked.
 		PREVIOUS_TRACK_UUID => execute_input(Some("[k(MediaPrevTrack)]".to_owned())).await,
