@@ -53,6 +53,16 @@
 	</branding>
 
 	<releases>
+		<release version="2.15.5" date="2026-09-28">
+			<url type="details">https://github.com/nickhighland/OpenDeck-VSD-Inside-M18/releases/tag/tv2.15.5</url>
+			<description>
+				<ul>
+					<li>Reconnect the M18 after its USB connection drops</li>
+					<li>Turn pages as soon as a page key is pressed</li>
+					<li>Keep page turns to one update and stop key images from stalling</li>
+				</ul>
+			</description>
+		</release>
 		<release version="2.15.4" date="2026-09-28">
 			<url type="details">https://github.com/nickhighland/OpenDeck-VSD-Inside-M18/releases/tag/tv2.15.4</url>
 			<description>
