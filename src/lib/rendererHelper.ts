@@ -37,6 +37,36 @@ export function artworkForState(image: string, state: Pick<ActionState, "show" |
 	return image;
 }
 
+/**
+ * Load an image, giving up after a few seconds and trying once more, so a
+ * load that never finishes (a stuck connection to the image server) cannot
+ * leave a key undrawn: a key is redrawn only after its last drawing ends.
+ */
+export async function loadImage(source: string, timeout = 4000): Promise<HTMLImageElement> {
+	for (let attempt = 1; ; attempt++) {
+		const image = document.createElement("img");
+		image.crossOrigin = "anonymous";
+		const loaded = new Promise<HTMLImageElement>((resolve, reject) => {
+			image.onload = () => resolve(image);
+			image.onerror = () => reject(new Error(`Could not load ${source.slice(0, 120)}`));
+		});
+		// A retry asks the server again rather than waiting on the same request.
+		image.src = attempt > 1 && !source.startsWith("data:") ? `${source}${source.includes("?") ? "&" : "?"}retry=${Date.now()}` : source;
+		let timer: ReturnType<typeof setTimeout> | undefined;
+		const timedOut = new Promise<never>((_, reject) => {
+			timer = setTimeout(() => reject(new Error(`Timed out loading ${source.slice(0, 120)}`)), timeout);
+		});
+		try {
+			return await Promise.race([loaded, timedOut]);
+		} catch (error) {
+			image.src = "";
+			if (attempt >= 2) throw error;
+		} finally {
+			clearTimeout(timer);
+		}
+	}
+}
+
 export class CanvasLock {
 	currentLock = Promise.resolve();
 	async lock() {
@@ -84,14 +114,9 @@ export async function renderImage(
 
 	try {
 		// Load image
-		const image = document.createElement("img");
-		image.crossOrigin = "anonymous";
-		image.src = processImage ? getImage(artworkForState(state.image || fallback || "", state), fallback) : state.image;
-		if (image.src == undefined) return;
-		await new Promise((resolve, reject) => {
-			image.onload = resolve;
-			image.onerror = reject;
-		});
+		const source = processImage ? getImage(artworkForState(state.image || fallback || "", state), fallback) : state.image;
+		if (source == undefined) return;
+		const image = await loadImage(source);
 
 		context.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -165,24 +190,16 @@ export async function renderImage(
 		}
 	}
 
-	if (showOk) {
-		const okImage = document.createElement("img");
-		okImage.crossOrigin = "anonymous";
-		okImage.src = "/ok.png";
-		await new Promise((resolve) => {
-			okImage.onload = resolve;
-		});
-		context.drawImage(okImage, 0, 0, canvas.width, canvas.height);
-	}
-
-	if (showAlert) {
-		const alertImage = document.createElement("img");
-		alertImage.crossOrigin = "anonymous";
-		alertImage.src = "/alert.png";
-		await new Promise((resolve) => {
-			alertImage.onload = resolve;
-		});
-		context.drawImage(alertImage, 0, 0, canvas.width, canvas.height);
+	for (const [shown, overlay] of [
+		[showOk, "/ok.png"],
+		[showAlert, "/alert.png"],
+	] as const) {
+		if (!shown) continue;
+		try {
+			context.drawImage(await loadImage(overlay), 0, 0, canvas.width, canvas.height);
+		} catch (error) {
+			console.warn(error);
+		}
 	}
 
 	// Make the image smaller while the button is pressed.
@@ -211,10 +228,12 @@ export async function resizeImage(source: string): Promise<string | undefined> {
 	const context = canvas.getContext("2d");
 	if (!context) return;
 
-	const image = document.createElement("img");
-	image.crossOrigin = "anonymous";
-	image.src = source;
-	await new Promise((resolve) => (image.onload = resolve));
+	let image: HTMLImageElement;
+	try {
+		image = await loadImage(source);
+	} catch {
+		return undefined;
+	}
 
 	let xOffset = 0,
 		yOffset = 0;

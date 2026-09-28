@@ -41,27 +41,23 @@ fn respond(request: Request, mut response: Response<std::io::Cursor<Vec<u8>>>, h
 	let _ = request.respond(response);
 }
 
-/// Start a simple webserver to serve files of plugins that run in a browser environment.
+/// Threads answering requests. With several, one slow response (say, to a
+/// client that stopped reading) cannot hold up every image behind it.
+const WORKERS: usize = 6;
+
+/// Start a simple webserver to serve files of plugins that run in a browser
+/// environment, and key images to the editor.
 ///
-/// The server runs on its own thread: `tiny_http` blocks while waiting for
-/// requests, and must not occupy one of the async runtime's worker threads.
+/// The server runs on its own threads: `tiny_http` blocks while waiting for
+/// requests, and must not occupy the async runtime's worker threads.
 pub fn init_webserver(prefix: PathBuf) {
-	let spawned = std::thread::Builder::new().name("plugin-webserver".to_owned()).spawn(move || {
-		let runtime = match tokio::runtime::Builder::new_current_thread().enable_all().build() {
-			Ok(runtime) => runtime,
-			Err(error) => {
-				log::error!("Failed to start the plugin webserver runtime: {error}");
-				return;
-			}
-		};
-		runtime.block_on(serve(prefix));
-	});
+	let spawned = std::thread::Builder::new().name("plugin-webserver".to_owned()).spawn(move || serve(prefix));
 	if let Err(error) = spawned {
 		log::error!("Failed to start the plugin webserver thread: {error}");
 	}
 }
 
-async fn serve(prefix: PathBuf) {
+fn serve(prefix: PathBuf) {
 	let prefix = match prefix.canonicalize() {
 		Ok(prefix) => prefix,
 		Err(error) => {
@@ -95,12 +91,24 @@ async fn serve(prefix: PathBuf) {
 		}
 	};
 
+	let server = std::sync::Arc::new(server);
+	for worker in 1..WORKERS {
+		let (server, prefix) = (server.clone(), prefix.clone());
+		let spawned = std::thread::Builder::new().name(format!("plugin-webserver-{worker}")).spawn(move || {
+			for request in server.incoming_requests() {
+				handle_request(request, &prefix);
+			}
+		});
+		if let Err(error) = spawned {
+			log::warn!("Failed to start a plugin webserver thread: {error}");
+		}
+	}
 	for request in server.incoming_requests() {
-		handle_request(request, &prefix).await;
+		handle_request(request, &prefix);
 	}
 }
 
-async fn handle_request(request: Request, prefix: &Path) {
+fn handle_request(request: Request, prefix: &Path) {
 	// A malformed percent-encoding used to panic here and take the whole
 	// webserver (property inspectors, plugin icons) down until restart.
 	let Ok(decoded) = urlencoding::decode(request.url()) else {
@@ -115,7 +123,7 @@ async fn handle_request(request: Request, prefix: &Path) {
 	let url = url.get(1..).unwrap_or_default().replace('/', "\\");
 	let path = Path::new(url.trim_end_matches("|opendeck_property_inspector").trim_end_matches("|opendeck_property_inspector_child"));
 
-	if !matches!(tokio::fs::try_exists(path).await, Ok(true)) {
+	if !matches!(path.try_exists(), Ok(true)) {
 		let _ = request.respond(Response::empty(404));
 		return;
 	}
@@ -140,7 +148,7 @@ async fn handle_request(request: Request, prefix: &Path) {
 	// and requests the Svelte frontend to maximise the property inspector.
 
 	if let Some(path) = url.strip_suffix("|opendeck_property_inspector") {
-		let mut content = tokio::fs::read_to_string(path).await.unwrap_or_default();
+		let mut content = std::fs::read_to_string(path).unwrap_or_default();
 		content += r#"
 			<div id="opendeck_iframe_container" style="position: absolute; z-index: 100; top: 0; left: 0; width: 100%; height: 100%; display: none;"></div>
 			<script>
@@ -209,7 +217,7 @@ async fn handle_request(request: Request, prefix: &Path) {
 		headers.extend(header("Content-Type", "text/html"));
 		respond(request, Response::from_data(content.into_bytes()), headers);
 	} else if let Some(path) = url.strip_suffix("|opendeck_property_inspector_child") {
-		let content = tokio::fs::read_to_string(path).await.unwrap_or_default();
+		let content = std::fs::read_to_string(path).unwrap_or_default();
 		let content = format!("<script>window.opener ??= window.parent;</script>{content}");
 
 		headers.extend(header("Content-Type", "text/html"));
@@ -222,10 +230,10 @@ async fn handle_request(request: Request, prefix: &Path) {
 		headers.extend(header("Content-Type", &mime_type));
 
 		if mime_type.starts_with("text/") || mime_type == "image/svg+xml" || mime_type == "application/json" {
-			respond(request, Response::from_data(tokio::fs::read(&url).await.unwrap_or_default()), headers);
+			respond(request, Response::from_data(std::fs::read(&url).unwrap_or_default()), headers);
 		} else {
-			let file = match tokio::fs::File::open(&url).await {
-				Ok(file) => file.into_std().await,
+			let file = match std::fs::File::open(&url) {
+				Ok(file) => file,
 				Err(_) => {
 					let _ = request.respond(Response::empty(404));
 					return;
@@ -237,5 +245,49 @@ async fn handle_request(request: Request, prefix: &Path) {
 			}
 			let _ = request.respond(response);
 		}
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use std::io::{Read, Write};
+	use std::net::TcpStream;
+	use std::time::{Duration, Instant};
+
+	fn request(port: u16, path: &str) -> TcpStream {
+		let mut stream = TcpStream::connect((super::super::LOOPBACK, port)).unwrap();
+		write!(stream, "GET {path} HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n").unwrap();
+		stream
+	}
+
+	#[test]
+	fn a_client_that_stops_reading_does_not_hold_up_other_requests() {
+		let directory = std::env::temp_dir().join(format!("opendeck-webserver-test-{}", std::process::id()));
+		std::fs::create_dir_all(&directory).unwrap();
+		let large = directory.join("large.png");
+		let small = directory.join("small.png");
+		// Larger than the loopback socket buffers, so writing it blocks while nobody reads.
+		std::fs::write(&large, vec![7u8; 8 * 1024 * 1024]).unwrap();
+		std::fs::write(&small, vec![9u8; 1024]).unwrap();
+		// There is no app (and so no settings file) in tests.
+		crate::store::remember_settings(&crate::store::Settings::default());
+		super::init_webserver(directory.clone());
+		let port = *super::super::PORT_BASE + 2;
+		let started = Instant::now();
+		while TcpStream::connect((super::super::LOOPBACK, port)).is_err() && started.elapsed() < Duration::from_secs(5) {
+			std::thread::sleep(Duration::from_millis(20));
+		}
+
+		let _stalled = request(port, &large.canonicalize().unwrap().to_string_lossy());
+		std::thread::sleep(Duration::from_millis(200));
+
+		let mut reader = request(port, &small.canonicalize().unwrap().to_string_lossy());
+		reader.set_read_timeout(Some(Duration::from_secs(3))).unwrap();
+		let mut response = Vec::new();
+		reader.read_to_end(&mut response).expect("the second request was answered");
+		assert!(response.starts_with(b"HTTP/1.1 200"), "{}", String::from_utf8_lossy(&response[..response.len().min(80)]));
+		assert!(response.ends_with(&[9u8; 1024]));
+
+		let _ = std::fs::remove_dir_all(&directory);
 	}
 }

@@ -586,9 +586,11 @@ async fn device_output_task(device: Arc<Device>, mut receiver: mpsc::Receiver<De
 
 	let mut flush_deadline: Option<Instant> = None;
 	let mut page_turn: Option<PageTurn> = None;
-	// What each key shows (or will at the next flush), so an identical image
-	// is not sent again.
-	let mut written = [0u64; LCD_KEY_COUNT as usize];
+	// What each key shows (or will at the next flush), so an image that looks
+	// the same is not sent again.
+	let mut written: [ShownImage; LCD_KEY_COUNT as usize] = Default::default();
+	// Until the first page is shown, what the keys show is unknown.
+	let mut shown_once = false;
 	loop {
 		let far = Instant::now() + Duration::from_secs(24 * 60 * 60);
 		let flush_at = flush_deadline.unwrap_or(far);
@@ -627,9 +629,12 @@ async fn device_output_task(device: Arc<Device>, mut receiver: mpsc::Receiver<De
 			// Keys left without an image are cleared when a page turn finishes,
 			// so a passing clear (say, from a key between two pages) is ignored.
 			OutputAction::Command(Some(DeviceCommand::ClearImage(_))) if page_turn.is_some() => Ok(OutputStep::Continue),
+			// Already blank (every page turn, including the first page after
+			// connecting, leaves each key either drawn or cleared).
+			OutputAction::Command(Some(DeviceCommand::ClearImage(position))) if device_key(position).is_some() && written[position as usize].fingerprint == 0 && shown_once => Ok(OutputStep::Continue),
 			OutputAction::Command(Some(DeviceCommand::ClearImage(position))) => match device_key(position) {
 				Some(device_position) => {
-					written[position as usize] = 0;
+					written[position as usize] = ShownImage::default();
 					with_deadline("Clearing a key image", DEVICE_IO_TIMEOUT, device.clear_button_image(device_position))
 						.await
 						.map(|_| OutputStep::ScheduleFlush)
@@ -643,9 +648,10 @@ async fn device_output_task(device: Arc<Device>, mut receiver: mpsc::Receiver<De
 			}
 			OutputAction::FinishPage => {
 				let Some(turn) = page_turn.take() else { continue };
+				shown_once = true;
 				let drawn = turn.drawn;
 				for position in (0..LCD_KEY_COUNT).filter(|position| drawn & (1u32 << position) == 0) {
-					written[position as usize] = 0;
+					written[position as usize] = ShownImage::default();
 				}
 				let show = async {
 					if drawn == 0 {
@@ -694,16 +700,52 @@ async fn device_output_task(device: Arc<Device>, mut receiver: mpsc::Receiver<De
 	}
 }
 
-/// Put a key image in the M18's buffer, unless the key already has exactly
-/// this image. Returns whether anything changed.
-async fn write_key_image(device: &Device, written: &mut [u64; LCD_KEY_COUNT as usize], position: u8, image: &[u8]) -> Result<bool, MirajazzError> {
+/// The image a key shows (or will at the next flush).
+#[derive(Default)]
+struct ShownImage {
+	/// 0 when the key has no image.
+	fingerprint: u64,
+	pixels: Option<image::RgbImage>,
+}
+
+/// Whether two renderings of a key look the same. Drawing the same key again
+/// can differ in a few pixel values (for example in how the web view scales
+/// an icon), which must not make the key update again after a page turn;
+/// any real change, such as another title or image, differs far more.
+fn looks_the_same(shown: &image::RgbImage, next: &image::RgbImage) -> bool {
+	if shown.dimensions() != next.dimensions() {
+		return false;
+	}
+	let mut total = 0u64;
+	for (a, b) in shown.as_raw().iter().zip(next.as_raw()) {
+		let difference = a.abs_diff(*b);
+		if difference > 48 {
+			return false;
+		}
+		total += u64::from(difference);
+	}
+	total <= shown.as_raw().len() as u64
+}
+
+/// Put a key image in the M18's buffer, unless the key already shows this
+/// image or one that looks the same. Returns whether anything changed.
+async fn write_key_image(device: &Device, written: &mut [ShownImage; LCD_KEY_COUNT as usize], position: u8, image: &[u8]) -> Result<bool, MirajazzError> {
 	let Some(device_position) = device_key(position) else { return Ok(false) };
+	let shown = &mut written[position as usize];
 	let fingerprint = image_fingerprint(image);
-	if written[position as usize] == fingerprint {
+	if shown.fingerprint == fingerprint {
+		return Ok(false);
+	}
+	let pixels = image::load_from_memory_with_format(image, image::ImageFormat::Jpeg).ok().map(|decoded| decoded.to_rgb8());
+	if let (Some(before), Some(after)) = (&shown.pixels, &pixels)
+		&& looks_the_same(before, after)
+	{
+		// Remember the new rendering so repeats of it are skipped cheaply.
+		shown.fingerprint = fingerprint;
 		return Ok(false);
 	}
 	device.write_image(device_position, image).await?;
-	written[position as usize] = fingerprint;
+	*shown = ShownImage { fingerprint, pixels };
 	Ok(true)
 }
 
@@ -932,6 +974,21 @@ mod tests {
 		assert!(matches!(image_step(&mut turning, 1, true, false), OutputStep::Continue));
 		let turn = turning.unwrap();
 		assert_eq!((turn.drawn, turn.finished), (0b11, 0b10));
+
+		// Rendering noise is not a change; a new title or image is.
+		let base = image::RgbImage::from_fn(64, 64, |x, y| image::Rgb([(x * 4) as u8, (y * 4) as u8, 90]));
+		let noisy = image::RgbImage::from_fn(64, 64, |x, y| {
+			let pixel = base.get_pixel(x, y).0;
+			image::Rgb([pixel[0].saturating_add(((x + y) % 3) as u8), pixel[1], pixel[2]])
+		});
+		assert!(looks_the_same(&base, &noisy));
+		let mut titled = base.clone();
+		for x in 10..54 {
+			for y in 50..60 {
+				titled.put_pixel(x, y, image::Rgb([255, 255, 255]));
+			}
+		}
+		assert!(!looks_the_same(&base, &titled));
 
 		assert_ne!(image_fingerprint(b""), 0, "0 means a key without an image");
 		assert_eq!(image_fingerprint(b"key"), image_fingerprint(b"key"));
