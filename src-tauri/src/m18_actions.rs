@@ -46,6 +46,7 @@ pub const PAGE_INDICATOR_UUID: &str = "opendeck.m18.page-indicator";
 /// It is deliberately excluded from the selectable action catalog.
 pub const UNSUPPORTED_VSD_UUID: &str = "opendeck.m18.unsupported-vsd-action";
 pub const RUN_COMMAND_UUID: &str = "opendeck.m18.run-command";
+const STARTER_RUN_COMMAND_UUID: &str = "com.amansprojects.starterpack.runcommand";
 
 static ENIGO: OnceLock<Mutex<Option<Enigo>>> = OnceLock::new();
 static ICON_LOOKUPS: OnceLock<Mutex<HashMap<String, IconLookup>>> = OnceLock::new();
@@ -511,6 +512,32 @@ mod tests {
 		assert_eq!(switch_command(&instance).as_deref(), Some("m1ddc set input 17"));
 	}
 
+	#[test]
+	fn only_command_actions_can_run_during_display_sleep() {
+		fn instance(uuid: &str, settings: serde_json::Value) -> ActionInstance {
+			ActionInstance {
+				action: serde_json::from_value(serde_json::json!({ "name": uuid, "uuid": uuid, "states": [{}] })).unwrap(),
+				context: crate::shared::ActionContext {
+					device: "18-TEST".to_owned(),
+					profile: "Default".to_owned(),
+					controller: "Keypad".to_owned(),
+					position: 0,
+					path: vec![],
+					index: 0,
+				},
+				states: vec![Default::default()],
+				current_state: 0,
+				settings,
+				children: None,
+			}
+		}
+
+		assert!(can_run_while_display_sleeping(&instance(RUN_COMMAND_UUID, serde_json::json!({ "command": "m1ddc set input 17" }))));
+		assert!(can_run_while_display_sleeping(&instance(STARTER_RUN_COMMAND_UUID, serde_json::json!({ "down": "m1ddc set input 17" }))));
+		assert!(!can_run_while_display_sleeping(&instance(SUPER_HOTKEYS_UUID, serde_json::json!({ "down": "[k(Meta,Press)]" }))));
+		assert!(!can_run_while_display_sleeping(&instance(RUN_COMMAND_UUID, serde_json::json!({ "command": "" }))));
+	}
+
 	/// Needs a macOS desktop session: cargo test finds_app_icons -- --ignored
 	#[cfg(target_os = "macos")]
 	#[test]
@@ -829,6 +856,19 @@ pub(crate) fn switch_command(instance: &ActionInstance) -> Option<String> {
 		.and_then(Value::as_str)
 		.filter(|command| !command.trim().is_empty())
 		.map(str::to_owned)
+}
+
+/// Command actions can still execute while the computer-state sleep gate is
+/// active. Unlike simulated keystrokes, a shell command is not delivered to
+/// macOS's lock screen; this is what lets an M18 key switch a monitor input
+/// through a DDC helper while the Mac is locked or showing its screensaver.
+pub(crate) fn can_run_while_display_sleeping(instance: &ActionInstance) -> bool {
+	match instance.action.uuid.as_str() {
+		RUN_COMMAND_UUID => string_setting(&instance.settings, "command").is_some(),
+		STARTER_RUN_COMMAND_UUID => ["down", "up", "rotate"].iter().any(|key| string_setting(&instance.settings, key).is_some()),
+		_ if is_switch_action(&instance.action.uuid) => switch_command(instance).is_some(),
+		_ => false,
+	}
 }
 
 pub async fn key_down(instance: &ActionInstance) -> Result<(), anyhow::Error> {

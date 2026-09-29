@@ -53,6 +53,15 @@
 	</branding>
 
 	<releases>
+		<release version="2.15.8" date="2026-09-29">
+			<url type="details">https://github.com/nickhighland/OpenDeck-VSD-Inside-M18/releases/tag/tv2.15.8</url>
+			<description>
+				<ul>
+					<li>Allow command-based monitor input switching while macOS is locked or showing its screensaver</li>
+					<li>Keep ordinary M18 actions wake-only while the display is asleep</li>
+				</ul>
+			</description>
+		</release>
 		<release version="2.15.7" date="2026-09-28">
 			<url type="details">https://github.com/nickhighland/OpenDeck-VSD-Inside-M18/releases/tag/tv2.15.7</url>
 			<description>

@@ -120,7 +120,15 @@ pub async fn key_down(event: PayloadEvent<PressPayload>) -> Result<(), anyhow::E
 /// wrapper above and start their trace when they enter the core.
 pub async fn key_down_at(event: PayloadEvent<PressPayload>, requested_at: Instant) -> Result<(), anyhow::Error> {
 	// A press that only wakes the display must not also run the key's action.
-	if crate::device_sleep::note_key_down(&event.payload.device, event.payload.position).await {
+	// Command actions are the exception: they run in the background and are
+	// specifically intended to keep working while macOS is locked or showing
+	// its screensaver.
+	let allow_action_while_sleeping = if crate::device_sleep::action_sleep_override_active(&event.payload.device) {
+		crate::events::outbound::keypad::action_can_run_while_display_sleeping(&event.payload.device, event.payload.position).await
+	} else {
+		false
+	};
+	if crate::device_sleep::note_key_down(&event.payload.device, event.payload.position, allow_action_while_sleeping).await {
 		return Ok(());
 	}
 	crate::events::outbound::keypad::key_down_at(&event.payload.device, event.payload.position, requested_at).await

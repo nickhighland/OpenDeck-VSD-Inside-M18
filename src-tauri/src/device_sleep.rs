@@ -95,6 +95,10 @@ fn locked_sleep_active() -> bool {
 	SLEEP_WHEN_COMPUTER_LOCKED.load(Ordering::Relaxed) && COMPUTER_LOCKED.load(Ordering::Relaxed)
 }
 
+fn command_can_run_without_waking(allow_action: bool, locked: bool, reason: Option<SleepReason>) -> bool {
+	allow_action && (locked || matches!(reason, Some(SleepReason::Idle | SleepReason::Locked)))
+}
+
 /// Whether an awake display should turn off for inactivity. Both the computer
 /// and the M18 itself must have been idle for the whole timeout. An unknown
 /// computer idle time never puts the display to sleep.
@@ -110,6 +114,13 @@ fn idle_wake_due(timeout: Duration, computer_idle: Option<Duration>) -> bool {
 
 pub fn is_device_sleeping(device: &str) -> bool {
 	SLEEPING_DEVICES.contains_key(device)
+}
+
+/// Whether the physical key path needs to check for a command action before
+/// applying the wake-only behavior. The lock state can become observable a
+/// moment before the power-event task has darkened every device.
+pub fn action_sleep_override_active(device: &str) -> bool {
+	locked_sleep_active() || SLEEPING_DEVICES.get(device).is_some_and(|entry| matches!(*entry.value(), SleepReason::Idle | SleepReason::Locked))
 }
 
 pub fn init_device_sleep() {
@@ -195,10 +206,16 @@ pub fn is_sleeping(device: &str) -> bool {
 
 /// Record an M18 key press. Returns `true` when the press must not run its
 /// action: it woke the display, or the display stays off because the
-/// computer is locked.
-pub async fn note_key_down(device: &str, position: u8) -> bool {
+/// computer is locked. Background command actions are allowed through the
+/// computer-state sleep gate so they can switch monitor inputs while locked.
+pub async fn note_key_down(device: &str, position: u8, allow_action_while_sleeping: bool) -> bool {
 	LAST_DEVICE_PRESS.insert(device.to_owned(), Instant::now());
-	if locked_sleep_active() || wake_device(device).await {
+	let locked = locked_sleep_active();
+	let reason = SLEEPING_DEVICES.get(device).map(|entry| *entry.value());
+	if command_can_run_without_waking(allow_action_while_sleeping, locked, reason) {
+		return false;
+	}
+	if locked || wake_device(device).await {
 		WAKE_PRESSES.insert((device.to_owned(), position), ());
 		return true;
 	}
@@ -329,5 +346,14 @@ mod tests {
 		assert!(!idle_wake_due(5 * MINUTE, Some(6 * MINUTE)));
 		assert!(idle_wake_due(Duration::ZERO, Some(6 * MINUTE)));
 		assert!(idle_wake_due(5 * MINUTE, None));
+	}
+
+	#[test]
+	fn command_actions_bypass_only_computer_state_sleep() {
+		assert!(command_can_run_without_waking(true, true, None));
+		assert!(command_can_run_without_waking(true, false, Some(SleepReason::Idle)));
+		assert!(command_can_run_without_waking(true, false, Some(SleepReason::Locked)));
+		assert!(!command_can_run_without_waking(true, false, Some(SleepReason::Manual)));
+		assert!(!command_can_run_without_waking(false, true, Some(SleepReason::Locked)));
 	}
 }

@@ -175,6 +175,28 @@ fn report_action_failure(instance: &crate::shared::ActionInstance, phase: &str, 
 	show_alert(&instance.context);
 }
 
+/// Look up the physical key's root action before the sleep gate decides
+/// whether the press is wake-only. This is deliberately limited to command
+/// actions; simulated input and other UI actions must not bypass the lock
+/// screen just because they are assigned to an M18 key.
+pub async fn action_can_run_while_display_sleeping(device: &str, key: u8) -> bool {
+	let mut locks = acquire_locks_mut().await;
+	let Ok(selected_profile) = locks.device_stores.get_selected_profile(device) else {
+		return false;
+	};
+	let context = Context {
+		device: device.to_owned(),
+		profile: selected_profile,
+		controller: "Keypad".to_owned(),
+		position: key,
+	};
+	get_slot_mut(&context, &mut locks)
+		.await
+		.ok()
+		.and_then(|slot| slot.as_ref())
+		.is_some_and(crate::m18_actions::can_run_while_display_sleeping)
+}
+
 pub async fn key_down_at(device: &str, key: u8, requested_at: Instant) -> Result<(), anyhow::Error> {
 	let mut locks = acquire_locks_mut().await;
 	let selected_profile = locks.device_stores.get_selected_profile(device)?;
